@@ -4,6 +4,8 @@ using Microsoft.Extensions.DependencyInjection;
 using POSSystem.Application;
 using POSSystem.Application.Orders.Interfaces;
 using POSSystem.Application.Menu.Interfaces;
+using POSSystem.Application.Inventory.Interfaces;
+using POSSystem.Application.Recipe.Interfaces;
 using POSSystem.Infrastructure.Data;
 using POSSystem.Infrastructure.Repositories;
 
@@ -19,6 +21,8 @@ public static class ServiceRegistration
         // Register repositories
         services.AddScoped<IOrderRepository, OrderRepository>();
         services.AddScoped<IMenuRepository, MenuRepository>();
+        services.AddScoped<IInventoryRepository, InventoryRepository>();
+        services.AddScoped<IRecipeRepository, RecipeRepository>();
 
         // Add other infrastructure services here
 

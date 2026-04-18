@@ -1,5 +1,6 @@
 using POSSystem.Application.Orders.DTOs;
 using POSSystem.Application.Orders.Interfaces;
+using POSSystem.Application.Inventory.Interfaces;
 using POSSystem.Domain;
 using System.Linq;
 
@@ -8,10 +9,12 @@ namespace POSSystem.Application.Orders.Services;
 public class OrderService : IOrderService
 {
     private readonly IOrderRepository _repository;
+    private readonly IInventoryService _inventoryService;
 
-    public OrderService(IOrderRepository repository)
+    public OrderService(IOrderRepository repository, IInventoryService inventoryService)
     {
         _repository = repository;
+        _inventoryService = inventoryService;
     }
 
     public async Task<Order> CreateOrderAsync(CreateOrderDto dto)
@@ -124,29 +127,14 @@ public class OrderService : IOrderService
         // Deduct inventory
         var menuItemIds = order.OrderItems.Select(oi => oi.MenuItemId).Distinct().ToList();
         var recipes = await _repository.GetRecipesByMenuItemIdsAsync(menuItemIds);
-        var inventoryIds = recipes.Select(r => r.IngredientId).Distinct().ToList();
-        var inventoryItems = await _repository.GetInventoryItemsAsync(inventoryIds);
-        var inventoryDict = inventoryItems.ToDictionary(i => i.Id, i => i);
 
         foreach (var orderItem in order.OrderItems)
         {
             var itemRecipes = recipes.Where(r => r.MenuItemId == orderItem.MenuItemId);
             foreach (var recipe in itemRecipes)
             {
-                var inventory = inventoryDict[recipe.IngredientId];
                 var deductQuantity = recipe.QuantityRequired * orderItem.Quantity;
-                if (inventory.CurrentStock < deductQuantity) throw new Exception($"Insufficient stock for {inventory.Name}");
-                inventory.CurrentStock -= deductQuantity;
-
-                // Perhaps add StockMovement
-                var movement = new StockMovement
-                {
-                    ItemId = inventory.Id,
-                    Quantity = -deductQuantity,
-                    Type = StockMovementType.Out,
-                    BranchFromId = order.BranchId
-                };
-                await _repository.AddStockMovementAsync(movement);
+                await _inventoryService.DeductStockAsync(recipe.IngredientId, deductQuantity, order.BranchId);
             }
         }
 

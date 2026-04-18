@@ -18,7 +18,7 @@ public interface IOrderRepository
     Task<Order?> GetOrderWithItemsAsync(int id);
     Task<MenuItem?> GetMenuItemAsync(int id);
     Task<ICollection<MenuItem>> GetMenuItemsAsync(IEnumerable<int> ids);
-    Task<ICollection<Recipe>> GetRecipesByMenuItemIdsAsync(IEnumerable<int> menuItemIds);
+    Task<ICollection<POSSystem.Domain.Recipe>> GetRecipesByMenuItemIdsAsync(IEnumerable<int> menuItemIds);
     Task<ICollection<InventoryItem>> GetInventoryItemsAsync(IEnumerable<int> ids);
     Task AddOrderAsync(Order order);
     Task AddOrderItemAsync(OrderItem orderItem);
