@@ -1,0 +1,40 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "POSSystem.Domain", "Domain\POSSystem.Domain.csproj", "{75518C68-2CDC-4536-8FFE-A70B686D46DE}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "POSSystem.Application", "Application\POSSystem.Application.csproj", "{FDFCF1BA-1A70-462F-B2B1-A468C3A8C40E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "POSSystem.Infrastructure", "Infrastructure\POSSystem.Infrastructure.csproj", "{EAF92AD4-89BD-44EF-91D6-D477FEE851C5}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "POSSystem.API", "API\POSSystem.API.csproj", "{2B6D9F2D-0A91-4853-9800-13BEF1FD42ED}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{75518C68-2CDC-4536-8FFE-A70B686D46DE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{75518C68-2CDC-4536-8FFE-A70B686D46DE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{75518C68-2CDC-4536-8FFE-A70B686D46DE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{75518C68-2CDC-4536-8FFE-A70B686D46DE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FDFCF1BA-1A70-462F-B2B1-A468C3A8C40E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FDFCF1BA-1A70-462F-B2B1-A468C3A8C40E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FDFCF1BA-1A70-462F-B2B1-A468C3A8C40E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FDFCF1BA-1A70-462F-B2B1-A468C3A8C40E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EAF92AD4-89BD-44EF-91D6-D477FEE851C5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EAF92AD4-89BD-44EF-91D6-D477FEE851C5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EAF92AD4-89BD-44EF-91D6-D477FEE851C5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EAF92AD4-89BD-44EF-91D6-D477FEE851C5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2B6D9F2D-0A91-4853-9800-13BEF1FD42ED}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2B6D9F2D-0A91-4853-9800-13BEF1FD42ED}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2B6D9F2D-0A91-4853-9800-13BEF1FD42ED}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2B6D9F2D-0A91-4853-9800-13BEF1FD42ED}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
