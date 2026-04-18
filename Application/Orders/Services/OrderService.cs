@@ -55,6 +55,26 @@ public class OrderService : IOrderService
         return order;
     }
 
+    public async Task<Order> CreateEmptyOrderAsync(CreateEmptyOrderDto dto)
+    {
+        var order = new Order
+        {
+            OrderType = dto.OrderType,
+            TableId = dto.TableId,
+            CustomerId = dto.CustomerId,
+            WaiterId = dto.WaiterId,
+            Notes = dto.Notes,
+            BranchId = dto.BranchId,
+            Status = OrderStatus.Pending,
+            OrderItems = new List<OrderItem>()
+        };
+
+        await _repository.AddOrderAsync(order);
+        await _repository.SaveChangesAsync();
+
+        return order;
+    }
+
     public async Task<OrderItem> AddOrderItemAsync(int orderId, AddOrderItemDto dto)
     {
         var order = await _repository.GetOrderWithItemsAsync(orderId);
@@ -89,6 +109,56 @@ public class OrderService : IOrderService
         if (order == null) throw new Exception("Order not found");
 
         return await CalculateTotalsAsync(order);
+    }
+
+    public async Task<Order> CompleteOrderAsync(int orderId)
+    {
+        var order = await _repository.GetOrderWithItemsAsync(orderId);
+        if (order == null) throw new Exception("Order not found");
+
+        if (order.Status == OrderStatus.Completed) throw new Exception("Order already completed");
+
+        // Calculate totals
+        await CalculateTotalsAsync(order);
+
+        // Deduct inventory
+        var menuItemIds = order.OrderItems.Select(oi => oi.MenuItemId).Distinct().ToList();
+        var recipes = await _repository.GetRecipesByMenuItemIdsAsync(menuItemIds);
+        var inventoryIds = recipes.Select(r => r.IngredientId).Distinct().ToList();
+        var inventoryItems = await _repository.GetInventoryItemsAsync(inventoryIds);
+        var inventoryDict = inventoryItems.ToDictionary(i => i.Id, i => i);
+
+        foreach (var orderItem in order.OrderItems)
+        {
+            var itemRecipes = recipes.Where(r => r.MenuItemId == orderItem.MenuItemId);
+            foreach (var recipe in itemRecipes)
+            {
+                var inventory = inventoryDict[recipe.IngredientId];
+                var deductQuantity = recipe.QuantityRequired * orderItem.Quantity;
+                if (inventory.CurrentStock < deductQuantity) throw new Exception($"Insufficient stock for {inventory.Name}");
+                inventory.CurrentStock -= deductQuantity;
+
+                // Perhaps add StockMovement
+                var movement = new StockMovement
+                {
+                    ItemId = inventory.Id,
+                    Quantity = -deductQuantity,
+                    Type = StockMovementType.Out,
+                    BranchFromId = order.BranchId
+                };
+                await _repository.AddStockMovementAsync(movement);
+            }
+        }
+
+        order.Status = OrderStatus.Completed;
+        await _repository.SaveChangesAsync();
+
+        return order;
+    }
+
+    public async Task<Order?> GetOrderAsync(int id)
+    {
+        return await _repository.GetOrderWithItemsAsync(id);
     }
 
     private async Task<Order> CalculateTotalsAsync(Order order)

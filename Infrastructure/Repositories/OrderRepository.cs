@@ -44,6 +44,26 @@ public class OrderRepository : IOrderRepository
         await _context.OrderItems.AddAsync(orderItem);
     }
 
+    public async Task<ICollection<Recipe>> GetRecipesByMenuItemIdsAsync(IEnumerable<int> menuItemIds)
+    {
+        return await _context.Recipes
+            .Where(r => menuItemIds.Contains(r.MenuItemId))
+            .Include(r => r.Ingredient)
+            .ToListAsync();
+    }
+
+    public async Task<ICollection<InventoryItem>> GetInventoryItemsAsync(IEnumerable<int> ids)
+    {
+        return await _context.InventoryItems
+            .Where(i => ids.Contains(i.Id))
+            .ToListAsync();
+    }
+
+    public async Task AddStockMovementAsync(StockMovement movement)
+    {
+        await _context.StockMovements.AddAsync(movement);
+    }
+
     public async Task SaveChangesAsync()
     {
         await _context.SaveChangesAsync();
