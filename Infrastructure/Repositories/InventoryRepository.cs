@@ -7,9 +7,9 @@ namespace POSSystem.Infrastructure.Repositories;
 
 public class InventoryRepository : IInventoryRepository
 {
-    private readonly ApplicationDbContext _context;
+    private readonly POSDbContext _context;
 
-    public InventoryRepository(ApplicationDbContext context)
+    public InventoryRepository(POSDbContext context)
     {
         _context = context;
     }
