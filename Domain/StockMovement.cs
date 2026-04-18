@@ -10,7 +10,6 @@ public class StockMovement : BaseEntity
     public int? BranchFromId { get; set; }
     public int? BranchToId { get; set; }
 
-    public virtual Branch Branch { get; set; } = null!;
     public virtual InventoryItem Item { get; set; } = null!;
     public virtual Branch? BranchFrom { get; set; }
     public virtual Branch? BranchTo { get; set; }
