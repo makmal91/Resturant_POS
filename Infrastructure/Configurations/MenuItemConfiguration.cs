@@ -50,6 +50,11 @@ public class MenuItemConfiguration : IEntityTypeConfiguration<MenuItem>
             .HasForeignKey(v => v.MenuItemId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        builder.HasMany(mi => mi.Addons)
+            .WithOne(a => a.MenuItem)
+            .HasForeignKey(a => a.MenuItemId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         builder.HasMany(mi => mi.Recipes)
             .WithOne(r => r.MenuItem)
             .HasForeignKey(r => r.MenuItemId)

@@ -17,6 +17,7 @@ public class POSDbContext : DbContext
     public DbSet<MenuCategory> MenuCategories { get; set; } = null!;
     public DbSet<MenuItem> MenuItems { get; set; } = null!;
     public DbSet<MenuItemVariant> MenuItemVariants { get; set; } = null!;
+    public DbSet<MenuItemAddon> MenuItemAddons { get; set; } = null!;
     public DbSet<Table> Tables { get; set; } = null!;
     public DbSet<Customer> Customers { get; set; } = null!;
     public DbSet<Order> Orders { get; set; } = null!;
@@ -38,6 +39,7 @@ public class POSDbContext : DbContext
         modelBuilder.ApplyConfiguration(new MenuCategoryConfiguration());
         modelBuilder.ApplyConfiguration(new MenuItemConfiguration());
         modelBuilder.ApplyConfiguration(new MenuItemVariantConfiguration());
+        modelBuilder.ApplyConfiguration(new MenuItemAddonConfiguration());
         modelBuilder.ApplyConfiguration(new TableConfiguration());
         modelBuilder.ApplyConfiguration(new CustomerConfiguration());
         modelBuilder.ApplyConfiguration(new OrderConfiguration());

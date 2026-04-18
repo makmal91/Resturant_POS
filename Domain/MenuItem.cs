@@ -18,6 +18,7 @@ public class MenuItem : BaseEntity
     public virtual Branch Branch { get; set; } = null!;
     public virtual MenuCategory MenuCategory { get; set; } = null!;
     public virtual ICollection<MenuItemVariant> Variants { get; set; } = new List<MenuItemVariant>();
+    public virtual ICollection<MenuItemAddon> Addons { get; set; } = new List<MenuItemAddon>();
     public virtual ICollection<OrderItem> OrderItems { get; set; } = new List<OrderItem>();
     public virtual ICollection<Recipe> Recipes { get; set; } = new List<Recipe>();
 }
