@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { FormInput, FormSelect, FormButton } from './index';
+import { safeString } from '../../utils/safeValues';
 
 interface InventoryFormData {
   itemName: string;
@@ -9,26 +10,49 @@ interface InventoryFormData {
 }
 
 interface InventoryFormProps {
-  initialData?: Partial<InventoryFormData>;
+  initialData?: Partial<InventoryFormData> | null;
   onSubmit: (data: InventoryFormData) => void;
   isLoading?: boolean;
   submitLabel?: string;
 }
 
+const DEFAULT_INVENTORY_FORM_DATA: InventoryFormData = {
+  itemName: '',
+  unit: 'Piece',
+  stock: '',
+  minLevel: '',
+};
+
+const buildInventoryFormData = (
+  source?: Partial<InventoryFormData> | null
+): InventoryFormData => ({
+  itemName: safeString(source?.itemName),
+  unit: safeString(source?.unit, 'Piece') || 'Piece',
+  stock: safeString(source?.stock),
+  minLevel: safeString(source?.minLevel),
+});
+
 const InventoryForm: React.FC<InventoryFormProps> = ({
-  initialData = {},
+  initialData,
   onSubmit,
   isLoading = false,
   submitLabel = 'Add Item',
 }) => {
-  const [formData, setFormData] = useState<InventoryFormData>({
-    itemName: initialData.itemName || '',
-    unit: initialData.unit || 'Piece',
-    stock: initialData.stock || '',
-    minLevel: initialData.minLevel || '',
-  });
+  const safeInitialData = useMemo(
+    () => initialData ?? DEFAULT_INVENTORY_FORM_DATA,
+    [initialData]
+  );
+
+  const [formData, setFormData] = useState<InventoryFormData>(() =>
+    buildInventoryFormData(safeInitialData)
+  );
 
   const [errors, setErrors] = useState<Partial<InventoryFormData>>({});
+
+  useEffect(() => {
+    setFormData(buildInventoryFormData(safeInitialData));
+    setErrors({});
+  }, [safeInitialData]);
 
   const validateForm = (): boolean => {
     const newErrors: Partial<InventoryFormData> = {};
@@ -70,10 +94,12 @@ const InventoryForm: React.FC<InventoryFormProps> = ({
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
         <div className="px-6 py-4 border-b border-gray-200">
           <h2 className="text-xl font-semibold text-gray-900">
-            {initialData.itemName ? 'Update Item' : 'Add New Item'}
+            {safeString(safeInitialData?.itemName).trim() ? 'Update Item' : 'Add New Item'}
           </h2>
           <p className="text-sm text-gray-600 mt-1">
-            {initialData.itemName ? 'Update inventory item details' : 'Add a new item to your inventory'}
+            {safeString(safeInitialData?.itemName).trim()
+              ? 'Update inventory item details'
+              : 'Add a new item to your inventory'}
           </p>
         </div>
 

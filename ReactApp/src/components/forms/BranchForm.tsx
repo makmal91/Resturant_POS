@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { FormInput, FormSelect, FormButton } from './index';
+import { safeString } from '../../utils/safeValues';
 
 interface BranchFormData {
   name: string;
@@ -11,28 +12,51 @@ interface BranchFormData {
 }
 
 interface BranchFormProps {
-  initialData?: Partial<BranchFormData>;
+  initialData?: Partial<BranchFormData> | null;
   onSubmit: (data: BranchFormData) => void;
   isLoading?: boolean;
   submitLabel?: string;
 }
 
+const DEFAULT_BRANCH_FORM_DATA: BranchFormData = {
+  name: '',
+  address: '',
+  city: '',
+  phone: '',
+  taxRate: '',
+  status: 'Active',
+};
+
+const buildBranchFormData = (source?: Partial<BranchFormData> | null): BranchFormData => ({
+  name: safeString(source?.name),
+  address: safeString(source?.address),
+  city: safeString(source?.city),
+  phone: safeString(source?.phone),
+  taxRate: safeString(source?.taxRate),
+  status: safeString(source?.status, 'Active') || 'Active',
+});
+
 const BranchForm: React.FC<BranchFormProps> = ({
-  initialData = {},
+  initialData,
   onSubmit,
   isLoading = false,
   submitLabel = 'Create Branch',
 }) => {
-  const [formData, setFormData] = useState<BranchFormData>({
-    name: initialData.name || '',
-    address: initialData.address || '',
-    city: initialData.city || '',
-    phone: initialData.phone || '',
-    taxRate: initialData.taxRate || '',
-    status: initialData.status || 'Active',
-  });
+  const safeInitialData = useMemo(
+    () => initialData ?? DEFAULT_BRANCH_FORM_DATA,
+    [initialData]
+  );
+
+  const [formData, setFormData] = useState<BranchFormData>(() =>
+    buildBranchFormData(safeInitialData)
+  );
 
   const [errors, setErrors] = useState<Partial<BranchFormData>>({});
+
+  useEffect(() => {
+    setFormData(buildBranchFormData(safeInitialData));
+    setErrors({});
+  }, [safeInitialData]);
 
   const validateForm = (): boolean => {
     const newErrors: Partial<BranchFormData> = {};

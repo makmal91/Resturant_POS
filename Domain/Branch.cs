@@ -20,6 +20,7 @@ public class Branch : BaseEntity
     public virtual ICollection<User> Users { get; set; } = new List<User>();
     public virtual ICollection<Role> Roles { get; set; } = new List<Role>();
     public virtual ICollection<MenuCategory> MenuCategories { get; set; } = new List<MenuCategory>();
+    public virtual ICollection<SubCategory> SubCategories { get; set; } = new List<SubCategory>();
     public virtual ICollection<MenuItem> MenuItems { get; set; } = new List<MenuItem>();
     public virtual ICollection<Table> Tables { get; set; } = new List<Table>();
     public virtual ICollection<Customer> Customers { get; set; } = new List<Customer>();

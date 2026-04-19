@@ -10,7 +10,6 @@ namespace POSSystem.API.Controllers;
 public class CategoriesController : ControllerBase
 {
     private readonly IMenuService _menuService;
-    private const int DefaultBranchId = 1;
 
     public CategoriesController(IMenuService menuService)
     {
@@ -19,16 +18,22 @@ public class CategoriesController : ControllerBase
 
     [HttpGet]
     public async Task<IActionResult> GetCategories(
-        [FromQuery] int branchId = DefaultBranchId,
+        [FromQuery] int branchId,
         [FromQuery] CategoryType? categoryType = null)
     {
+        if (branchId <= 0)
+            return BadRequest(new { message = "branchId is required." });
+
         var categories = await _menuService.GetCategoriesAsync(branchId, categoryType);
         return Ok(new { categories });
     }
 
     [HttpGet("{id:int}")]
-    public async Task<IActionResult> GetCategoryById(int id, [FromQuery] int branchId = DefaultBranchId)
+    public async Task<IActionResult> GetCategoryById(int id, [FromQuery] int branchId)
     {
+        if (branchId <= 0)
+            return BadRequest(new { message = "branchId is required." });
+
         var category = await _menuService.GetCategoryByIdAsync(id, branchId);
         if (category == null)
             return NotFound();
@@ -40,26 +45,50 @@ public class CategoriesController : ControllerBase
     public async Task<IActionResult> CreateCategory([FromBody] CreateMenuCategoryDto dto)
     {
         if (dto.BranchId <= 0)
-            dto.BranchId = DefaultBranchId;
+            return BadRequest(new { message = "BranchId is required." });
 
-        var category = await _menuService.AddCategoryAsync(dto);
-        return CreatedAtAction(nameof(GetCategoryById), new { id = category.Id, branchId = category.BranchId }, category);
+        try
+        {
+            var category = await _menuService.AddCategoryAsync(dto);
+            return CreatedAtAction(nameof(GetCategoryById), new { id = category.Id, branchId = category.BranchId }, category);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     [HttpPut("{id:int}")]
     public async Task<IActionResult> UpdateCategory(int id, [FromBody] UpdateMenuCategoryDto dto)
     {
         if (dto.BranchId <= 0)
-            dto.BranchId = DefaultBranchId;
+            return BadRequest(new { message = "BranchId is required." });
 
-        var category = await _menuService.UpdateCategoryAsync(id, dto);
-        return Ok(category);
+        try
+        {
+            var category = await _menuService.UpdateCategoryAsync(id, dto);
+            return Ok(category);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     [HttpDelete("{id:int}")]
-    public async Task<IActionResult> DeleteCategory(int id, [FromQuery] int branchId = DefaultBranchId)
+    public async Task<IActionResult> DeleteCategory(int id, [FromQuery] int branchId)
     {
-        await _menuService.DeleteCategoryAsync(id, branchId);
-        return NoContent();
+        if (branchId <= 0)
+            return BadRequest(new { message = "branchId is required." });
+
+        try
+        {
+            await _menuService.DeleteCategoryAsync(id, branchId);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 }

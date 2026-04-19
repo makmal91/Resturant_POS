@@ -4,6 +4,7 @@ import Badge from './Badge';
 import { useFormModal } from '../contexts/FormModalContext';
 import { useConfirmDialog } from '../contexts/ConfirmDialogContext';
 import { BranchService } from '../services/apiService';
+import { safeString } from '../utils/safeValues';
 
 interface Branch {
   id: number;
@@ -22,13 +23,33 @@ const BranchesList: React.FC = () => {
   const { openForm, isOpen } = useFormModal();
   const { showConfirm } = useConfirmDialog();
 
+  const normalizeBranches = (payload: unknown): Branch[] => {
+    const rows = Array.isArray(payload) ? payload : [];
+
+    return rows
+      .map((row): Branch => {
+        const item = row as Partial<Branch>;
+        return {
+          id: Number(item?.id ?? 0),
+          name: safeString(item?.name),
+          address: safeString(item?.address),
+          city: safeString(item?.city),
+          phone: safeString(item?.phone),
+          taxRate: Number(item?.taxRate ?? 0),
+          status: safeString(item?.status, 'Active') || 'Active',
+          createdAt: safeString(item?.createdAt),
+        };
+      })
+      .filter((branch) => branch.id > 0);
+  };
+
   const fetchBranches = useCallback(async () => {
     setLoading(true);
     try {
       // Try API first, fall back to mock data
       try {
         const response = await BranchService.getAll();
-        setBranches(response.data);
+        setBranches(normalizeBranches(response?.data));
       } catch (err) {
         // Use mock data if API fails
         console.log('Using mock data for branches');
@@ -138,7 +159,7 @@ const BranchesList: React.FC = () => {
       header: 'Status',
       render: (value) => (
         <Badge variant={value === 'Active' ? 'success' : 'danger'} size="sm" dot>
-          {value}
+          {safeString(value)}
         </Badge>
       ),
     },

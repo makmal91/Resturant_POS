@@ -5,7 +5,13 @@ namespace POSSystem.Application.Menu.DTOs;
 public class CreateMenuCategoryDto
 {
     public string Name { get; set; } = string.Empty;
+    public string Code { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
+    public int DisplayOrder { get; set; }
+    public string ImageUrl { get; set; } = string.Empty;
+    public string Icon { get; set; } = string.Empty;
+    public string Color { get; set; } = string.Empty;
+    public bool Status { get; set; } = true;
     public CategoryType CategoryType { get; set; } = CategoryType.Sale;
     public int BranchId { get; set; }
 }
@@ -13,8 +19,36 @@ public class CreateMenuCategoryDto
 public class UpdateMenuCategoryDto
 {
     public string Name { get; set; } = string.Empty;
+    public string Code { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
+    public int DisplayOrder { get; set; }
+    public string ImageUrl { get; set; } = string.Empty;
+    public string Icon { get; set; } = string.Empty;
+    public string Color { get; set; } = string.Empty;
+    public bool Status { get; set; } = true;
     public CategoryType CategoryType { get; set; } = CategoryType.Sale;
+    public int BranchId { get; set; }
+}
+
+public class CreateSubCategoryDto
+{
+    public string Name { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public int DisplayOrder { get; set; }
+    public bool Status { get; set; } = true;
+    public string Icon { get; set; } = string.Empty;
+    public int CategoryId { get; set; }
+    public int BranchId { get; set; }
+}
+
+public class UpdateSubCategoryDto
+{
+    public string Name { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public int DisplayOrder { get; set; }
+    public bool Status { get; set; } = true;
+    public string Icon { get; set; } = string.Empty;
+    public int CategoryId { get; set; }
     public int BranchId { get; set; }
 }
 
@@ -73,9 +107,32 @@ public class MenuCategoryDto
 {
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
+    public string Code { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
+    public int DisplayOrder { get; set; }
+    public string ImageUrl { get; set; } = string.Empty;
+    public string Icon { get; set; } = string.Empty;
+    public string Color { get; set; } = string.Empty;
+    public bool Status { get; set; } = true;
     public CategoryType CategoryType { get; set; } = CategoryType.Sale;
+    public int BranchId { get; set; }
+    public string BranchName { get; set; } = string.Empty;
+    public List<SubCategoryDto> SubCategories { get; set; } = new();
     public List<MenuItemDto> Items { get; set; } = new();
+}
+
+public class SubCategoryDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public int DisplayOrder { get; set; }
+    public bool Status { get; set; } = true;
+    public string Icon { get; set; } = string.Empty;
+    public int CategoryId { get; set; }
+    public string CategoryName { get; set; } = string.Empty;
+    public int BranchId { get; set; }
+    public string BranchName { get; set; } = string.Empty;
 }
 
 public class MenuItemDto

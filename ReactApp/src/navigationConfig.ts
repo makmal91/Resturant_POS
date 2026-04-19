@@ -18,6 +18,7 @@ import MenuList from './components/MenuList';
 import InventoryList from './components/InventoryList';
 import { OrderScreen } from './components/forms';
 import CategoryPage from './modules/category/CategoryPage';
+import SubCategoryPage from './modules/subcategory/SubCategoryPage';
 import ProductPage from './modules/product/ProductPage';
 import CustomerPage from './modules/customer/CustomerPage';
 import SupplierPage from './modules/supplier/SupplierPage';
@@ -58,6 +59,13 @@ export const navigationItems: NavigationItem[] = [
     label: 'Categories',
     component: CategoryPage,
     icon: '🗂️',
+    group: 'Master Data',
+  },
+  {
+    path: '/subcategories',
+    label: 'SubCategories',
+    component: SubCategoryPage,
+    icon: '🧩',
     group: 'Master Data',
   },
   {

@@ -4,6 +4,7 @@ import Badge from './Badge';
 import { useFormModal } from '../contexts/FormModalContext';
 import { useConfirmDialog } from '../contexts/ConfirmDialogContext';
 import { UserService } from '../services/apiService';
+import { safeString } from '../utils/safeValues';
 
 interface User {
   id: number;
@@ -21,13 +22,32 @@ const UsersList: React.FC = () => {
   const { openForm, isOpen } = useFormModal();
   const { showConfirm } = useConfirmDialog();
 
+  const normalizeUsers = (payload: unknown): User[] => {
+    const rows = Array.isArray(payload) ? payload : [];
+
+    return rows
+      .map((row): User => {
+        const item = row as Partial<User>;
+        return {
+          id: Number(item?.id ?? 0),
+          name: safeString(item?.name),
+          role: safeString(item?.role),
+          branch: safeString(item?.branch),
+          salary: Number(item?.salary ?? 0),
+          shift: safeString(item?.shift),
+          status: safeString(item?.status, 'Active') || 'Active',
+        };
+      })
+      .filter((user) => user.id > 0);
+  };
+
   const fetchUsers = useCallback(async () => {
     setLoading(true);
     try {
       // Try API first, fall back to mock data
       try {
         const response = await UserService.getAll();
-        setUsers(response.data);
+        setUsers(normalizeUsers(response?.data));
       } catch (err) {
         // Use mock data if API fails
         console.log('Using mock data for users');
@@ -112,7 +132,7 @@ const UsersList: React.FC = () => {
       key: 'role',
       header: 'Role',
       render: (value) => (
-        <Badge variant="primary" size="sm">{value}</Badge>
+        <Badge variant="primary" size="sm">{safeString(value)}</Badge>
       ),
     },
     {
@@ -124,7 +144,7 @@ const UsersList: React.FC = () => {
       key: 'shift',
       header: 'Shift',
       render: (value) => (
-        <Badge variant="info" size="sm">{value}</Badge>
+        <Badge variant="info" size="sm">{safeString(value)}</Badge>
       ),
     },
     {
@@ -137,7 +157,7 @@ const UsersList: React.FC = () => {
       header: 'Status',
       render: (value) => (
         <Badge variant={value === 'Active' ? 'success' : 'danger'} size="sm" dot>
-          {value}
+          {safeString(value)}
         </Badge>
       ),
     },

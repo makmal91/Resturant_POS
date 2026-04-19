@@ -2,6 +2,39 @@ import React, { createContext, useContext, useState } from 'react';
 
 export type FormType = 'branch' | 'user' | 'menu' | 'inventory' | null;
 
+const DEFAULT_BRANCH_FORM_DATA = {
+  name: '',
+  address: '',
+  city: '',
+  phone: '',
+  taxRate: '',
+  status: 'Active',
+};
+
+const DEFAULT_USER_FORM_DATA = {
+  name: '',
+  role: '',
+  branch: '',
+  salary: '',
+  shift: 'Morning',
+};
+
+const DEFAULT_INVENTORY_FORM_DATA = {
+  itemName: '',
+  unit: 'Piece',
+  stock: '',
+  minLevel: '',
+};
+
+const DEFAULT_MENU_FORM_DATA = {
+  name: '',
+  price: 0,
+  description: '',
+  categoryId: null,
+  category: '',
+  variants: [],
+};
+
 interface FormModalContextType {
   isOpen: boolean;
   formType: FormType;
@@ -13,18 +46,23 @@ interface FormModalContextType {
 }
 
 const getDefaultFormData = (type: FormType) => {
-  if (type === 'menu') {
-    return {
-      name: '',
-      price: 0,
-      description: '',
-      categoryId: null,
-      category: '',
-      variants: [],
-    };
+  if (type === 'branch') {
+    return DEFAULT_BRANCH_FORM_DATA;
   }
 
-  return null;
+  if (type === 'user') {
+    return DEFAULT_USER_FORM_DATA;
+  }
+
+  if (type === 'inventory') {
+    return DEFAULT_INVENTORY_FORM_DATA;
+  }
+
+  if (type === 'menu') {
+    return DEFAULT_MENU_FORM_DATA;
+  }
+
+  return {};
 };
 
 const FormModalContext = createContext<FormModalContextType | undefined>(undefined);
@@ -33,26 +71,27 @@ export const FormModalProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [isOpen, setIsOpen] = useState(false);
   const [formType, setFormType] = useState<FormType>(null);
   const [editingId, setEditingId] = useState<string | number | null>(null);
-  const [editingData, setEditingDataState] = useState<any>(null);
+  const [editingData, setEditingDataState] = useState<any>({});
 
   const openForm = (type: FormType, data?: any) => {
     const payload = data ?? getDefaultFormData(type);
+    const safePayload = payload ?? getDefaultFormData(type);
 
     setFormType(type);
-    setEditingDataState(payload);
-    setEditingId(payload?.id ?? null);
+    setEditingDataState(safePayload);
+    setEditingId(safePayload?.id ?? null);
     setIsOpen(true);
   };
 
   const closeForm = () => {
     setIsOpen(false);
     setFormType(null);
-    setEditingDataState(null);
+    setEditingDataState({});
     setEditingId(null);
   };
 
   const setEditingData = (data: any) => {
-    setEditingDataState(data);
+    setEditingDataState(data ?? {});
   };
 
   return (

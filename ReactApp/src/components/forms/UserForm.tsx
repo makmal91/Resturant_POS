@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { FormInput, FormSelect, FormButton } from './index';
+import { safeString } from '../../utils/safeValues';
 
 interface UserFormData {
   name: string;
@@ -10,29 +11,51 @@ interface UserFormData {
 }
 
 interface UserFormProps {
-  initialData?: Partial<UserFormData>;
+  initialData?: Partial<UserFormData> | null;
   onSubmit: (data: UserFormData) => void;
   branches?: { id: string; name: string }[];
   isLoading?: boolean;
   submitLabel?: string;
 }
 
+const DEFAULT_USER_FORM_DATA: UserFormData = {
+  name: '',
+  role: '',
+  branch: '',
+  salary: '',
+  shift: 'Morning',
+};
+
+const buildUserFormData = (source?: Partial<UserFormData> | null): UserFormData => ({
+  name: safeString(source?.name),
+  role: safeString(source?.role),
+  branch: safeString(source?.branch),
+  salary: safeString(source?.salary),
+  shift: safeString(source?.shift, 'Morning') || 'Morning',
+});
+
 const UserForm: React.FC<UserFormProps> = ({
-  initialData = {},
+  initialData,
   onSubmit,
   branches = [],
   isLoading = false,
   submitLabel = 'Create User',
 }) => {
-  const [formData, setFormData] = useState<UserFormData>({
-    name: initialData.name || '',
-    role: initialData.role || '',
-    branch: initialData.branch || '',
-    salary: initialData.salary || '',
-    shift: initialData.shift || 'Morning',
-  });
+  const safeInitialData = useMemo(
+    () => initialData ?? DEFAULT_USER_FORM_DATA,
+    [initialData]
+  );
+
+  const [formData, setFormData] = useState<UserFormData>(() =>
+    buildUserFormData(safeInitialData)
+  );
 
   const [errors, setErrors] = useState<Partial<UserFormData>>({});
+
+  useEffect(() => {
+    setFormData(buildUserFormData(safeInitialData));
+    setErrors({});
+  }, [safeInitialData]);
 
   const validateForm = (): boolean => {
     const newErrors: Partial<UserFormData> = {};
@@ -70,10 +93,12 @@ const UserForm: React.FC<UserFormProps> = ({
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
         <div className="px-6 py-4 border-b border-gray-200">
           <h2 className="text-xl font-semibold text-gray-900">
-            {initialData.name ? 'Edit User' : 'Add New User'}
+            {safeString(safeInitialData?.name).trim() ? 'Edit User' : 'Add New User'}
           </h2>
           <p className="text-sm text-gray-600 mt-1">
-            {initialData.name ? 'Update user information' : 'Create a new staff member account'}
+            {safeString(safeInitialData?.name).trim()
+              ? 'Update user information'
+              : 'Create a new staff member account'}
           </p>
         </div>
 
