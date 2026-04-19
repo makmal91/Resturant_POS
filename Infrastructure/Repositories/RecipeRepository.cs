@@ -26,6 +26,16 @@ public class RecipeRepository : IRecipeRepository
             .ToListAsync();
     }
 
+    public async Task<MenuItem?> GetMenuItemAsync(int id)
+    {
+        return await _context.MenuItems.FindAsync(id);
+    }
+
+    public async Task<InventoryItem?> GetInventoryItemAsync(int id)
+    {
+        return await _context.InventoryItems.FindAsync(id);
+    }
+
     public async Task AddRecipeAsync(POSSystem.Domain.Recipe recipe)
     {
         await _context.Recipes.AddAsync(recipe);

@@ -17,6 +17,10 @@ public class MenuCategoryConfiguration : IEntityTypeConfiguration<MenuCategory>
         builder.Property(mc => mc.Description)
             .HasMaxLength(500);
 
+        builder.Property(mc => mc.CategoryType)
+            .HasConversion<int>()
+            .HasDefaultValue(CategoryType.Sale);
+
         // Indexes
         builder.HasIndex(mc => mc.BranchId)
             .HasDatabaseName("idx_menucategory_branchid");
@@ -24,6 +28,9 @@ public class MenuCategoryConfiguration : IEntityTypeConfiguration<MenuCategory>
         builder.HasIndex(mc => new { mc.BranchId, mc.Name })
             .IsUnique()
             .HasDatabaseName("idx_menucategory_branch_name");
+
+        builder.HasIndex(mc => new { mc.BranchId, mc.CategoryType })
+            .HasDatabaseName("idx_menucategory_branch_type");
 
         // Relationships
         builder.HasMany(mc => mc.MenuItems)

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { FormInput, FormSelect, FormButton } from './index';
 
 interface Variant {
@@ -6,45 +6,138 @@ interface Variant {
   price: string;
 }
 
+const normalizeVariants = (variants: unknown): Variant[] => {
+  if (!Array.isArray(variants)) {
+    return [];
+  }
+
+  return variants.map((variant) => {
+    const item = variant as { name?: unknown; price?: unknown };
+    return {
+      name: String(item?.name ?? ''),
+      price: String(item?.price ?? ''),
+    };
+  });
+};
+
 interface MenuFormData {
   name: string;
   category: string;
   price: string;
+  productType: string;
   variants: Variant[];
 }
 
 interface MenuFormProps {
-  initialData?: Partial<MenuFormData>;
-  onSubmit: (data: MenuFormData) => void;
+  initialData?: Partial<MenuFormData> | null;
+  onSubmit: (data: MenuFormData) => void | Promise<void>;
   categories?: { id: string; name: string }[];
+  isCategoryLoading?: boolean;
+  categoryError?: string | null;
   isLoading?: boolean;
   submitLabel?: string;
+  isEditMode?: boolean;
 }
 
+const DEFAULT_MENU_FORM_DATA: MenuFormData = {
+  name: '',
+  category: '',
+  price: '0',
+  productType: 'FinishedGood',
+  variants: [],
+};
+
+const normalizeCategory = (
+  rawCategory: unknown,
+  normalizedCategories: { id: string; name: string }[]
+): string => {
+  if (rawCategory == null) {
+    return '';
+  }
+
+  const value = String(rawCategory).trim();
+  if (!value) {
+    return '';
+  }
+
+  const matched = normalizedCategories.find(
+    (category) =>
+      category.id === value ||
+      category.name.toLowerCase() === value.toLowerCase()
+  );
+
+  return matched ? matched.id : value;
+};
+
+const buildInitialFormData = (
+  initialData: Partial<MenuFormData> | null | undefined,
+  normalizedCategories: { id: string; name: string }[]
+): MenuFormData => ({
+  name: String(initialData?.name ?? ''),
+  category: normalizeCategory(initialData?.category, normalizedCategories),
+  price: String(initialData?.price ?? ''),
+  productType: String(initialData?.productType ?? 'FinishedGood'),
+  variants: normalizeVariants(initialData?.variants),
+});
+
 const MenuForm: React.FC<MenuFormProps> = ({
-  initialData = { variants: [] },
+  initialData,
   onSubmit,
   categories = [],
+  isCategoryLoading = false,
+  categoryError = null,
   isLoading = false,
   submitLabel = 'Create Menu Item',
+  isEditMode = false,
 }) => {
-  const [formData, setFormData] = useState<MenuFormData>({
-    name: initialData.name || '',
-    category: initialData.category || '',
-    price: initialData.price || '',
-    variants: initialData.variants || [],
-  });
+  const safeMenu = useMemo(
+    () => initialData ?? DEFAULT_MENU_FORM_DATA,
+    [initialData]
+  );
+
+  const normalizedCategories = useMemo(
+    () =>
+      (Array.isArray(categories) ? categories : [])
+        .map((category) => ({
+          id: String(category?.id ?? ''),
+          name: String(category?.name ?? ''),
+        }))
+        .filter((category) => category.id && category.name),
+    [categories]
+  );
+
+  const [formData, setFormData] = useState<MenuFormData>(() =>
+    buildInitialFormData(safeMenu, normalizedCategories)
+  );
 
   const [errors, setErrors] = useState<Partial<MenuFormData>>({});
-  const [variantError, setVariantError] = useState<string>('');
+  const [formError, setFormError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setFormData(buildInitialFormData(safeMenu, normalizedCategories));
+    setErrors({});
+    setFormError(null);
+  }, [safeMenu, normalizedCategories]);
 
   const validateForm = (): boolean => {
     const newErrors: Partial<MenuFormData> = {};
+    const priceValue = Number(formData.price);
 
     if (!formData.name.trim()) newErrors.name = 'Item name is required';
-    if (!formData.category) newErrors.category = 'Category is required';
-    if (!formData.price) newErrors.price = 'Price is required';
-    if (parseFloat(formData.price) < 0) newErrors.price = 'Price must be positive';
+    if (normalizedCategories.length === 0) {
+      newErrors.category = 'No categories found. Please create a menu category first.';
+    } else if (!formData.category) {
+      newErrors.category = 'Category is required';
+    }
+    if (!formData.price || !Number.isFinite(priceValue)) {
+      newErrors.price = 'Price is required';
+    } else if (priceValue < 0) {
+      newErrors.price = 'Price must be positive';
+    }
+
+    if (!formData.productType) {
+      newErrors.productType = 'Product type is required';
+    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -59,7 +152,7 @@ const MenuForm: React.FC<MenuFormProps> = ({
   const handleAddVariant = () => {
     const newVariant: Variant = { name: '', price: '' };
     setFormData((prev) => ({ ...prev, variants: [...prev.variants, newVariant] }));
-    setVariantError('');
+    setFormError(null);
   };
 
   const handleVariantChange = (
@@ -79,11 +172,24 @@ const MenuForm: React.FC<MenuFormProps> = ({
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
+
     if (validateForm()) {
-      onSubmit(formData);
+      try {
+        await Promise.resolve(onSubmit(formData));
+      } catch (err) {
+        console.error('Menu form submit failed:', err);
+        setFormError('Failed to submit form. Please try again.');
+      }
     }
+  };
+
+  const handleReset = () => {
+    setFormData(buildInitialFormData(safeMenu, normalizedCategories));
+    setErrors({});
+    setFormError(null);
   };
 
   return (
@@ -96,18 +202,42 @@ const MenuForm: React.FC<MenuFormProps> = ({
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
         <div className="px-6 py-4 border-b border-gray-200">
           <h2 className="text-xl font-semibold text-gray-900">
-            {initialData.name ? 'Edit Menu Item' : 'Add New Menu Item'}
+            {isEditMode ? 'Edit Menu Item' : 'Add New Menu Item'}
           </h2>
           <p className="text-sm text-gray-600 mt-1">
-            {initialData.name ? 'Update menu item details' : 'Create a new menu item with variants and pricing'}
+            {isEditMode ? 'Update menu item details' : 'Create a new menu item with variants and pricing'}
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6">
+          {isCategoryLoading && (
+            <div className="mb-4 rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+              Loading menu categories...
+            </div>
+          )}
+
+          {categoryError && (
+            <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              {categoryError}
+            </div>
+          )}
+
+          {!isCategoryLoading && normalizedCategories.length === 0 && (
+            <div className="mb-4 rounded-md border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
+              No menu categories available yet. Please create a category before adding items.
+            </div>
+          )}
+
+          {formError && (
+            <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {formError}
+            </div>
+          )}
+
           {/* Basic Information */}
           <div className="mb-8">
             <h3 className="text-base font-semibold text-gray-900 mb-4">Basic Information</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <FormInput
                 label="Item Name"
                 name="name"
@@ -123,10 +253,26 @@ const MenuForm: React.FC<MenuFormProps> = ({
                 name="category"
                 value={formData.category}
                 onChange={handleChange}
-                options={categories.map((cat) => ({ label: cat.name, value: cat.id }))}
+                options={normalizedCategories.map((cat) => ({ label: cat.name, value: cat.id }))}
                 placeholder="Select category"
                 required
                 error={errors.category}
+                disabled={isCategoryLoading || normalizedCategories.length === 0}
+              />
+
+              <FormSelect
+                label="Product Type"
+                name="productType"
+                value={formData.productType}
+                onChange={handleChange}
+                options={[
+                  { label: 'Finished Good', value: 'FinishedGood' },
+                  { label: 'Raw Material', value: 'RawMaterial' },
+                  { label: 'Semi Finished', value: 'SemiFinished' },
+                  { label: 'Service', value: 'Service' },
+                ]}
+                required
+                error={errors.productType}
               />
             </div>
           </div>
@@ -149,6 +295,7 @@ const MenuForm: React.FC<MenuFormProps> = ({
           </div>
 
           {/* Variants Section */}
+          {formData.productType === 'FinishedGood' && (
           <div>
             <div className="flex justify-between items-center mb-4">
               <div>
@@ -213,11 +360,18 @@ const MenuForm: React.FC<MenuFormProps> = ({
               </div>
             )}
           </div>
+          )}
 
           {/* Action Buttons */}
           <div className="mt-8 flex justify-end space-x-3">
-            <FormButton type="reset" label="Clear" variant="secondary" />
-            <FormButton type="submit" label={submitLabel} loading={isLoading} variant="primary" />
+            <FormButton type="button" label="Clear" variant="secondary" onClick={handleReset} />
+            <FormButton
+              type="submit"
+              label={submitLabel}
+              loading={isLoading}
+              disabled={isCategoryLoading || normalizedCategories.length === 0}
+              variant="primary"
+            />
           </div>
         </form>
       </div>

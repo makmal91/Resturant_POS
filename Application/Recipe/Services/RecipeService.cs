@@ -15,6 +15,23 @@ public class RecipeService : IRecipeService
 
     public async Task<POSSystem.Domain.Recipe> CreateRecipeAsync(CreateRecipeDto dto)
     {
+        var menuItem = await _repository.GetMenuItemAsync(dto.MenuItemId);
+        if (menuItem == null)
+            throw new Exception("Menu item not found");
+
+        if (menuItem.ProductType != ProductType.FinishedGood)
+            throw new Exception("Recipe can only be attached to FinishedGood menu items");
+
+        var ingredient = await _repository.GetInventoryItemAsync(dto.IngredientId);
+        if (ingredient == null)
+            throw new Exception("Ingredient not found");
+
+        if (ingredient.ProductType != ProductType.RawMaterial && ingredient.ProductType != ProductType.SemiFinished)
+            throw new Exception("Recipe ingredient must be RawMaterial or SemiFinished");
+
+        if (ingredient.BranchId != dto.BranchId || menuItem.BranchId != dto.BranchId)
+            throw new Exception("Recipe item and ingredient must belong to the same branch");
+
         var recipe = new POSSystem.Domain.Recipe
         {
             MenuItemId = dto.MenuItemId,

@@ -127,7 +127,7 @@ namespace POSSystem.Infrastructure.Migrations
                             City = "Default City",
                             ClosingTime = new TimeSpan(0, 22, 0, 0, 0),
                             Code = "MAIN",
-                            CreatedDate = new DateTime(2026, 4, 18, 11, 23, 16, 244, DateTimeKind.Utc).AddTicks(9384),
+                            CreatedDate = new DateTime(2026, 4, 19, 11, 0, 35, 292, DateTimeKind.Utc).AddTicks(9337),
                             Currency = "USD",
                             Email = "main@restaurant.com",
                             IsActive = true,
@@ -248,6 +248,16 @@ namespace POSSystem.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("IsInventoryItem")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("IsPurchasable")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
                     b.Property<decimal>("MinStockLevel")
                         .HasPrecision(12, 2)
                         .HasColumnType("decimal(12,2)");
@@ -262,6 +272,11 @@ namespace POSSystem.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
+
+                    b.Property<int>("ProductType")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
 
                     b.Property<decimal>("PurchasePrice")
                         .HasPrecision(10, 2)
@@ -287,6 +302,9 @@ namespace POSSystem.Infrastructure.Migrations
                         .IsUnique()
                         .HasDatabaseName("idx_inventoryitem_branch_name");
 
+                    b.HasIndex("BranchId", "IsInventoryItem", "ProductType")
+                        .HasDatabaseName("idx_inventoryitem_branch_inventory_type");
+
                     b.ToTable("InventoryItems");
                 });
 
@@ -300,6 +318,11 @@ namespace POSSystem.Infrastructure.Migrations
 
                     b.Property<int>("BranchId")
                         .HasColumnType("int");
+
+                    b.Property<int>("CategoryType")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
 
                     b.Property<int?>("CreatedById")
                         .HasColumnType("int");
@@ -338,6 +361,9 @@ namespace POSSystem.Infrastructure.Migrations
 
                     b.HasIndex("BranchId")
                         .HasDatabaseName("idx_menucategory_branchid");
+
+                    b.HasIndex("BranchId", "CategoryType")
+                        .HasDatabaseName("idx_menucategory_branch_type");
 
                     b.HasIndex("BranchId", "Name")
                         .IsUnique()
@@ -388,6 +414,26 @@ namespace POSSystem.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("IsInventoryItem")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("IsPurchasable")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("IsRecipeItem")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("IsSaleable")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
                     b.Property<bool>("IsVeg")
                         .HasColumnType("bit");
 
@@ -412,6 +458,9 @@ namespace POSSystem.Infrastructure.Migrations
                         .HasPrecision(10, 2)
                         .HasColumnType("decimal(10,2)");
 
+                    b.Property<int>("ProductType")
+                        .HasColumnType("int");
+
                     b.Property<decimal>("TaxPercentage")
                         .HasPrecision(5, 2)
                         .HasColumnType("decimal(5,2)");
@@ -429,6 +478,9 @@ namespace POSSystem.Infrastructure.Migrations
 
                     b.HasIndex("BranchId", "IsAvailable")
                         .HasDatabaseName("idx_menuitem_branch_available");
+
+                    b.HasIndex("BranchId", "IsSaleable", "ProductType")
+                        .HasDatabaseName("idx_menuitem_branch_saleable_type");
 
                     b.ToTable("MenuItems");
                 });
@@ -678,6 +730,16 @@ namespace POSSystem.Infrastructure.Migrations
                     b.Property<string>("ModifiedByName")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("ModifiersJson")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("Notes")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
                     b.Property<int>("OrderId")
                         .HasColumnType("int");
 
@@ -694,6 +756,9 @@ namespace POSSystem.Infrastructure.Migrations
 
                     b.Property<DateTime?>("UpdatedDate")
                         .HasColumnType("datetime2");
+
+                    b.Property<int?>("VariantId")
+                        .HasColumnType("int");
 
                     b.HasKey("Id");
 
@@ -898,7 +963,7 @@ namespace POSSystem.Infrastructure.Migrations
                         {
                             Id = 1,
                             BranchId = 1,
-                            CreatedDate = new DateTime(2026, 4, 18, 11, 23, 16, 244, DateTimeKind.Utc).AddTicks(9726),
+                            CreatedDate = new DateTime(2026, 4, 19, 11, 0, 35, 292, DateTimeKind.Utc).AddTicks(9498),
                             IsDeleted = false,
                             Name = "Admin",
                             Permissions = "all_permissions"
@@ -1138,7 +1203,7 @@ namespace POSSystem.Infrastructure.Migrations
                         {
                             Id = 1,
                             BranchId = 1,
-                            CreatedDate = new DateTime(2026, 4, 18, 11, 23, 16, 244, DateTimeKind.Utc).AddTicks(9790),
+                            CreatedDate = new DateTime(2026, 4, 19, 11, 0, 35, 292, DateTimeKind.Utc).AddTicks(9533),
                             Email = "admin@restaurant.com",
                             FullName = "System Administrator",
                             IsDeleted = false,

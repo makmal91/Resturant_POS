@@ -1,10 +1,11 @@
 import { create } from 'zustand'
-import axios from 'axios'
+import api, { getApiErrorMessage } from '../services/api'
 
 export interface MenuCategory {
   id: number
   name: string
   description: string
+  categoryType?: 'Sale' | 'Inventory' | string
   items: MenuItem[]
 }
 
@@ -14,6 +15,11 @@ export interface MenuItem {
   price: number
   tax: number
   preparationTime: number
+  productType?: 'RawMaterial' | 'FinishedGood' | 'SemiFinished' | 'Service' | string
+  isSaleable?: boolean
+  isInventoryItem?: boolean
+  isRecipeItem?: boolean
+  isPurchasable?: boolean
   variants: MenuItemVariant[]
   addons: MenuItemAddon[]
 }
@@ -44,6 +50,8 @@ export interface CartItem {
 
 interface POSState {
   menu: MenuCategory[]
+  isMenuLoading: boolean
+  menuError: string | null
   selectedCategory: number | null
   cart: CartItem[]
   discount: number
@@ -66,6 +74,8 @@ interface POSState {
 
 export const usePOSStore = create<POSState>((set, get) => ({
   menu: [],
+  isMenuLoading: false,
+  menuError: null,
   selectedCategory: null,
   cart: [],
   discount: 0,
@@ -74,11 +84,40 @@ export const usePOSStore = create<POSState>((set, get) => ({
   showItemModal: false,
 
   fetchMenu: async (branchId: number) => {
+    set({ isMenuLoading: true, menuError: null })
+
     try {
-      const response = await axios.get(`/api/menu?branchId=${branchId}`)
-      set({ menu: response.data.categories })
+      console.log(`[POS] Fetching menu for branch ${branchId}`)
+
+      const response = await api.get('/menu', {
+        params: { branchId }
+      })
+
+      const categories = (response.data?.categories ?? [])
+        .filter((category: MenuCategory) => (category?.categoryType ?? 'Sale') === 'Sale')
+        .map((category: MenuCategory) => ({
+          ...category,
+          items: (category?.items ?? []).filter((item: MenuItem) =>
+            (item?.isSaleable ?? false) && (item?.productType ?? '') === 'FinishedGood'
+          )
+        }))
+
+      set({
+        menu: categories,
+        selectedCategory: categories[0]?.id ?? null,
+        isMenuLoading: false,
+        menuError: null,
+      })
     } catch (error) {
+      const message = getApiErrorMessage(error, 'Failed to fetch menu.')
       console.error('Failed to fetch menu:', error)
+
+      set({
+        menu: [],
+        selectedCategory: null,
+        isMenuLoading: false,
+        menuError: message,
+      })
     }
   },
 

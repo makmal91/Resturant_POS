@@ -13,6 +13,11 @@ public class MenuItem : BaseEntity
     public string ImageUrl { get; set; } = string.Empty;
     public bool IsAvailable { get; set; } = true;
     public bool IsVeg { get; set; }
+    public ProductType ProductType { get; set; } = ProductType.FinishedGood;
+    public bool IsSaleable { get; set; } = true;
+    public bool IsInventoryItem { get; set; }
+    public bool IsRecipeItem { get; set; }
+    public bool IsPurchasable { get; set; }
     public int MenuCategoryId { get; set; }
 
     public virtual Branch Branch { get; set; } = null!;

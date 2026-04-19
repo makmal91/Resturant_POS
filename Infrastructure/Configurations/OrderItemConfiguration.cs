@@ -22,6 +22,12 @@ public class OrderItemConfiguration : IEntityTypeConfiguration<OrderItem>
         builder.Property(oi => oi.Total)
             .HasPrecision(10, 2);
 
+        builder.Property(oi => oi.ModifiersJson)
+            .HasMaxLength(2000);
+
+        builder.Property(oi => oi.Notes)
+            .HasMaxLength(500);
+
         // Indexes
         builder.HasIndex(oi => oi.OrderId)
             .HasDatabaseName("idx_orderitem_orderid");

@@ -32,6 +32,15 @@ public class InventoryRepository : IInventoryRepository
             .ToListAsync();
     }
 
+    public async Task<ICollection<InventoryItem>> GetInventoryItemsByBranchAsync(int branchId)
+    {
+        return await _context.InventoryItems
+            .Where(i => i.BranchId == branchId &&
+                        i.IsInventoryItem &&
+                        (i.ProductType == ProductType.RawMaterial || i.ProductType == ProductType.SemiFinished))
+            .ToListAsync();
+    }
+
     public async Task AddStockMovementAsync(StockMovement movement)
     {
         await _context.StockMovements.AddAsync(movement);

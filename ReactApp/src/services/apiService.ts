@@ -1,22 +1,6 @@
-import axios, { AxiosInstance } from 'axios';
+import apiClient from './api';
 
-const API_BASE_URL = 'https://localhost:7183/api';
-
-const apiClient: AxiosInstance = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
-
-// Add token to requests if it exists
-apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('authToken');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
+const DEFAULT_BRANCH_ID = 1;
 
 export const BranchService = {
   getAll: () => apiClient.get('/branches'),
@@ -35,20 +19,27 @@ export const UserService = {
 };
 
 export const MenuService = {
-  getAll: () => apiClient.get('/menu'),
-  getById: (id: number) => apiClient.get(`/menu/${id}`),
-  create: (data: any) => apiClient.post('/menu', data),
+  getAll: (branchId: number = DEFAULT_BRANCH_ID) =>
+    apiClient.get('/menu/pos', { params: { branchId } }),
+  getAllMenu: (branchId: number = DEFAULT_BRANCH_ID) =>
+    apiClient.get('/menu/all', { params: { branchId } }),
+  getById: (id: number, branchId: number = DEFAULT_BRANCH_ID) =>
+    apiClient.get('/menu/all', { params: { branchId, id } }),
+  create: (data: any) => apiClient.post('/menu/items', data),
   update: (id: number, data: any) => apiClient.put(`/menu/${id}`, data),
   delete: (id: number) => apiClient.delete(`/menu/${id}`),
-  getCategories: () => apiClient.get('/menu/categories'),
+  getCategories: (branchId: number = DEFAULT_BRANCH_ID, includeAll: boolean = false) =>
+    apiClient.get(includeAll ? '/menu/all' : '/menu/pos', { params: { branchId } }),
 };
 
 export const InventoryService = {
-  getAll: () => apiClient.get('/inventory'),
+  getAll: (branchId: number = DEFAULT_BRANCH_ID) => apiClient.get('/inventory', { params: { branchId } }),
   getById: (id: number) => apiClient.get(`/inventory/${id}`),
   create: (data: any) => apiClient.post('/inventory', data),
   update: (id: number, data: any) => apiClient.put(`/inventory/${id}`, data),
   delete: (id: number) => apiClient.delete(`/inventory/${id}`),
+  purchase: (data: any) => apiClient.post('/inventory/purchase', data),
+  adjust: (data: any) => apiClient.post('/inventory/adjust', data),
 };
 
 export const OrderService = {

@@ -27,6 +27,11 @@ public class OrderRepository : IOrderRepository
         return await _context.MenuItems.FindAsync(id);
     }
 
+    public async Task<MenuItemVariant?> GetVariantAsync(int id)
+    {
+        return await _context.MenuItemVariants.FindAsync(id);
+    }
+
     public async Task<ICollection<MenuItem>> GetMenuItemsAsync(IEnumerable<int> ids)
     {
         return await _context.MenuItems

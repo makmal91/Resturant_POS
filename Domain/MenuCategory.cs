@@ -6,6 +6,7 @@ public class MenuCategory : BaseEntity
 {
     public string Name { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
+    public CategoryType CategoryType { get; set; } = CategoryType.Sale;
 
     public virtual Branch Branch { get; set; } = null!;
     public virtual ICollection<MenuItem> MenuItems { get; set; } = new List<MenuItem>();

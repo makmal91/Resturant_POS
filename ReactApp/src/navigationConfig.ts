@@ -17,6 +17,13 @@ import UsersList from './components/UsersList';
 import MenuList from './components/MenuList';
 import InventoryList from './components/InventoryList';
 import { OrderScreen } from './components/forms';
+import CategoryPage from './modules/category/CategoryPage';
+import ProductPage from './modules/product/ProductPage';
+import CustomerPage from './modules/customer/CustomerPage';
+import SupplierPage from './modules/supplier/SupplierPage';
+import UnitPage from './modules/unit/UnitPage';
+import TaxPage from './modules/tax/TaxPage';
+import DiscountPage from './modules/discount/DiscountPage';
 
 export const navigationItems: NavigationItem[] = [
   {
@@ -44,6 +51,55 @@ export const navigationItems: NavigationItem[] = [
     label: 'Menu',
     component: MenuList,
     icon: '🍽️',
+    group: 'Master Data',
+  },
+  {
+    path: '/categories',
+    label: 'Categories',
+    component: CategoryPage,
+    icon: '🗂️',
+    group: 'Master Data',
+  },
+  {
+    path: '/products',
+    label: 'Products',
+    component: ProductPage,
+    icon: '🧾',
+    group: 'Master Data',
+  },
+  {
+    path: '/customers',
+    label: 'Customers',
+    component: CustomerPage,
+    icon: '🙋',
+    group: 'Master Data',
+  },
+  {
+    path: '/suppliers',
+    label: 'Suppliers',
+    component: SupplierPage,
+    icon: '🚚',
+    group: 'Master Data',
+  },
+  {
+    path: '/units',
+    label: 'Units',
+    component: UnitPage,
+    icon: '⚖️',
+    group: 'Master Data',
+  },
+  {
+    path: '/taxes',
+    label: 'Taxes',
+    component: TaxPage,
+    icon: '💸',
+    group: 'Master Data',
+  },
+  {
+    path: '/discounts',
+    label: 'Discounts',
+    component: DiscountPage,
+    icon: '🏷️',
     group: 'Master Data',
   },
   {

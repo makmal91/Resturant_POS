@@ -16,6 +16,8 @@ public interface IRecipeRepository
 {
     Task<POSSystem.Domain.Recipe?> GetRecipeAsync(int id);
     Task<ICollection<POSSystem.Domain.Recipe>> GetRecipesByMenuItemAsync(int menuItemId);
+    Task<MenuItem?> GetMenuItemAsync(int id);
+    Task<InventoryItem?> GetInventoryItemAsync(int id);
     Task AddRecipeAsync(POSSystem.Domain.Recipe recipe);
     Task SaveChangesAsync();
 }

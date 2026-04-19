@@ -44,10 +44,18 @@ public class MenuController : ControllerBase
         return CreatedAtAction(nameof(AddAddon), new { menuItemId, id = addon.Id }, addon);
     }
 
-    [HttpGet]
-    public async Task<ActionResult<MenuDto>> GetFullMenu([FromQuery] int branchId)
+    [HttpGet("all")]
+    public async Task<ActionResult<MenuDto>> GetAllMenu([FromQuery] int branchId)
     {
         var menu = await _menuService.GetFullMenuAsync(branchId);
+        return Ok(menu);
+    }
+
+    [HttpGet]
+    [HttpGet("pos")]
+    public async Task<ActionResult<MenuDto>> GetPosMenu([FromQuery] int branchId)
+    {
+        var menu = await _menuService.GetPosMenuAsync(branchId);
         return Ok(menu);
     }
 }

@@ -3,6 +3,7 @@ import DataTable, { Column, Action } from './DataTable';
 import Badge from './Badge';
 import { useFormModal } from '../contexts/FormModalContext';
 import { useConfirmDialog } from '../contexts/ConfirmDialogContext';
+import { InventoryService } from '../services/apiService';
 
 interface InventoryItem {
   id: number;
@@ -11,44 +12,60 @@ interface InventoryItem {
   stock: number;
   minLevel: number;
   status: string;
+  productType: string;
 }
 
 const InventoryList: React.FC = () => {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string>('');
+  const [isProcessing, setIsProcessing] = useState(false);
   const { openForm } = useFormModal();
   const { showConfirm } = useConfirmDialog();
 
-  useEffect(() => {
-    setTimeout(() => {
-      setItems([
-        {
-          id: 1,
-          itemName: 'Tomato',
-          unit: 'kg',
-          stock: 50,
-          minLevel: 10,
-          status: 'In Stock'
-        },
-        {
-          id: 2,
-          itemName: 'Chicken Breast',
-          unit: 'kg',
-          stock: 8,
-          minLevel: 15,
-          status: 'Low Stock'
-        },
-        {
-          id: 3,
-          itemName: 'Olive Oil',
-          unit: 'L',
-          stock: 2,
-          minLevel: 5,
-          status: 'Critical'
-        },
-      ]);
+  const BRANCH_ID = 1;
+
+  const normalizeInventoryItems = (payload: unknown): InventoryItem[] => {
+    const source = payload as { items?: any[] } | undefined;
+    const rawItems = Array.isArray(source?.items) ? source.items : [];
+
+    return rawItems
+      .map((raw): InventoryItem => {
+        const stock = Number(raw?.currentStock ?? 0);
+        const minLevel = Number(raw?.minStockLevel ?? 0);
+
+        return {
+          id: Number(raw?.id ?? 0),
+          itemName: String(raw?.name ?? ''),
+          unit: String(raw?.unit ?? ''),
+          stock,
+          minLevel,
+          status: getStockStatus(stock, minLevel),
+          productType: String(raw?.productType ?? ''),
+        };
+      })
+      .filter((item) => item.id > 0)
+      .filter((item) => item.productType === 'RawMaterial' || item.productType === 'SemiFinished');
+  };
+
+  const loadInventory = async () => {
+    setLoading(true);
+    setError('');
+
+    try {
+      const response = await InventoryService.getAll(BRANCH_ID);
+      setItems(normalizeInventoryItems(response?.data));
+    } catch (err) {
+      console.error('Failed to fetch inventory items:', err);
+      setItems([]);
+      setError('Failed to load inventory items.');
+    } finally {
       setLoading(false);
-    }, 1000);
+    }
+  };
+
+  useEffect(() => {
+    void loadInventory();
   }, []);
 
   const getStockStatus = (stock: number, minLevel: number): 'In Stock' | 'Low Stock' | 'Critical' => {
@@ -99,6 +116,13 @@ const InventoryList: React.FC = () => {
         );
       },
     },
+    {
+      key: 'productType',
+      header: 'Type',
+      render: (value) => (
+        <Badge variant="info" size="sm">{String(value ?? '')}</Badge>
+      ),
+    },
   ];
 
   const handleAddItem = () => {
@@ -107,6 +131,49 @@ const InventoryList: React.FC = () => {
 
   const handleEditItem = (item: InventoryItem) => {
     openForm('inventory', item);
+  };
+
+  const handlePurchase = async (item: InventoryItem) => {
+    if (item.productType !== 'RawMaterial') {
+      alert('Purchase entry is allowed only for RawMaterial.');
+      return;
+    }
+
+    const quantityText = window.prompt(`Enter purchase quantity for ${item.itemName}:`, '1');
+    const quantity = Number(quantityText ?? '0');
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      return;
+    }
+
+    try {
+      setIsProcessing(true);
+      await InventoryService.purchase({ itemId: item.id, quantity, branchId: BRANCH_ID });
+      await loadInventory();
+    } catch (err) {
+      console.error('Purchase entry failed:', err);
+      alert('Failed to add purchase stock.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleAdjust = async (item: InventoryItem) => {
+    const quantityText = window.prompt(`Enter adjustment quantity for ${item.itemName} (use negative to deduct):`, '1');
+    const quantityDelta = Number(quantityText ?? '0');
+    if (!Number.isFinite(quantityDelta) || quantityDelta === 0) {
+      return;
+    }
+
+    try {
+      setIsProcessing(true);
+      await InventoryService.adjust({ itemId: item.id, quantityDelta, branchId: BRANCH_ID, reason: 'Manual adjustment' });
+      await loadInventory();
+    } catch (err) {
+      console.error('Stock adjustment failed:', err);
+      alert('Failed to adjust stock.');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleDeleteItem = (item: InventoryItem) => {
@@ -129,6 +196,20 @@ const InventoryList: React.FC = () => {
 
   const actions: Action<InventoryItem>[] = [
     {
+      label: 'Purchase',
+      onClick: (item) => {
+        void handlePurchase(item);
+      },
+      variant: 'secondary',
+    },
+    {
+      label: 'Adjust',
+      onClick: (item) => {
+        void handleAdjust(item);
+      },
+      variant: 'secondary',
+    },
+    {
       label: 'Edit',
       onClick: handleEditItem,
       variant: 'primary',
@@ -144,12 +225,19 @@ const InventoryList: React.FC = () => {
     <div>
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Inventory</h1>
-        <p className="text-gray-600">Track and manage inventory levels</p>
+        <p className="text-gray-600">Track raw materials and semi-finished inventory levels</p>
       </div>
+
+      {error && (
+        <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
 
       <div className="mb-6 flex justify-end">
         <button
           onClick={handleAddItem}
+          disabled={isProcessing}
           className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
         >
           <svg className="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -3,6 +3,7 @@ using POSSystem.Application.Orders.Interfaces;
 using POSSystem.Application.Inventory.Interfaces;
 using POSSystem.Domain;
 using System.Linq;
+using System.Text.Json;
 
 namespace POSSystem.Application.Orders.Services;
 
@@ -37,12 +38,30 @@ public class OrderService : IOrderService
 
         foreach (var itemDto in dto.OrderItems)
         {
-            var menuItem = menuItemDict[itemDto.MenuItemId];
+            if (!menuItemDict.TryGetValue(itemDto.MenuItemId, out var menuItem))
+                throw new Exception($"Menu item {itemDto.MenuItemId} not found");
+
+            if (!menuItem.IsSaleable || menuItem.ProductType != ProductType.FinishedGood)
+                throw new Exception($"Menu item {menuItem.Name} is not allowed for POS order");
+
+            var price = menuItem.Price;
+            if (itemDto.VariantId.HasValue)
+            {
+                var variant = await _repository.GetVariantAsync(itemDto.VariantId.Value);
+                if (variant == null || variant.MenuItemId != menuItem.Id)
+                    throw new Exception("Invalid variant for selected menu item");
+
+                price = variant.Price;
+            }
+
             var orderItem = new OrderItem
             {
                 MenuItemId = itemDto.MenuItemId,
+                VariantId = itemDto.VariantId,
+                ModifiersJson = JsonSerializer.Serialize(itemDto.ModifierIds),
+                Notes = itemDto.Notes,
                 Quantity = itemDto.Quantity,
-                Price = menuItem.Price,
+                Price = price,
                 Discount = itemDto.Discount,
                 BranchId = dto.BranchId
             };
@@ -86,12 +105,28 @@ public class OrderService : IOrderService
         var menuItem = await _repository.GetMenuItemAsync(dto.MenuItemId);
         if (menuItem == null) throw new Exception("Menu item not found");
 
+        if (!menuItem.IsSaleable || menuItem.ProductType != ProductType.FinishedGood)
+            throw new Exception("Only saleable FinishedGood items can be added to order");
+
+        var price = menuItem.Price;
+        if (dto.VariantId.HasValue)
+        {
+            var variant = await _repository.GetVariantAsync(dto.VariantId.Value);
+            if (variant == null || variant.MenuItemId != menuItem.Id)
+                throw new Exception("Invalid variant for selected menu item");
+
+            price = variant.Price;
+        }
+
         var orderItem = new OrderItem
         {
             OrderId = orderId,
             MenuItemId = dto.MenuItemId,
+            VariantId = dto.VariantId,
+            ModifiersJson = JsonSerializer.Serialize(dto.ModifierIds),
+            Notes = dto.Notes,
             Quantity = dto.Quantity,
-            Price = menuItem.Price,
+            Price = price,
             Discount = dto.Discount,
             BranchId = order.BranchId
         };
@@ -130,6 +165,9 @@ public class OrderService : IOrderService
 
         foreach (var orderItem in order.OrderItems)
         {
+            if (!orderItem.MenuItem.IsSaleable || orderItem.MenuItem.ProductType != ProductType.FinishedGood)
+                throw new Exception($"Invalid order item type for {orderItem.MenuItem.Name}");
+
             var itemRecipes = recipes.Where(r => r.MenuItemId == orderItem.MenuItemId);
             foreach (var recipe in itemRecipes)
             {

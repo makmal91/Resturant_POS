@@ -3,6 +3,7 @@ import DataTable, { Column, Action } from './DataTable';
 import Badge from './Badge';
 import { useFormModal } from '../contexts/FormModalContext';
 import { useConfirmDialog } from '../contexts/ConfirmDialogContext';
+import { MenuService } from '../services/apiService';
 
 interface MenuItem {
   id: number;
@@ -12,6 +13,15 @@ interface MenuItem {
   variants: number;
   status: string;
 }
+
+const EMPTY_MENU_FORM_DATA = {
+  name: '',
+  price: 0,
+  description: '',
+  categoryId: null,
+  category: '',
+  variants: [],
+};
 
 const MenuList: React.FC = () => {
   const [items, setItems] = useState<MenuItem[]>([]);
@@ -93,7 +103,8 @@ const MenuList: React.FC = () => {
   ];
 
   const handleAddItem = () => {
-    openForm('menu');
+    console.log('[MenuList] Add Item clicked');
+    openForm('menu', EMPTY_MENU_FORM_DATA);
   };
 
   const handleEditItem = (item: MenuItem) => {

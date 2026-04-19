@@ -29,6 +29,22 @@ public class MenuItemConfiguration : IEntityTypeConfiguration<MenuItem>
         builder.Property(mi => mi.ImageUrl)
             .HasMaxLength(500);
 
+        builder.Property(mi => mi.ProductType)
+            .HasConversion<int>()
+            .HasDefaultValue(ProductType.FinishedGood);
+
+        builder.Property(mi => mi.IsSaleable)
+            .HasDefaultValue(true);
+
+        builder.Property(mi => mi.IsInventoryItem)
+            .HasDefaultValue(false);
+
+        builder.Property(mi => mi.IsRecipeItem)
+            .HasDefaultValue(false);
+
+        builder.Property(mi => mi.IsPurchasable)
+            .HasDefaultValue(false);
+
         // Indexes
         builder.HasIndex(mi => mi.BranchId)
             .HasDatabaseName("idx_menuitem_branchid");
@@ -38,6 +54,9 @@ public class MenuItemConfiguration : IEntityTypeConfiguration<MenuItem>
 
         builder.HasIndex(mi => new { mi.BranchId, mi.IsAvailable })
             .HasDatabaseName("idx_menuitem_branch_available");
+
+        builder.HasIndex(mi => new { mi.BranchId, mi.IsSaleable, mi.ProductType })
+            .HasDatabaseName("idx_menuitem_branch_saleable_type");
 
         // Relationships
         builder.HasOne(mi => mi.MenuCategory)

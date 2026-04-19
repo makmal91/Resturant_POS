@@ -12,6 +12,21 @@ interface FormModalContextType {
   setEditingData: (data: any) => void;
 }
 
+const getDefaultFormData = (type: FormType) => {
+  if (type === 'menu') {
+    return {
+      name: '',
+      price: 0,
+      description: '',
+      categoryId: null,
+      category: '',
+      variants: [],
+    };
+  }
+
+  return null;
+};
+
 const FormModalContext = createContext<FormModalContextType | undefined>(undefined);
 
 export const FormModalProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -21,9 +36,11 @@ export const FormModalProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [editingData, setEditingDataState] = useState<any>(null);
 
   const openForm = (type: FormType, data?: any) => {
+    const payload = data ?? getDefaultFormData(type);
+
     setFormType(type);
-    setEditingDataState(data || null);
-    setEditingId(data?.id || null);
+    setEditingDataState(payload);
+    setEditingId(payload?.id ?? null);
     setIsOpen(true);
   };
 

@@ -1,5 +1,19 @@
 namespace POSSystem.Domain;
 
+public enum ProductType
+{
+    RawMaterial,
+    FinishedGood,
+    SemiFinished,
+    Service
+}
+
+public enum CategoryType
+{
+    Sale,
+    Inventory
+}
+
 public enum OrderType
 {
     DineIn,

@@ -18,6 +18,12 @@ public class InventoryService : IInventoryService
         var item = await _repository.GetInventoryItemAsync(dto.ItemId);
         if (item == null) throw new Exception("Inventory item not found");
 
+        if (!item.IsInventoryItem)
+            throw new Exception("Selected item is not tracked in inventory");
+
+        if (item.ProductType != ProductType.RawMaterial)
+            throw new Exception("Purchase stock entry is allowed only for RawMaterial items");
+
         item.CurrentStock += dto.Quantity;
 
         var movement = new StockMovement
@@ -32,11 +38,48 @@ public class InventoryService : IInventoryService
         await _repository.SaveChangesAsync();
     }
 
+    public async Task AdjustStockAsync(AdjustStockDto dto)
+    {
+        if (dto.QuantityDelta == 0)
+            throw new Exception("Adjustment quantity must not be zero");
+
+        var item = await _repository.GetInventoryItemAsync(dto.ItemId);
+        if (item == null) throw new Exception("Inventory item not found");
+        if (item.BranchId != dto.BranchId) throw new Exception("Item not in branch");
+
+        if (!item.IsInventoryItem)
+            throw new Exception("Selected item is not tracked in inventory");
+
+        if (item.ProductType != ProductType.RawMaterial && item.ProductType != ProductType.SemiFinished)
+            throw new Exception("Only RawMaterial and SemiFinished items can be adjusted");
+
+        var nextStock = item.CurrentStock + dto.QuantityDelta;
+        if (nextStock < 0)
+            throw new Exception("Stock cannot be negative after adjustment");
+
+        item.CurrentStock = nextStock;
+
+        var movement = new StockMovement
+        {
+            ItemId = dto.ItemId,
+            Quantity = dto.QuantityDelta,
+            Type = dto.QuantityDelta > 0 ? StockMovementType.In : StockMovementType.Out,
+            BranchFromId = dto.QuantityDelta < 0 ? dto.BranchId : null,
+            BranchToId = dto.QuantityDelta > 0 ? dto.BranchId : null
+        };
+
+        await _repository.AddStockMovementAsync(movement);
+        await _repository.SaveChangesAsync();
+    }
+
     public async Task TransferStockAsync(TransferStockDto dto)
     {
         var fromItem = await _repository.GetInventoryItemAsync(dto.ItemId);
         if (fromItem == null) throw new Exception("Inventory item not found");
         if (fromItem.BranchId != dto.FromBranchId) throw new Exception("Item not in from branch");
+
+        if (!fromItem.IsInventoryItem)
+            throw new Exception("Selected item is not tracked in inventory");
 
         if (fromItem.CurrentStock < dto.Quantity) throw new Exception("Insufficient stock for transfer");
 
@@ -76,6 +119,12 @@ public class InventoryService : IInventoryService
         if (item == null) throw new Exception("Inventory item not found");
         if (item.BranchId != branchId) throw new Exception("Item not in branch");
 
+        if (!item.IsInventoryItem)
+            throw new Exception("Selected item is not tracked in inventory");
+
+        if (item.ProductType != ProductType.RawMaterial && item.ProductType != ProductType.SemiFinished)
+            throw new Exception("Only RawMaterial and SemiFinished items can be deducted by recipe");
+
         if (item.CurrentStock < quantity) throw new Exception("Insufficient stock");
 
         item.CurrentStock -= quantity;
@@ -90,5 +139,10 @@ public class InventoryService : IInventoryService
 
         await _repository.AddStockMovementAsync(movement);
         await _repository.SaveChangesAsync();
+    }
+
+    public async Task<ICollection<InventoryItem>> GetInventoryItemsAsync(int branchId)
+    {
+        return await _repository.GetInventoryItemsByBranchAsync(branchId);
     }
 }

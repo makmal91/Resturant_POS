@@ -31,6 +31,16 @@ public class InventoryItemConfiguration : IEntityTypeConfiguration<InventoryItem
         builder.Property(i => i.PurchasePrice)
             .HasPrecision(10, 2);
 
+        builder.Property(i => i.ProductType)
+            .HasConversion<int>()
+            .HasDefaultValue(ProductType.RawMaterial);
+
+        builder.Property(i => i.IsInventoryItem)
+            .HasDefaultValue(true);
+
+        builder.Property(i => i.IsPurchasable)
+            .HasDefaultValue(true);
+
         // Indexes
         builder.HasIndex(i => i.BranchId)
             .HasDatabaseName("idx_inventoryitem_branchid");
@@ -41,6 +51,9 @@ public class InventoryItemConfiguration : IEntityTypeConfiguration<InventoryItem
 
         builder.HasIndex(i => i.Category)
             .HasDatabaseName("idx_inventoryitem_category");
+
+        builder.HasIndex(i => new { i.BranchId, i.IsInventoryItem, i.ProductType })
+            .HasDatabaseName("idx_inventoryitem_branch_inventory_type");
 
         // Relationships
         builder.HasMany(i => i.StockMovements)
