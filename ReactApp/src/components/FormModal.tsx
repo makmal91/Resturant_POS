@@ -110,16 +110,43 @@ const FormModal: React.FC = () => {
     setIsSubmitting(true);
     setError(null);
     setSuccessMessage(null);
+
+    const selectedCompanyId = Number(data?.companyId ?? 1);
+    const payload = {
+      name: String(data?.name ?? '').trim(),
+      code: String(data?.code ?? '').trim(),
+      address: String(data?.address ?? '').trim(),
+      city: String(data?.city ?? '').trim(),
+      phone: String(data?.phone ?? '').trim(),
+      taxRate: Number(data?.taxRate ?? 0),
+      status: String(data?.status ?? 'Active'),
+      companyId: Number.isFinite(selectedCompanyId) ? selectedCompanyId : 0,
+      isActive: String(data?.status ?? 'Active').toLowerCase() !== 'inactive',
+    };
+
+    if (!payload.name || !payload.code) {
+      alert('Name and Code are required');
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (payload.companyId <= 0) {
+      setError('CompanyId is required.');
+      setIsSubmitting(false);
+      return;
+    }
+
     try {
       if (isEditMode) {
         // Update
-        await BranchService.update(editingData.id, data);
+        await BranchService.update(editingData.id, payload);
       } else {
         // Create
-        await BranchService.create(data);
+        await BranchService.create(payload);
       }
       closeWithSuccess(isEditMode ? 'Branch updated successfully.' : 'Branch created successfully.');
     } catch (err: any) {
+      console.error('Branch API Error:', err?.response?.data || err?.message);
       setError(getApiErrorMessage(err, 'Failed to save branch'));
     } finally {
       setIsSubmitting(false);

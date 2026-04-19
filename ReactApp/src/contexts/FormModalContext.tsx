@@ -4,10 +4,12 @@ export type FormType = 'branch' | 'user' | 'menu' | 'inventory' | null;
 
 const DEFAULT_BRANCH_FORM_DATA = {
   name: '',
+  code: '',
   address: '',
   city: '',
   phone: '',
   taxRate: '',
+  companyId: 1,
   status: 'Active',
 };
 

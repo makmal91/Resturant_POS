@@ -4,10 +4,12 @@ import { safeString } from '../../utils/safeValues';
 
 interface BranchFormData {
   name: string;
+  code: string;
   address: string;
   city: string;
   phone: string;
   taxRate: string;
+  companyId: number;
   status: string;
 }
 
@@ -20,19 +22,23 @@ interface BranchFormProps {
 
 const DEFAULT_BRANCH_FORM_DATA: BranchFormData = {
   name: '',
+  code: '',
   address: '',
   city: '',
   phone: '',
   taxRate: '',
+  companyId: 1,
   status: 'Active',
 };
 
 const buildBranchFormData = (source?: Partial<BranchFormData> | null): BranchFormData => ({
   name: safeString(source?.name),
+  code: safeString(source?.code),
   address: safeString(source?.address),
   city: safeString(source?.city),
   phone: safeString(source?.phone),
   taxRate: safeString(source?.taxRate),
+  companyId: Number(source?.companyId ?? 1),
   status: safeString(source?.status, 'Active') || 'Active',
 });
 
@@ -62,6 +68,7 @@ const BranchForm: React.FC<BranchFormProps> = ({
     const newErrors: Partial<BranchFormData> = {};
 
     if (!formData.name.trim()) newErrors.name = 'Branch name is required';
+    if (!formData.code.trim()) newErrors.code = 'Branch code is required';
     if (!formData.address.trim()) newErrors.address = 'Address is required';
     if (!formData.city.trim()) newErrors.city = 'City is required';
     if (!formData.phone.trim()) newErrors.phone = 'Phone is required';
@@ -111,6 +118,18 @@ const BranchForm: React.FC<BranchFormProps> = ({
                 placeholder="Enter branch name"
                 required
                 error={errors.name}
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <FormInput
+                label="Branch Code"
+                name="code"
+                value={formData.code}
+                onChange={handleChange}
+                placeholder="Enter unique branch code"
+                required
+                error={errors.code}
               />
             </div>
 
