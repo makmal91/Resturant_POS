@@ -61,69 +61,98 @@ const InventoryForm: React.FC<InventoryFormProps> = ({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white p-6 rounded-lg shadow-md max-w-md mx-auto">
-      <h2 className="text-2xl font-bold mb-6 text-gray-800">Inventory Item</h2>
-
-      <FormInput
-        label="Item Name"
-        name="itemName"
-        value={formData.itemName}
-        onChange={handleChange}
-        placeholder="Enter item name"
-        required
-        error={errors.itemName}
-      />
-
-      <FormSelect
-        label="Unit of Measurement"
-        name="unit"
-        value={formData.unit}
-        onChange={handleChange}
-        options={[
-          { label: 'Piece', value: 'Piece' },
-          { label: 'kg', value: 'kg' },
-          { label: 'g', value: 'g' },
-          { label: 'L', value: 'L' },
-          { label: 'ml', value: 'ml' },
-          { label: 'Box', value: 'Box' },
-          { label: 'Dozen', value: 'Dozen' },
-          { label: 'Bundle', value: 'Bundle' },
-        ]}
-        required
-        error={errors.unit}
-      />
-
-      <FormInput
-        label="Current Stock"
-        name="stock"
-        type="number"
-        value={formData.stock}
-        onChange={handleChange}
-        placeholder="Enter stock quantity"
-        required
-        min="0"
-        step="0.01"
-        error={errors.stock}
-      />
-
-      <FormInput
-        label="Minimum Level"
-        name="minLevel"
-        type="number"
-        value={formData.minLevel}
-        onChange={handleChange}
-        placeholder="Enter minimum stock level"
-        required
-        min="0"
-        step="0.01"
-        error={errors.minLevel}
-      />
-
-      <div className="mt-6 flex gap-3">
-        <FormButton type="submit" label={submitLabel} loading={isLoading} variant="primary" />
-        <FormButton type="reset" label="Reset" variant="secondary" />
+    <div className="max-w-3xl mx-auto">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">Inventory Management</h1>
+        <p className="text-gray-600">Manage inventory items and stock levels</p>
       </div>
-    </form>
+
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h2 className="text-xl font-semibold text-gray-900">
+            {initialData.itemName ? 'Update Item' : 'Add New Item'}
+          </h2>
+          <p className="text-sm text-gray-600 mt-1">
+            {initialData.itemName ? 'Update inventory item details' : 'Add a new item to your inventory'}
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Item Information */}
+            <div className="md:col-span-2">
+              <h3 className="text-base font-semibold text-gray-900 mb-4">Item Information</h3>
+              <FormInput
+                label="Item Name"
+                name="itemName"
+                value={formData.itemName}
+                onChange={handleChange}
+                placeholder="e.g., Tomato, Chicken Breast, Olive Oil"
+                required
+                error={errors.itemName}
+              />
+            </div>
+
+            {/* Unit & Stock Section */}
+            <div className="md:col-span-2">
+              <h3 className="text-base font-semibold text-gray-900 mb-4">Stock Details</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <FormSelect
+                  label="Unit of Measurement"
+                  name="unit"
+                  value={formData.unit}
+                  onChange={handleChange}
+                  options={[
+                    { label: 'Piece', value: 'Piece' },
+                    { label: 'kg', value: 'kg' },
+                    { label: 'g', value: 'g' },
+                    { label: 'L', value: 'L' },
+                    { label: 'ml', value: 'ml' },
+                    { label: 'Box', value: 'Box' },
+                    { label: 'Dozen', value: 'Dozen' },
+                    { label: 'Bundle', value: 'Bundle' },
+                  ]}
+                  required
+                  error={errors.unit}
+                />
+
+                <FormInput
+                  label="Current Stock"
+                  name="stock"
+                  type="number"
+                  value={formData.stock}
+                  onChange={handleChange}
+                  placeholder="0.00"
+                  required
+                  min="0"
+                  step="0.01"
+                  error={errors.stock}
+                />
+
+                <FormInput
+                  label="Minimum Level"
+                  name="minLevel"
+                  type="number"
+                  value={formData.minLevel}
+                  onChange={handleChange}
+                  placeholder="0.00"
+                  required
+                  min="0"
+                  step="0.01"
+                  error={errors.minLevel}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="mt-8 flex justify-end space-x-3">
+            <FormButton type="reset" label="Clear" variant="secondary" />
+            <FormButton type="submit" label={submitLabel} loading={isLoading} variant="primary" />
+          </div>
+        </form>
+      </div>
+    </div>
   );
 };
 

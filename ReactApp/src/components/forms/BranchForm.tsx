@@ -64,81 +64,99 @@ const BranchForm: React.FC<BranchFormProps> = ({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white p-6 rounded-lg shadow-md max-w-md mx-auto">
-      <h2 className="text-2xl font-bold mb-6 text-gray-800">Branch Information</h2>
-
-      <FormInput
-        label="Branch Name"
-        name="name"
-        value={formData.name}
-        onChange={handleChange}
-        placeholder="Enter branch name"
-        required
-        error={errors.name}
-      />
-
-      <FormInput
-        label="Address"
-        name="address"
-        value={formData.address}
-        onChange={handleChange}
-        placeholder="Enter street address"
-        required
-        error={errors.address}
-      />
-
-      <FormInput
-        label="City"
-        name="city"
-        value={formData.city}
-        onChange={handleChange}
-        placeholder="Enter city"
-        required
-        error={errors.city}
-      />
-
-      <FormInput
-        label="Phone"
-        name="phone"
-        type="tel"
-        value={formData.phone}
-        onChange={handleChange}
-        placeholder="Enter phone number"
-        required
-        error={errors.phone}
-      />
-
-      <FormInput
-        label="Tax Rate (%)"
-        name="taxRate"
-        type="number"
-        value={formData.taxRate}
-        onChange={handleChange}
-        placeholder="Enter tax rate"
-        required
-        min="0"
-        max="100"
-        step="0.01"
-        error={errors.taxRate}
-      />
-
-      <FormSelect
-        label="Status"
-        name="status"
-        value={formData.status}
-        onChange={handleChange}
-        options={[
-          { label: 'Active', value: 'Active' },
-          { label: 'Inactive', value: 'Inactive' },
-        ]}
-        required
-      />
-
-      <div className="mt-6 flex gap-3">
-        <FormButton type="submit" label={submitLabel} loading={isLoading} variant="primary" />
-        <FormButton type="reset" label="Reset" variant="secondary" />
+    <div className="max-w-4xl mx-auto">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">Branch Management</h1>
+        <p className="text-gray-600">Create and manage restaurant branches</p>
       </div>
-    </form>
+
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h2 className="text-xl font-semibold text-gray-900">Branch Information</h2>
+          <p className="text-sm text-gray-600 mt-1">Enter the details for the new branch</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="md:col-span-2">
+              <FormInput
+                label="Branch Name"
+                name="name"
+                value={formData.name}
+                onChange={handleChange}
+                placeholder="Enter branch name"
+                required
+                error={errors.name}
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <FormInput
+                label="Address"
+                name="address"
+                value={formData.address}
+                onChange={handleChange}
+                placeholder="Enter street address"
+                required
+                error={errors.address}
+              />
+            </div>
+
+            <FormInput
+              label="City"
+              name="city"
+              value={formData.city}
+              onChange={handleChange}
+              placeholder="Enter city"
+              required
+              error={errors.city}
+            />
+
+            <FormInput
+              label="Phone"
+              name="phone"
+              type="tel"
+              value={formData.phone}
+              onChange={handleChange}
+              placeholder="Enter phone number"
+              required
+              error={errors.phone}
+            />
+
+            <FormInput
+              label="Tax Rate (%)"
+              name="taxRate"
+              type="number"
+              value={formData.taxRate}
+              onChange={handleChange}
+              placeholder="Enter tax rate"
+              required
+              min="0"
+              max="100"
+              step="0.01"
+              error={errors.taxRate}
+            />
+
+            <FormSelect
+              label="Status"
+              name="status"
+              value={formData.status}
+              onChange={handleChange}
+              options={[
+                { label: 'Active', value: 'Active' },
+                { label: 'Inactive', value: 'Inactive' },
+              ]}
+              required
+            />
+          </div>
+
+          <div className="mt-8 flex justify-end space-x-3">
+            <FormButton type="reset" label="Reset" variant="secondary" />
+            <FormButton type="submit" label={submitLabel} loading={isLoading} variant="primary" />
+          </div>
+        </form>
+      </div>
+    </div>
   );
 };
 

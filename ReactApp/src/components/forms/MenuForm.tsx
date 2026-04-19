@@ -87,95 +87,141 @@ const MenuForm: React.FC<MenuFormProps> = ({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white p-6 rounded-lg shadow-md max-w-2xl mx-auto">
-      <h2 className="text-2xl font-bold mb-6 text-gray-800">Menu Item</h2>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <FormInput
-          label="Item Name"
-          name="name"
-          value={formData.name}
-          onChange={handleChange}
-          placeholder="Enter item name"
-          required
-          error={errors.name}
-        />
-
-        <FormSelect
-          label="Category"
-          name="category"
-          value={formData.category}
-          onChange={handleChange}
-          options={categories.map((cat) => ({ label: cat.name, value: cat.id }))}
-          placeholder="Select category"
-          required
-          error={errors.category}
-        />
+    <div className="max-w-4xl mx-auto">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">Menu Management</h1>
+        <p className="text-gray-600">Create and manage menu items</p>
       </div>
 
-      <FormInput
-        label="Base Price"
-        name="price"
-        type="number"
-        value={formData.price}
-        onChange={handleChange}
-        placeholder="Enter price"
-        required
-        min="0"
-        step="0.01"
-        error={errors.price}
-      />
-
-      <div className="mt-6">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold text-gray-800">Variants</h3>
-          <FormButton
-            type="button"
-            label="+ Add Variant"
-            onClick={handleAddVariant}
-            variant="secondary"
-          />
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h2 className="text-xl font-semibold text-gray-900">
+            {initialData.name ? 'Edit Menu Item' : 'Add New Menu Item'}
+          </h2>
+          <p className="text-sm text-gray-600 mt-1">
+            {initialData.name ? 'Update menu item details' : 'Create a new menu item with variants and pricing'}
+          </p>
         </div>
 
-        {formData.variants.length > 0 ? (
-          <div className="space-y-3 bg-gray-50 p-4 rounded-lg">
-            {formData.variants.map((variant, index) => (
-              <div key={index} className="flex gap-3 items-end">
-                <FormInput
-                  label={`Variant ${index + 1} Name`}
-                  name={`variant-name-${index}`}
-                  value={variant.name}
-                  onChange={(e) => handleVariantChange(index, 'name', e.target.value)}
-                  placeholder="e.g., Small, Large"
-                />
-                <FormInput
-                  label={`Price Adjustment`}
-                  name={`variant-price-${index}`}
-                  type="number"
-                  value={variant.price}
-                  onChange={(e) => handleVariantChange(index, 'price', e.target.value)}
-                  placeholder="e.g., 2.50"
-                  step="0.01"
-                />
-                <FormButton
-                  type="button"
-                  label="Remove"
-                  onClick={() => handleRemoveVariant(index)}
-                  variant="danger"
-                />
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-gray-500 italic text-sm">No variants added yet</p>
-        )}
-      </div>
+        <form onSubmit={handleSubmit} className="p-6">
+          {/* Basic Information */}
+          <div className="mb-8">
+            <h3 className="text-base font-semibold text-gray-900 mb-4">Basic Information</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <FormInput
+                label="Item Name"
+                name="name"
+                value={formData.name}
+                onChange={handleChange}
+                placeholder="e.g., Grilled Salmon"
+                required
+                error={errors.name}
+              />
 
-      <div className="mt-6 flex gap-3">
-        <FormButton type="submit" label={submitLabel} loading={isLoading} variant="primary" />
-        <FormButton type="reset" label="Reset" variant="secondary" />
+              <FormSelect
+                label="Category"
+                name="category"
+                value={formData.category}
+                onChange={handleChange}
+                options={categories.map((cat) => ({ label: cat.name, value: cat.id }))}
+                placeholder="Select category"
+                required
+                error={errors.category}
+              />
+            </div>
+          </div>
+
+          {/* Pricing */}
+          <div className="mb-8">
+            <h3 className="text-base font-semibold text-gray-900 mb-4">Pricing</h3>
+            <FormInput
+              label="Base Price"
+              name="price"
+              type="number"
+              value={formData.price}
+              onChange={handleChange}
+              placeholder="0.00"
+              required
+              min="0"
+              step="0.01"
+              error={errors.price}
+            />
+          </div>
+
+          {/* Variants Section */}
+          <div>
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h3 className="text-base font-semibold text-gray-900">Variants</h3>
+                <p className="text-sm text-gray-600 mt-1">Add different sizes or options for this item</p>
+              </div>
+              <button
+                type="button"
+                onClick={handleAddVariant}
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                <svg className="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Add Variant
+              </button>
+            </div>
+
+            {formData.variants.length > 0 ? (
+              <div className="space-y-3">
+                {formData.variants.map((variant, index) => (
+                  <div key={index} className="flex gap-3 items-end bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <div className="flex-1">
+                      <FormInput
+                        label={index === 0 ? 'Variant Name' : undefined}
+                        name={`variant-name-${index}`}
+                        value={variant.name}
+                        onChange={(e) => handleVariantChange(index, 'name', e.target.value)}
+                        placeholder="e.g., Small, Medium, Large"
+                      />
+                    </div>
+                    <div className="w-32">
+                      <FormInput
+                        label={index === 0 ? 'Price Adjustment' : undefined}
+                        name={`variant-price-${index}`}
+                        type="number"
+                        value={variant.price}
+                        onChange={(e) => handleVariantChange(index, 'price', e.target.value)}
+                        placeholder="0.00"
+                        step="0.01"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveVariant(index)}
+                      className="p-3 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      title="Remove variant"
+                    >
+                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-6 text-center border-2 border-dashed border-gray-300 rounded-lg">
+                <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                </svg>
+                <p className="mt-2 text-sm text-gray-600">No variants added. Click "Add Variant" to create one.</p>
+              </div>
+            )}
+          </div>
+
+          {/* Action Buttons */}
+          <div className="mt-8 flex justify-end space-x-3">
+            <FormButton type="reset" label="Clear" variant="secondary" />
+            <FormButton type="submit" label={submitLabel} loading={isLoading} variant="primary" />
+          </div>
+        </form>
       </div>
-    </form>
+    </div>
   );
 };
 

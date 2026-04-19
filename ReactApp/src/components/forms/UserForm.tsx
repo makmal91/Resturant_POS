@@ -61,79 +61,114 @@ const UserForm: React.FC<UserFormProps> = ({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white p-6 rounded-lg shadow-md max-w-md mx-auto">
-      <h2 className="text-2xl font-bold mb-6 text-gray-800">User Information</h2>
-
-      <FormInput
-        label="Full Name"
-        name="name"
-        value={formData.name}
-        onChange={handleChange}
-        placeholder="Enter full name"
-        required
-        error={errors.name}
-      />
-
-      <FormSelect
-        label="Role"
-        name="role"
-        value={formData.role}
-        onChange={handleChange}
-        options={[
-          { label: 'Manager', value: 'Manager' },
-          { label: 'Cashier', value: 'Cashier' },
-          { label: 'Chef', value: 'Chef' },
-          { label: 'Waiter', value: 'Waiter' },
-          { label: 'Admin', value: 'Admin' },
-        ]}
-        placeholder="Select role"
-        required
-        error={errors.role}
-      />
-
-      <FormSelect
-        label="Assigned Branch"
-        name="branch"
-        value={formData.branch}
-        onChange={handleChange}
-        options={branches.map((branch) => ({ label: branch.name, value: branch.id }))}
-        placeholder="Select branch"
-        required
-        error={errors.branch}
-      />
-
-      <FormInput
-        label="Monthly Salary"
-        name="salary"
-        type="number"
-        value={formData.salary}
-        onChange={handleChange}
-        placeholder="Enter salary"
-        required
-        min="0"
-        step="0.01"
-        error={errors.salary}
-      />
-
-      <FormSelect
-        label="Shift"
-        name="shift"
-        value={formData.shift}
-        onChange={handleChange}
-        options={[
-          { label: 'Morning', value: 'Morning' },
-          { label: 'Afternoon', value: 'Afternoon' },
-          { label: 'Evening', value: 'Evening' },
-          { label: 'Night', value: 'Night' },
-        ]}
-        required
-      />
-
-      <div className="mt-6 flex gap-3">
-        <FormButton type="submit" label={submitLabel} loading={isLoading} variant="primary" />
-        <FormButton type="reset" label="Reset" variant="secondary" />
+    <div className="max-w-3xl mx-auto">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">User Management</h1>
+        <p className="text-gray-600">Manage staff and user accounts</p>
       </div>
-    </form>
+
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h2 className="text-xl font-semibold text-gray-900">
+            {initialData.name ? 'Edit User' : 'Add New User'}
+          </h2>
+          <p className="text-sm text-gray-600 mt-1">
+            {initialData.name ? 'Update user information' : 'Create a new staff member account'}
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Personal Information Section */}
+            <div className="md:col-span-2">
+              <h3 className="text-base font-semibold text-gray-900 mb-4">Personal Information</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <FormInput
+                  label="Full Name"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleChange}
+                  placeholder="Enter full name"
+                  required
+                  error={errors.name}
+                />
+
+                <FormSelect
+                  label="Role"
+                  name="role"
+                  value={formData.role}
+                  onChange={handleChange}
+                  options={[
+                    { label: 'Manager', value: 'Manager' },
+                    { label: 'Cashier', value: 'Cashier' },
+                    { label: 'Chef', value: 'Chef' },
+                    { label: 'Waiter', value: 'Waiter' },
+                    { label: 'Admin', value: 'Admin' },
+                  ]}
+                  placeholder="Select role"
+                  required
+                  error={errors.role}
+                />
+              </div>
+            </div>
+
+            {/* Assignment Section */}
+            <div className="md:col-span-2">
+              <h3 className="text-base font-semibold text-gray-900 mb-4">Assignment</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <FormSelect
+                  label="Assigned Branch"
+                  name="branch"
+                  value={formData.branch}
+                  onChange={handleChange}
+                  options={branches.map((branch) => ({ label: branch.name, value: branch.id }))}
+                  placeholder="Select branch"
+                  required
+                  error={errors.branch}
+                />
+
+                <FormSelect
+                  label="Shift"
+                  name="shift"
+                  value={formData.shift}
+                  onChange={handleChange}
+                  options={[
+                    { label: 'Morning', value: 'Morning' },
+                    { label: 'Afternoon', value: 'Afternoon' },
+                    { label: 'Evening', value: 'Evening' },
+                    { label: 'Night', value: 'Night' },
+                  ]}
+                  required
+                />
+              </div>
+            </div>
+
+            {/* Compensation Section */}
+            <div className="md:col-span-2">
+              <h3 className="text-base font-semibold text-gray-900 mb-4">Compensation</h3>
+              <FormInput
+                label="Monthly Salary"
+                name="salary"
+                type="number"
+                value={formData.salary}
+                onChange={handleChange}
+                placeholder="Enter salary"
+                required
+                min="0"
+                step="0.01"
+                error={errors.salary}
+              />
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="mt-8 flex justify-end space-x-3">
+            <FormButton type="reset" label="Clear" variant="secondary" />
+            <FormButton type="submit" label={submitLabel} loading={isLoading} variant="primary" />
+          </div>
+        </form>
+      </div>
+    </div>
   );
 };
 
