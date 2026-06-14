@@ -1,8 +1,10 @@
 import React, { useMemo, useEffect, useState } from 'react';
 import { useFormModal } from '../contexts/FormModalContext';
-import { BranchForm, BusinessForm, UserForm, MenuForm, InventoryForm } from './forms';
+import { BranchForm, BusinessForm, UserForm, MenuForm, InventoryForm, CategoryForm } from './forms';
 import { BranchService, BusinessService, UserService, MenuService, InventoryService } from '../services/apiService';
 import { getApiErrorMessage } from '../services/api';
+import { categoryService } from '../modules/category/categoryService';
+import { useBranchStore } from '../stores/useBranchStore';
 
 interface MenuCategoryOption {
   id: string;
@@ -346,6 +348,65 @@ const FormModal: React.FC = () => {
     }
   };
 
+  const handleCategorySubmit = async (data: any) => {
+    setIsSubmitting(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    const branchId = Number(data?.branchId ?? 0);
+    const name = String(data?.name ?? '').trim();
+
+    if (!name) {
+      setError('Category name is required.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (branchId <= 0) {
+      setError('Branch selection is required.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    const rawImageUrl = String(data?.imageUrl ?? '').trim();
+    const formData = new FormData();
+    formData.append('name', name);
+    formData.append('code', String(data?.code ?? '').trim());
+    formData.append('description', String(data?.description ?? '').trim());
+    formData.append('displayOrder', String(Number(data?.displayOrder ?? 0)));
+    formData.append('imageUrl', rawImageUrl.startsWith('data:') ? '' : rawImageUrl.slice(0, 500));
+    formData.append('icon', String(data?.icon ?? '').trim());
+    formData.append('color', String(data?.color ?? '#2563eb').trim());
+    formData.append('status', String(data?.status ?? 'Active').toLowerCase() !== 'inactive' ? 'Active' : 'Inactive');
+    formData.append(
+      'categoryType',
+      String(data?.categoryType ?? 'Sale') === 'Inventory' ? 'Inventory' : 'Sale'
+    );
+    formData.append('branchId', String(branchId));
+
+    if (data?.imageFile instanceof File) {
+      formData.append('image', data.imageFile);
+    }
+
+    if (data?.removeImage) {
+      formData.append('removeImage', 'true');
+    }
+
+    try {
+      useBranchStore.getState().setSelectedBranchId(branchId);
+      if (isEditMode) {
+        await categoryService.update(Number(editingData.id), formData, branchId);
+      } else {
+        await categoryService.create(formData, branchId);
+      }
+      closeWithSuccess(isEditMode ? 'Category updated successfully.' : 'Category created successfully.');
+    } catch (err: any) {
+      setError(getApiErrorMessage(err, 'Failed to save category'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const getFormComponent = () => {
     switch (formType) {
       case 'branch':
@@ -397,6 +458,16 @@ const FormModal: React.FC = () => {
             submitLabel={isEditMode ? 'Update Item' : 'Create Item'}
           />
         );
+      case 'category':
+        return (
+          <CategoryForm
+            initialData={editingData}
+            onSubmit={handleCategorySubmit}
+            isLoading={isSubmitting}
+            submitLabel={isEditMode ? 'Update Category' : 'Create Category'}
+            lockBranch={isEditMode || Number(editingData?.branchId ?? 0) > 0}
+          />
+        );
       default:
         return null;
     }
@@ -404,7 +475,8 @@ const FormModal: React.FC = () => {
 
   if (!isRendered) return null;
 
-  const panelWidthClass = formType === 'business' || formType === 'branch' ? 'max-w-4xl' : 'max-w-2xl';
+  const panelWidthClass =
+    formType === 'business' || formType === 'branch' || formType === 'category' ? 'max-w-4xl' : 'max-w-2xl';
 
   return (
     <>

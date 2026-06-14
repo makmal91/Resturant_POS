@@ -13,10 +13,28 @@ export interface CategoryPayload {
   branchId: number;
 }
 
+const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim() || '/api';
+
+const branchRequestConfig = (branchId: number) => ({
+  headers: { 'X-Branch-Id': String(branchId) },
+});
+
 export const categoryService = {
-  getAll: (branchId: number) => apiClient.get('/categories', { params: { branchId } }),
-  getById: (id: number, branchId: number) => apiClient.get(`/categories/${id}`, { params: { branchId } }),
-  create: (data: CategoryPayload) => apiClient.post('/categories', data),
-  update: (id: number, data: CategoryPayload) => apiClient.put(`/categories/${id}`, data),
-  delete: (id: number, branchId: number) => apiClient.delete(`/categories/${id}`, { params: { branchId } }),
+  getImageUrl: (id: number, branchId: number) =>
+    `${apiBaseUrl.replace(/\/$/, '')}/categories/${id}/image?branchId=${branchId}`,
+
+  getAll: (branchId: number, page = 1, pageSize = 25) =>
+    apiClient.get('/categories', { params: { branchId, page, pageSize }, ...branchRequestConfig(branchId) }),
+
+  getById: (id: number, branchId: number) =>
+    apiClient.get(`/categories/${id}`, { params: { branchId }, ...branchRequestConfig(branchId) }),
+
+  create: (data: FormData, branchId: number) =>
+    apiClient.post('/categories', data, branchRequestConfig(branchId)),
+
+  update: (id: number, data: FormData, branchId: number) =>
+    apiClient.put(`/categories/${id}`, data, branchRequestConfig(branchId)),
+
+  delete: (id: number, branchId: number) =>
+    apiClient.delete(`/categories/${id}`, { params: { branchId }, ...branchRequestConfig(branchId) }),
 };

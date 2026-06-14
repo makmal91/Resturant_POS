@@ -9,6 +9,9 @@ public class MenuCategory : BaseEntity
     public string Description { get; set; } = string.Empty;
     public int DisplayOrder { get; set; }
     public string ImageUrl { get; set; } = string.Empty;
+    public byte[]? Image { get; set; }
+    public string? ImageContentType { get; set; }
+    public string? ImageFileName { get; set; }
     public string Icon { get; set; } = string.Empty;
     public string Color { get; set; } = string.Empty;
     public bool Status { get; set; } = true;

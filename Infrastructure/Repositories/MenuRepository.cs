@@ -1,4 +1,5 @@
 using POSSystem.Application.Menu.Interfaces;
+using POSSystem.Application.Common.DTOs;
 using POSSystem.Domain;
 using POSSystem.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -7,6 +8,7 @@ namespace POSSystem.Infrastructure.Repositories;
 
 public class MenuRepository : IMenuRepository
 {
+    private const int MaxPageSize = 100;
     private readonly POSDbContext _context;
 
     public MenuRepository(POSDbContext context)
@@ -34,6 +36,7 @@ public class MenuRepository : IMenuRepository
         var normalized = name.Trim();
 
         return await _context.MenuCategories
+            .IgnoreQueryFilters()
             .Where(c => c.BusinessId == businessId && c.BranchId == branchId && c.Name.ToLower() == normalized.ToLower())
             .Where(c => !excludeCategoryId.HasValue || c.Id != excludeCategoryId.Value)
             .FirstOrDefaultAsync();
@@ -76,7 +79,52 @@ public class MenuRepository : IMenuRepository
                 .FirstOrDefaultAsync(i => i.Id == id && i.BusinessId == businessId && i.BranchId == branchId);
     }
 
-            public async Task<ICollection<MenuCategory>> GetCategoriesByBranchAsync(int businessId, int branchId, CategoryType? categoryType = null)
+    public async Task<PagedResultDto<MenuCategory>> GetCategoriesPagedAsync(int businessId, int branchId, int page, int pageSize, CategoryType? categoryType = null)
+    {
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, MaxPageSize);
+
+        var query = _context.MenuCategories
+            .IgnoreQueryFilters()
+            .Where(c => !c.IsDeleted && c.BusinessId == businessId);
+
+        if (branchId > 0)
+        {
+            query = query.Where(c => c.BranchId == branchId);
+        }
+
+        if (categoryType.HasValue)
+        {
+            query = query.Where(c => c.CategoryType == categoryType.Value);
+        }
+
+        var totalRecords = await query.CountAsync();
+        var totalPages = totalRecords == 0 ? 0 : (int)Math.Ceiling(totalRecords / (double)pageSize);
+
+        if (totalPages > 0 && page > totalPages)
+            page = totalPages;
+
+        var orderedQuery = branchId == 0
+            ? query.OrderBy(c => c.Branch.Name).ThenBy(c => c.DisplayOrder).ThenBy(c => c.Name)
+            : query.OrderBy(c => c.DisplayOrder).ThenBy(c => c.Name);
+
+        var data = await orderedQuery
+            .Include(c => c.Branch)
+            .Include(c => c.SubCategories)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return new PagedResultDto<MenuCategory>
+        {
+            Data = data,
+            TotalRecords = totalRecords,
+            TotalPages = totalPages,
+            CurrentPage = page
+        };
+    }
+
+    public async Task<ICollection<MenuCategory>> GetCategoriesByBranchAsync(int businessId, int branchId, CategoryType? categoryType = null)
     {
         var query = _context.MenuCategories
                 .Where(c => c.BusinessId == businessId && c.BranchId == branchId)

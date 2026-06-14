@@ -15,7 +15,6 @@ public class MenuCategoryConfiguration : IEntityTypeConfiguration<MenuCategory>
             .HasMaxLength(100);
 
         builder.Property(mc => mc.Code)
-            .IsRequired()
             .HasMaxLength(50);
 
         builder.Property(mc => mc.Description)
@@ -23,6 +22,15 @@ public class MenuCategoryConfiguration : IEntityTypeConfiguration<MenuCategory>
 
         builder.Property(mc => mc.ImageUrl)
             .HasMaxLength(500);
+
+        builder.Property(mc => mc.Image)
+            .HasColumnType("varbinary(max)");
+
+        builder.Property(mc => mc.ImageContentType)
+            .HasMaxLength(100);
+
+        builder.Property(mc => mc.ImageFileName)
+            .HasMaxLength(255);
 
         builder.Property(mc => mc.Icon)
             .HasMaxLength(150);
@@ -47,6 +55,7 @@ public class MenuCategoryConfiguration : IEntityTypeConfiguration<MenuCategory>
 
         builder.HasIndex(mc => new { mc.BranchId, mc.Code })
             .IsUnique()
+            .HasFilter("[Code] IS NOT NULL AND [Code] <> ''")
             .HasDatabaseName("idx_menucategory_branch_code");
 
         builder.HasIndex(mc => new { mc.BranchId, mc.CategoryType })

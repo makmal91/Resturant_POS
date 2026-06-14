@@ -32,6 +32,28 @@ public class UpdateMenuCategoryDto
     public int BranchId { get; set; }
 }
 
+public class CategoryFormDto
+{
+    public string Name { get; set; } = string.Empty;
+    public string? Code { get; set; }
+    public string? Description { get; set; }
+    public int DisplayOrder { get; set; }
+    public string? ImageUrl { get; set; }
+    public string? Icon { get; set; }
+    public string? Color { get; set; }
+    public string? Status { get; set; }
+    public CategoryType CategoryType { get; set; } = CategoryType.Sale;
+    public int BranchId { get; set; }
+    public string? RemoveImage { get; set; }
+}
+
+public class CategoryImageDto
+{
+    public byte[] Image { get; set; } = Array.Empty<byte>();
+    public string ImageContentType { get; set; } = string.Empty;
+    public string ImageFileName { get; set; } = string.Empty;
+}
+
 public class CreateSubCategoryDto
 {
     public string Name { get; set; } = string.Empty;
@@ -117,6 +139,7 @@ public class MenuCategoryDto
     public string Description { get; set; } = string.Empty;
     public int DisplayOrder { get; set; }
     public string ImageUrl { get; set; } = string.Empty;
+    public bool HasImage { get; set; }
     public string Icon { get; set; } = string.Empty;
     public string Color { get; set; } = string.Empty;
     public bool Status { get; set; } = true;

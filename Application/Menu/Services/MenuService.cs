@@ -1,6 +1,7 @@
+using Microsoft.Extensions.Caching.Memory;
+using POSSystem.Application.Common.DTOs;
 using POSSystem.Application.Menu.DTOs;
 using POSSystem.Application.Menu.Interfaces;
-using Microsoft.Extensions.Caching.Memory;
 using POSSystem.Domain;
 
 namespace POSSystem.Application.Menu.Services;
@@ -60,6 +61,7 @@ public class MenuService : IMenuService
             Description = category.Description,
             DisplayOrder = category.DisplayOrder,
             ImageUrl = category.ImageUrl,
+            HasImage = category.Image != null && category.Image.Length > 0,
             Icon = category.Icon,
             Color = category.Color,
             Status = category.Status,
@@ -130,6 +132,24 @@ public class MenuService : IMenuService
     }
 
     private static string GetPosMenuCacheKey(int businessId, int branchId) => $"pos-menu-{businessId}-{branchId}";
+    private static string GetCategoryListVersionKey(int businessId, int branchId) => $"categories-version-{businessId}-{branchId}";
+    private static string GetCategoryListCacheKey(int businessId, int branchId, int version, int page, int pageSize, CategoryType? categoryType) =>
+        $"categories-{businessId}-{branchId}-{version}-{page}-{pageSize}-{categoryType?.ToString() ?? "all"}";
+
+    private int GetCategoryListVersion(int businessId, int branchId)
+    {
+        return _cache.GetOrCreate(GetCategoryListVersionKey(businessId, branchId), entry =>
+        {
+            entry.Priority = CacheItemPriority.NeverRemove;
+            return 0;
+        });
+    }
+
+    private void InvalidateCategoryListCache(int businessId, int branchId)
+    {
+        _cache.Set(GetCategoryListVersionKey(businessId, branchId), GetCategoryListVersion(businessId, branchId) + 1);
+        _cache.Set(GetCategoryListVersionKey(businessId, 0), GetCategoryListVersion(businessId, 0) + 1);
+    }
 
     private async Task EnsureBranchExistsAsync(int businessId, int branchId)
     {
@@ -149,14 +169,57 @@ public class MenuService : IMenuService
         if (string.IsNullOrWhiteSpace(categoryName))
             throw new InvalidOperationException("Category name is required.");
 
-        if (string.IsNullOrWhiteSpace(categoryCode))
-            throw new InvalidOperationException("Category code is required.");
-
         await EnsureBranchExistsAsync(businessId, branchId);
 
         var duplicateCategory = await _repository.GetCategoryByNameAsync(categoryName, businessId, branchId, excludeCategoryId);
-        if (duplicateCategory != null)
+        if (duplicateCategory != null && !duplicateCategory.IsDeleted)
             throw new InvalidOperationException("Category name must be unique per branch.");
+    }
+
+    private static void ApplyCreateDtoToCategory(MenuCategory category, CreateMenuCategoryDto dto)
+    {
+        category.Name = dto.Name.Trim();
+        category.Code = string.IsNullOrWhiteSpace(dto.Code) ? string.Empty : dto.Code.Trim();
+        category.Description = dto.Description;
+        category.DisplayOrder = dto.DisplayOrder;
+        category.ImageUrl = dto.ImageUrl;
+        category.Icon = dto.Icon;
+        category.Color = dto.Color;
+        category.Status = dto.Status;
+        category.CategoryType = dto.CategoryType;
+        category.BusinessId = dto.BusinessId;
+        category.BranchId = dto.BranchId;
+    }
+
+    private static void ApplyCategoryImage(
+        MenuCategory category,
+        byte[]? imageBytes,
+        string? fileName,
+        string? contentType,
+        bool replaceImage,
+        bool removeImage)
+    {
+        if (!replaceImage)
+            return;
+
+        if (removeImage || imageBytes == null || imageBytes.Length == 0)
+        {
+            category.Image = null;
+            category.ImageContentType = null;
+            category.ImageFileName = null;
+            return;
+        }
+
+        category.Image = imageBytes;
+        category.ImageContentType = contentType;
+        category.ImageFileName = fileName;
+    }
+
+    private static bool IsDuplicateKeyException(Exception exception)
+    {
+        var message = exception.InnerException?.Message ?? exception.Message;
+        return message.Contains("duplicate key", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("2601", StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task<MenuCategory> ValidateSubCategoryContextAsync(int categoryId, int businessId, int branchId)
@@ -179,6 +242,44 @@ public class MenuService : IMenuService
         return categories.Select(MapCategoryDto).ToList();
     }
 
+    public async Task<PagedResultDto<MenuCategoryDto>> GetCategoriesPagedAsync(int businessId, int branchId, int page, int pageSize, CategoryType? categoryType = null)
+    {
+        if (businessId <= 0)
+            throw new InvalidOperationException("BusinessId is required.");
+
+        if (branchId < 0)
+            throw new InvalidOperationException("BranchId is required.");
+
+        if (branchId > 0)
+        {
+            await EnsureBranchExistsAsync(businessId, branchId);
+        }
+
+        var cacheKey = GetCategoryListCacheKey(
+            businessId,
+            branchId,
+            GetCategoryListVersion(businessId, branchId),
+            Math.Max(1, page),
+            Math.Clamp(pageSize, 1, 100),
+            categoryType);
+        if (_cache.TryGetValue(cacheKey, out PagedResultDto<MenuCategoryDto>? cached) && cached != null)
+        {
+            return cached;
+        }
+
+        var result = await _repository.GetCategoriesPagedAsync(businessId, branchId, page, pageSize, categoryType);
+        var dto = new PagedResultDto<MenuCategoryDto>
+        {
+            Data = result.Data.Select(MapCategoryDto).ToList(),
+            TotalRecords = result.TotalRecords,
+            TotalPages = result.TotalPages,
+            CurrentPage = result.CurrentPage
+        };
+
+        _cache.Set(cacheKey, dto, PosCacheDuration);
+        return dto;
+    }
+
     public async Task<MenuCategoryDto?> GetCategoryByIdAsync(int id, int businessId, int branchId)
     {
         await EnsureBranchExistsAsync(businessId, branchId);
@@ -190,33 +291,81 @@ public class MenuService : IMenuService
         return MapCategoryDto(category);
     }
 
-    public async Task<MenuCategory> AddCategoryAsync(CreateMenuCategoryDto dto)
+    public async Task<CategoryImageDto?> GetCategoryImageAsync(int id, int businessId, int branchId)
+    {
+        await EnsureBranchExistsAsync(businessId, branchId);
+
+        var category = await _repository.GetCategoryAsync(id, businessId, branchId);
+        if (category == null || category.BranchId != branchId || category.Image == null || category.Image.Length == 0)
+            return null;
+
+        return new CategoryImageDto
+        {
+            Image = category.Image,
+            ImageContentType = category.ImageContentType ?? string.Empty,
+            ImageFileName = category.ImageFileName ?? string.Empty
+        };
+    }
+
+    public async Task<MenuCategory> AddCategoryAsync(
+        CreateMenuCategoryDto dto,
+        byte[]? imageBytes = null,
+        string? imageFileName = null,
+        string? imageContentType = null)
     {
         await ValidateCategoryInputAsync(dto.Name, dto.Code, dto.BusinessId, dto.BranchId);
 
-        var category = new MenuCategory
-        {
-            Name = dto.Name.Trim(),
-            Code = dto.Code.Trim(),
-            Description = dto.Description,
-            DisplayOrder = dto.DisplayOrder,
-            ImageUrl = dto.ImageUrl,
-            Icon = dto.Icon,
-            Color = dto.Color,
-            Status = dto.Status,
-            CategoryType = dto.CategoryType,
-            BusinessId = dto.BusinessId,
-            BranchId = dto.BranchId
-        };
+        var hasUploadedImage = imageBytes != null && imageBytes.Length > 0;
 
-        await _repository.AddCategoryAsync(category);
-        await _repository.SaveChangesAsync();
+        var archivedCategory = await _repository.GetCategoryByNameAsync(dto.Name, dto.BusinessId, dto.BranchId);
+        if (archivedCategory != null && archivedCategory.IsDeleted)
+        {
+            ApplyCreateDtoToCategory(archivedCategory, dto);
+            ApplyCategoryImage(archivedCategory, imageBytes, imageFileName, imageContentType, hasUploadedImage, false);
+            archivedCategory.IsDeleted = false;
+            archivedCategory.UpdatedDate = DateTime.UtcNow;
+
+            try
+            {
+                await _repository.SaveChangesAsync();
+            }
+            catch (Exception ex) when (IsDuplicateKeyException(ex))
+            {
+                throw new InvalidOperationException("Category name must be unique per branch.");
+            }
+
+            _cache.Remove(GetPosMenuCacheKey(dto.BusinessId, dto.BranchId));
+            InvalidateCategoryListCache(dto.BusinessId, dto.BranchId);
+            return archivedCategory;
+        }
+
+        var category = new MenuCategory();
+        ApplyCreateDtoToCategory(category, dto);
+        ApplyCategoryImage(category, imageBytes, imageFileName, imageContentType, hasUploadedImage, false);
+
+        try
+        {
+            await _repository.AddCategoryAsync(category);
+            await _repository.SaveChangesAsync();
+        }
+        catch (Exception ex) when (IsDuplicateKeyException(ex))
+        {
+            throw new InvalidOperationException("Category name must be unique per branch.");
+        }
+
         _cache.Remove(GetPosMenuCacheKey(dto.BusinessId, dto.BranchId));
+        InvalidateCategoryListCache(dto.BusinessId, dto.BranchId);
 
         return category;
     }
 
-    public async Task<MenuCategory> UpdateCategoryAsync(int id, UpdateMenuCategoryDto dto)
+    public async Task<MenuCategory> UpdateCategoryAsync(
+        int id,
+        UpdateMenuCategoryDto dto,
+        byte[]? imageBytes = null,
+        string? imageFileName = null,
+        string? imageContentType = null,
+        bool replaceImage = false)
     {
         var category = await _repository.GetCategoryAsync(id, dto.BusinessId, dto.BranchId, includeItems: true);
         if (category == null)
@@ -236,7 +385,7 @@ public class MenuService : IMenuService
         }
 
         category.Name = dto.Name.Trim();
-        category.Code = dto.Code.Trim();
+        category.Code = string.IsNullOrWhiteSpace(dto.Code) ? string.Empty : dto.Code.Trim();
         category.Description = dto.Description;
         category.DisplayOrder = dto.DisplayOrder;
         category.ImageUrl = dto.ImageUrl;
@@ -245,9 +394,19 @@ public class MenuService : IMenuService
         category.Status = dto.Status;
         category.CategoryType = dto.CategoryType;
         category.UpdatedDate = DateTime.UtcNow;
+        ApplyCategoryImage(category, imageBytes, imageFileName, imageContentType, replaceImage, replaceImage && (imageBytes == null || imageBytes.Length == 0));
 
-        await _repository.SaveChangesAsync();
+        try
+        {
+            await _repository.SaveChangesAsync();
+        }
+        catch (Exception ex) when (IsDuplicateKeyException(ex))
+        {
+            throw new InvalidOperationException("Category name must be unique per branch.");
+        }
+
         _cache.Remove(GetPosMenuCacheKey(dto.BusinessId, dto.BranchId));
+        InvalidateCategoryListCache(dto.BusinessId, dto.BranchId);
 
         return category;
     }
@@ -263,9 +422,14 @@ public class MenuService : IMenuService
         if (category.MenuItems.Count > 0)
             throw new InvalidOperationException("Cannot delete category that still has products.");
 
-        _repository.RemoveCategory(category);
+        if (category.SubCategories.Count > 0)
+            throw new InvalidOperationException("Cannot delete category that still has subcategories.");
+
+        category.IsDeleted = true;
+        category.UpdatedDate = DateTime.UtcNow;
         await _repository.SaveChangesAsync();
         _cache.Remove(GetPosMenuCacheKey(businessId, branchId));
+        InvalidateCategoryListCache(businessId, branchId);
     }
 
     public async Task<ICollection<SubCategoryDto>> GetSubCategoriesAsync(int businessId, int branchId, int? categoryId = null)

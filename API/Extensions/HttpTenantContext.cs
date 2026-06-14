@@ -42,18 +42,18 @@ public class HttpTenantContext : ITenantContext
     private int? TryReadIntClaim(string claimType)
     {
         var value = _httpContextAccessor.HttpContext?.User?.FindFirstValue(claimType);
-        return int.TryParse(value, out var parsed) && parsed > 0 ? parsed : null;
+        return int.TryParse(value, out var parsed) && parsed >= 0 ? parsed : null;
     }
 
     private int? TryReadIntHeader(string headerName)
     {
         var value = _httpContextAccessor.HttpContext?.Request?.Headers[headerName].FirstOrDefault();
-        return int.TryParse(value, out var parsed) && parsed > 0 ? parsed : null;
+        return int.TryParse(value, out var parsed) && parsed >= 0 ? parsed : null;
     }
 
     private int? TryReadIntQuery(string queryName)
     {
         var value = _httpContextAccessor.HttpContext?.Request?.Query[queryName].FirstOrDefault();
-        return int.TryParse(value, out var parsed) && parsed > 0 ? parsed : null;
+        return int.TryParse(value, out var parsed) && parsed >= 0 ? parsed : null;
     }
 }

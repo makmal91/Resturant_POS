@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState } from 'react';
 
-export type FormType = 'branch' | 'business' | 'user' | 'menu' | 'inventory' | null;
+export type FormType = 'branch' | 'business' | 'user' | 'menu' | 'inventory' | 'category' | null;
 
 const DEFAULT_BRANCH_FORM_DATA = {
   name: '',
@@ -50,6 +50,19 @@ const DEFAULT_MENU_FORM_DATA = {
   variants: [],
 };
 
+const DEFAULT_CATEGORY_FORM_DATA = {
+  name: '',
+  code: '',
+  description: '',
+  displayOrder: 0,
+  imageUrl: '',
+  icon: '',
+  color: '#2563eb',
+  status: 'Active',
+  categoryType: 'Sale',
+  branchId: 0,
+};
+
 interface FormModalContextType {
   isOpen: boolean;
   formType: FormType;
@@ -79,6 +92,10 @@ const getDefaultFormData = (type: FormType) => {
 
   if (type === 'menu') {
     return DEFAULT_MENU_FORM_DATA;
+  }
+
+  if (type === 'category') {
+    return DEFAULT_CATEGORY_FORM_DATA;
   }
 
   return {};

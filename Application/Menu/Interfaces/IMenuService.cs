@@ -1,14 +1,17 @@
 using POSSystem.Application.Menu.DTOs;
+using POSSystem.Application.Common.DTOs;
 using POSSystem.Domain;
 
 namespace POSSystem.Application.Menu.Interfaces;
 
 public interface IMenuService
 {
+    Task<PagedResultDto<MenuCategoryDto>> GetCategoriesPagedAsync(int businessId, int branchId, int page, int pageSize, CategoryType? categoryType = null);
     Task<ICollection<MenuCategoryDto>> GetCategoriesAsync(int businessId, int branchId, CategoryType? categoryType = null);
     Task<MenuCategoryDto?> GetCategoryByIdAsync(int id, int businessId, int branchId);
-    Task<MenuCategory> AddCategoryAsync(CreateMenuCategoryDto dto);
-    Task<MenuCategory> UpdateCategoryAsync(int id, UpdateMenuCategoryDto dto);
+    Task<CategoryImageDto?> GetCategoryImageAsync(int id, int businessId, int branchId);
+    Task<MenuCategory> AddCategoryAsync(CreateMenuCategoryDto dto, byte[]? imageBytes = null, string? imageFileName = null, string? imageContentType = null);
+    Task<MenuCategory> UpdateCategoryAsync(int id, UpdateMenuCategoryDto dto, byte[]? imageBytes = null, string? imageFileName = null, string? imageContentType = null, bool replaceImage = false);
     Task DeleteCategoryAsync(int id, int businessId, int branchId);
 
     Task<ICollection<SubCategoryDto>> GetSubCategoriesAsync(int businessId, int branchId, int? categoryId = null);
@@ -37,6 +40,7 @@ public interface IMenuRepository
     Task<SubCategory?> GetSubCategoryAsync(int id, int businessId, int branchId);
     Task<SubCategory?> GetSubCategoryByNameAsync(string name, int businessId, int branchId, int? excludeSubCategoryId = null);
     Task<MenuItem?> GetMenuItemAsync(int id, int businessId, int branchId, bool includeOptions = false);
+    Task<PagedResultDto<MenuCategory>> GetCategoriesPagedAsync(int businessId, int branchId, int page, int pageSize, CategoryType? categoryType = null);
     Task<ICollection<MenuCategory>> GetCategoriesByBranchAsync(int businessId, int branchId, CategoryType? categoryType = null);
     Task<ICollection<SubCategory>> GetSubCategoriesByBranchAsync(int businessId, int branchId, int? categoryId = null);
     Task<ICollection<MenuItem>> GetMenuItemsByBranchAsync(int businessId, int branchId, ProductType? productType = null, bool? isSaleable = null, bool? isInventoryItem = null);

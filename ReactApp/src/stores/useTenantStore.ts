@@ -29,6 +29,11 @@ const safeNumber = (value: unknown, fallback: number): number => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
 }
 
+const safeBranchNumber = (value: unknown, fallback: number): number => {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback
+}
+
 const saveSession = (session: TenantSession) => {
   localStorage.setItem(TENANT_SESSION_KEY, JSON.stringify(session))
   localStorage.setItem('businessId', String(session.businessId))
@@ -45,7 +50,7 @@ const readSession = (): TenantSession => {
     const parsed = JSON.parse(raw) as Partial<TenantSession>
     return {
       businessId: safeNumber(parsed.businessId, defaultSession.businessId),
-      branchId: safeNumber(parsed.branchId, defaultSession.branchId),
+      branchId: safeBranchNumber(parsed.branchId, defaultSession.branchId),
       role: parsed.role ?? defaultSession.role,
     }
   } catch {
@@ -68,7 +73,7 @@ export const useTenantStore = create<TenantState>((set, get) => ({
   setBranchId: (branchId) => {
     const next = {
       ...get().session,
-      branchId: safeNumber(branchId, defaultSession.branchId),
+      branchId: safeBranchNumber(branchId, defaultSession.branchId),
     }
     saveSession(next)
     set({ session: next })

@@ -27,8 +27,18 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
 
   const businessId = Number(localStorage.getItem('businessId') ?? 1);
   const branchId = Number(localStorage.getItem('branchId') ?? 1);
+  let tenantRole: string | undefined;
+  try {
+    const tenantSession = localStorage.getItem('tenantSession');
+    tenantRole = tenantSession ? (JSON.parse(tenantSession) as { role?: string }).role : undefined;
+  } catch {
+    tenantRole = undefined;
+  }
   config.headers['X-Business-Id'] = Number.isFinite(businessId) && businessId > 0 ? String(businessId) : '1';
-  config.headers['X-Branch-Id'] = Number.isFinite(branchId) && branchId > 0 ? String(branchId) : '1';
+  config.headers['X-Branch-Id'] = Number.isFinite(branchId) && branchId >= 0 ? String(branchId) : '1';
+  if (tenantRole) {
+    config.headers['X-User-Role'] = tenantRole;
+  }
 
   const method = config.method?.toUpperCase() ?? 'GET';
   const requestUrl = `${config.baseURL ?? ''}${config.url ?? ''}`;
@@ -83,8 +93,15 @@ export const getApiErrorMessage = (
   }
 
   const responseData = error.response?.data as
-    | { message?: string; title?: string; error?: string }
+    | { message?: string; title?: string; error?: string; errors?: Record<string, string[]> }
     | undefined;
+
+  if (responseData?.errors) {
+    const validationMessages = Object.values(responseData.errors).flat().filter(Boolean);
+    if (validationMessages.length > 0) {
+      return validationMessages.join(' ');
+    }
+  }
 
   return (
     responseData?.message ||

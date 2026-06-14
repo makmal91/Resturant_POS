@@ -39,7 +39,25 @@ export const useBranchStore = create<BranchState>((set, get) => ({
           }))
         : []
 
-      set({ branches, isLoading: false, error: null })
+      const { selectedBranchId } = get()
+      const storedBranchId = useTenantStore.getState().session.branchId
+      let nextSelectedBranchId = selectedBranchId
+
+      if (nextSelectedBranchId === null) {
+        if (storedBranchId > 0 && branches.some((branch) => branch.id === storedBranchId)) {
+          nextSelectedBranchId = storedBranchId
+        } else if (branches.length === 1) {
+          nextSelectedBranchId = branches[0].id
+        }
+      } else if (nextSelectedBranchId > 0 && !branches.some((branch) => branch.id === nextSelectedBranchId)) {
+        nextSelectedBranchId = branches.length === 1 ? branches[0].id : null
+      }
+
+      set({ branches, selectedBranchId: nextSelectedBranchId, isLoading: false, error: null })
+
+      if (nextSelectedBranchId !== null && nextSelectedBranchId !== selectedBranchId) {
+        useTenantStore.getState().setBranchId(nextSelectedBranchId)
+      }
     } catch (error) {
       set({
         branches: [],
@@ -52,7 +70,7 @@ export const useBranchStore = create<BranchState>((set, get) => ({
   setSelectedBranchId: (branchId) => {
     set({ selectedBranchId: branchId })
 
-    if (branchId && branchId > 0) {
+    if (branchId !== null) {
       useTenantStore.getState().setBranchId(branchId)
     }
   },

@@ -26,20 +26,20 @@ public static class TenantRequestExtensions
 
     public static int ResolveBranchId(this ControllerBase controller, int? fallback = null)
     {
+        if (fallback.HasValue && fallback.Value >= 0)
+            return fallback.Value;
+
         var claimValue = controller.User?.FindFirst("branchId")?.Value ?? controller.User?.FindFirst("BranchId")?.Value;
-        if (int.TryParse(claimValue, out var claimBranchId) && claimBranchId > 0)
+        if (int.TryParse(claimValue, out var claimBranchId) && claimBranchId >= 0)
             return claimBranchId;
 
         var headerValue = controller.Request.Headers["X-Branch-Id"].FirstOrDefault();
-        if (int.TryParse(headerValue, out var headerBranchId) && headerBranchId > 0)
+        if (int.TryParse(headerValue, out var headerBranchId) && headerBranchId >= 0)
             return headerBranchId;
 
         var queryValue = controller.Request.Query["branchId"].FirstOrDefault();
-        if (int.TryParse(queryValue, out var queryBranchId) && queryBranchId > 0)
+        if (int.TryParse(queryValue, out var queryBranchId) && queryBranchId >= 0)
             return queryBranchId;
-
-        if (fallback.HasValue && fallback.Value > 0)
-            return fallback.Value;
 
         return 1;
     }

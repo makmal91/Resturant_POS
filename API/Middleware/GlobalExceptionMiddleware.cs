@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 
 namespace POSSystem.API.Middleware;
 
@@ -34,15 +35,21 @@ public class GlobalExceptionMiddleware
             InvalidOperationException => HttpStatusCode.BadRequest,
             BadHttpRequestException => HttpStatusCode.BadRequest,
             InvalidDataException => HttpStatusCode.BadRequest,
+            DbUpdateException => HttpStatusCode.BadRequest,
             _ => HttpStatusCode.InternalServerError
         };
 
         context.Response.ContentType = "application/json";
         context.Response.StatusCode = (int)statusCode;
 
-        var message = statusCode == HttpStatusCode.InternalServerError
-            ? "Internal Server Error"
-            : exception.Message;
+        var message = statusCode switch
+        {
+            HttpStatusCode.InternalServerError => "Internal Server Error",
+            HttpStatusCode.BadRequest when exception is DbUpdateException dbUpdate
+                && dbUpdate.InnerException?.Message.Contains("duplicate key", StringComparison.OrdinalIgnoreCase) == true
+                => "A record with the same value already exists.",
+            _ => exception.Message
+        };
 
         var response = new
         {
