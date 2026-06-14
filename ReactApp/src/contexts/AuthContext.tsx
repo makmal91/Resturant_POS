@@ -1,7 +1,11 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { authService } from '../services/authService'
 import { useBranchStore } from '../stores/useBranchStore'
+import { usePermissionStore } from '../stores/usePermissionStore'
+import { useMenuStore } from '../stores/useMenuStore'
 import { useTenantStore, type TenantRole } from '../stores/useTenantStore'
+import type { ModulePermission } from '../types/permissions'
+import { isMasterUserRole } from '../types/permissions'
 import {
   authStorage,
   isTokenExpired,
@@ -24,8 +28,15 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 
+const isGlobalRole = (roleName?: string) =>
+  isMasterUserRole(roleName) || roleName === 'Super Admin' || roleName === 'SuperAdmin'
+
+const syncPermissionStore = (permissions: ModulePermission[], roleName?: string) => {
+  usePermissionStore.getState().setPermissions(permissions, roleName ?? null)
+}
+
 const mapRole = (roleName?: string): TenantRole => {
-  if (roleName === 'SuperAdmin' || roleName === 'Super Admin' || roleName === 'System Admin') {
+  if (isMasterUserRole(roleName) || roleName === 'SuperAdmin' || roleName === 'Super Admin') {
     return 'SuperAdmin'
   }
 
@@ -71,7 +82,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isHydrated, setIsHydrated] = useState(false)
 
   const applySession = useCallback(
-    (nextUser: StoredUser | null, nextToken: string | null, nextBranches: StoredBranch[], nextBranchId: number | null) => {
+    (
+      nextUser: StoredUser | null,
+      nextToken: string | null,
+      nextBranches: StoredBranch[],
+      nextBranchId: number | null,
+      nextPermissions: ModulePermission[] = authStorage.getPermissions()
+    ) => {
       setUser(nextUser)
       setToken(nextToken)
       setBranches(nextBranches)
@@ -83,9 +100,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           token: nextToken,
           branches: nextBranches,
           selectedBranchId: nextBranchId,
+          permissions: nextPermissions,
         })
         syncTenantSession(nextUser, nextBranchId)
         syncBranchStore(nextBranches, nextBranchId)
+        syncPermissionStore(nextPermissions, nextUser.roleName)
+        if (nextUser.roleId) {
+          void useMenuStore.getState().fetchMenus(nextUser.roleId)
+        }
       }
     },
     []
@@ -97,6 +119,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setToken(null)
     setBranches([])
     setSelectedBranchIdState(null)
+    usePermissionStore.getState().clearPermissions()
+    useMenuStore.getState().clearMenus()
     useBranchStore.setState({
       branches: [],
       selectedBranchId: null,
@@ -114,7 +138,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const setBranch = useCallback(
     (branchId: number) => {
-      if (!branches.some((branch) => branch.id === branchId)) {
+      const masterUser = isMasterUserRole(user?.roleName)
+      if (!masterUser && branchId > 0 && !branches.some((branch) => branch.id === branchId)) {
         throw new Error('Selected branch is no longer assigned to your account.')
       }
 
@@ -145,12 +170,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     async (username: string, password: string): Promise<'/' | '/select-branch'> => {
       const response = await authService.login({ username, password })
 
-      if (response.branches.length === 0) {
+      if (response.branches.length === 0 && !isGlobalRole(response.user.roleName)) {
         throw new Error('No branch assigned.')
       }
 
-      const autoSelectedBranchId = response.branches.length === 1 ? response.branches[0].id : null
-      applySession(response.user, response.token, response.branches, autoSelectedBranchId)
+      const autoSelectedBranchId =
+        response.branches.length === 1
+          ? response.branches[0].id
+          : response.branches.length === 0 && isGlobalRole(response.user.roleName)
+            ? 0
+            : null
+
+      applySession(
+        response.user,
+        response.token,
+        response.branches,
+        autoSelectedBranchId,
+        response.permissions
+      )
 
       return autoSelectedBranchId !== null ? '/' : '/select-branch'
     },
@@ -167,7 +204,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     if (snapshot.token && snapshot.user) {
-      applySession(snapshot.user, snapshot.token, snapshot.branches, snapshot.selectedBranchId)
+      applySession(
+        snapshot.user,
+        snapshot.token,
+        snapshot.branches,
+        snapshot.selectedBranchId,
+        snapshot.permissions
+      )
     }
 
     setIsHydrated(true)

@@ -38,8 +38,8 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
     config.headers['X-Business-Id'] = String(businessId);
   }
 
-  if (selectedBranchId !== null && selectedBranchId > 0) {
-    config.headers['X-Branch-Id'] = String(selectedBranchId);
+  if (selectedBranchId !== null) {
+    config.headers['X-Branch-Id'] = String(selectedBranchId)
   }
 
   if (user?.roleName) {

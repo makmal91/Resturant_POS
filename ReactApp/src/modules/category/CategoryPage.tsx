@@ -5,6 +5,8 @@ import BranchSelector from '../shared/BranchSelector';
 import { useBranchStore } from '../../stores/useBranchStore';
 import { useFormModal } from '../../contexts/FormModalContext';
 import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
+import { usePermission, useIsMasterUser } from '../../hooks/usePermission';
+import PermissionGate from '../../components/PermissionGate';
 import { getApiErrorMessage } from '../../services/api';
 import { safeString } from '../../utils/safeValues';
 import { categoryService } from './categoryService';
@@ -37,9 +39,15 @@ const CategoryPage: React.FC = () => {
   const [pageSize, setPageSize] = useState(10);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
+  const { canCreate, canEdit, canDelete } = usePermission('Categories');
+  const isMasterUser = useIsMasterUser();
+
   const hasBranchSelection = selectedBranchId !== null;
   const isGlobalMode = selectedBranchId === 0;
-  const canWrite = hasBranchSelection && !isGlobalMode;
+  const canWriteBranch = isMasterUser || (hasBranchSelection && !isGlobalMode);
+  const canAdd = canWriteBranch && canCreate;
+  const canModify = canWriteBranch && canEdit;
+  const canRemove = canWriteBranch && canDelete;
 
   const showNotification = useCallback((type: 'success' | 'error', message: string) => {
     setNotification({ type, message });
@@ -130,7 +138,7 @@ const CategoryPage: React.FC = () => {
   }, [isOpen, fetchCategories]);
 
   const handleAddCategory = () => {
-    if (!canWrite || selectedBranchId === null || selectedBranchId <= 0) {
+    if (!canAdd || selectedBranchId === null || selectedBranchId <= 0) {
       showNotification(
         'error',
         isGlobalMode
@@ -144,7 +152,7 @@ const CategoryPage: React.FC = () => {
   };
 
   const handleEdit = async (category: CategoryItem) => {
-    if (!canWrite || selectedBranchId === null || selectedBranchId <= 0) {
+    if (!canModify || selectedBranchId === null || selectedBranchId <= 0) {
       showNotification(
         'error',
         isGlobalMode
@@ -179,7 +187,7 @@ const CategoryPage: React.FC = () => {
   };
 
   const handleDelete = (category: CategoryItem) => {
-    if (!canWrite || selectedBranchId === null || selectedBranchId <= 0) {
+    if (!canRemove || selectedBranchId === null || selectedBranchId <= 0) {
       showNotification(
         'error',
         isGlobalMode
@@ -292,40 +300,42 @@ const CategoryPage: React.FC = () => {
     return baseColumns;
   }, [isGlobalMode]);
 
-  const actions: Action<CategoryItem>[] = canWrite
-    ? [
-        {
-          label: '',
-          onClick: handleEdit,
-          icon: (
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" title="Edit">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-              />
-            </svg>
-          ),
-          variant: 'secondary',
-        },
-        {
-          label: '',
-          onClick: handleDelete,
-          icon: (
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" title="Delete">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-              />
-            </svg>
-          ),
-          variant: 'danger',
-        },
-      ]
-    : [];
+  const actions: Action<CategoryItem>[] = [];
+  if (canModify) {
+    actions.push({
+      label: '',
+      onClick: handleEdit,
+      icon: (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" title="Edit">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+          />
+        </svg>
+      ),
+      variant: 'secondary',
+    });
+  }
+
+  if (canRemove) {
+    actions.push({
+      label: '',
+      onClick: handleDelete,
+      icon: (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" title="Delete">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+          />
+        </svg>
+      ),
+      variant: 'danger',
+    });
+  }
 
   const emptyMessage = !hasBranchSelection
     ? 'Select a branch to load categories.'
@@ -381,16 +391,18 @@ const CategoryPage: React.FC = () => {
 
       <div className="mb-6 flex justify-between items-center">
         <div></div>
-        <button
-          onClick={handleAddCategory}
-          disabled={!canWrite}
-          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          <svg className="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-          </svg>
-          Add Category
-        </button>
+        <PermissionGate module="Categories" action="create">
+          <button
+            onClick={handleAddCategory}
+            disabled={!canAdd}
+            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <svg className="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
+            Add Category
+          </button>
+        </PermissionGate>
       </div>
 
       <DataTable

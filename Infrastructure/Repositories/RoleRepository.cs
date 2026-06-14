@@ -91,7 +91,9 @@ public class RoleRepository : IRoleRepository
                 CanView = rp.CanView,
                 CanCreate = rp.CanCreate,
                 CanEdit = rp.CanEdit,
-                CanDelete = rp.CanDelete
+                CanDelete = rp.CanDelete,
+                CanExport = rp.CanExport,
+                CanUpload = rp.CanUpload
             })
             .ToListAsync();
 
@@ -116,7 +118,9 @@ public class RoleRepository : IRoleRepository
                 CanView = permission.CanView,
                 CanCreate = permission.CanCreate,
                 CanEdit = permission.CanEdit,
-                CanDelete = permission.CanDelete
+                CanDelete = permission.CanDelete,
+                CanExport = permission.CanExport,
+                CanUpload = permission.CanUpload
             });
         }
 
@@ -138,7 +142,9 @@ public class RoleRepository : IRoleRepository
                 CanView = rp.CanView,
                 CanCreate = rp.CanCreate,
                 CanEdit = rp.CanEdit,
-                CanDelete = rp.CanDelete
+                CanDelete = rp.CanDelete,
+                CanExport = rp.CanExport,
+                CanUpload = rp.CanUpload
             })
             .ToList()
     };

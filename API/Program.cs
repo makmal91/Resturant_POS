@@ -77,6 +77,9 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<POSDbContext>();
     var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("DatabaseInitializer");
     await UserManagementDatabaseInitializer.EnsureSchemaAsync(db, logger);
+    await NavigationMenuDatabaseInitializer.EnsureSchemaAsync(db, logger);
+    await RolePermissionSeeder.SeedDefaultPermissionsAsync(db, logger);
+    await NavigationMenuSeeder.SeedDefaultMenusAsync(db, logger);
 }
 
 // Configure the HTTP request pipeline.
@@ -94,6 +97,7 @@ app.UseGlobalExceptionMiddleware();
 
 app.UseAuthentication();
 app.UseBranchAccessMiddleware();
+app.UsePermissionAuthorizationMiddleware();
 app.UseAuthorization();
 
 app.MapControllers();

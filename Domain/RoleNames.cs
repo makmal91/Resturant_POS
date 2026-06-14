@@ -17,10 +17,13 @@ public static class RoleNames
         Cashier
     ];
 
+    public static bool IsMasterUser(string roleName) =>
+        string.Equals(roleName, SystemAdmin, StringComparison.OrdinalIgnoreCase);
+
     public static bool IsGlobalRole(string roleName) =>
-        string.Equals(roleName, SystemAdmin, StringComparison.OrdinalIgnoreCase) ||
+        IsMasterUser(roleName) ||
         string.Equals(roleName, SuperAdmin, StringComparison.OrdinalIgnoreCase);
 
     public static bool BypassesBranchRequirement(string roleName) =>
-        string.Equals(roleName, SystemAdmin, StringComparison.OrdinalIgnoreCase);
+        IsMasterUser(roleName);
 }

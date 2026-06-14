@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 using POSSystem.Application.Auth.DTOs;
 using POSSystem.Application.Auth.Interfaces;
 
@@ -29,5 +30,17 @@ public class AuthController : ControllerBase
         {
             return BadRequest(new { message = ex.Message });
         }
+    }
+
+    [Authorize]
+    [HttpGet("permissions")]
+    public async Task<IActionResult> GetPermissions()
+    {
+        var roleIdValue = User.FindFirstValue("roleId");
+        if (!int.TryParse(roleIdValue, out var roleId))
+            return Unauthorized(new { message = "Role information is missing from the token." });
+
+        var permissions = await _authService.GetCurrentUserPermissionsAsync(roleId);
+        return Ok(permissions);
     }
 }

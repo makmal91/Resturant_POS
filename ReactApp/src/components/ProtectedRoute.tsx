@@ -1,15 +1,22 @@
 import React from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { usePermissionStore } from '../stores/usePermissionStore'
 
 interface ProtectedRouteProps {
   children: React.ReactNode
   requireBranch?: boolean
+  module?: string
 }
 
-const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requireBranch = true }) => {
+const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
+  children,
+  requireBranch = true,
+  module,
+}) => {
   const { isAuthenticated, isHydrated, selectedBranchId } = useAuth()
   const location = useLocation()
+  const canViewModule = usePermissionStore((state) => !module || state.can(module, 'view'))
 
   if (!isHydrated) {
     return (
@@ -27,6 +34,10 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requireBranch
 
   if (requireBranch && selectedBranchId === null) {
     return <Navigate to="/select-branch" replace state={{ from: location.pathname }} />
+  }
+
+  if (!canViewModule) {
+    return <Navigate to="/" replace />
   }
 
   return <>{children}</>

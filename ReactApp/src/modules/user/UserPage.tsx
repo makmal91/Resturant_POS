@@ -8,6 +8,7 @@ import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
 import { getApiErrorMessage } from '../../services/api';
 import { safeString } from '../../utils/safeValues';
 import { userService, UserListItem } from './userService';
+import { useIsMasterUser } from '../../hooks/usePermission';
 
 const UserPage: React.FC = () => {
   const selectedBranchId = useBranchStore((state) => state.selectedBranchId);
@@ -25,10 +26,11 @@ const UserPage: React.FC = () => {
   const [totalRecords, setTotalRecords] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const isMasterUser = useIsMasterUser();
 
   const hasBranchSelection = selectedBranchId !== null;
   const isGlobalMode = selectedBranchId === 0;
-  const canWrite = hasBranchSelection && !isGlobalMode;
+  const canWrite = isMasterUser || (hasBranchSelection && !isGlobalMode);
 
   const showNotification = useCallback((type: 'success' | 'error', message: string) => {
     setNotification({ type, message });

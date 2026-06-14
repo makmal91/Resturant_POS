@@ -3,21 +3,31 @@ namespace POSSystem.Application.Common.Constants;
 public static class PermissionModules
 {
     public const string Categories = "Categories";
+    public const string SubCategories = "SubCategories";
     public const string Products = "Products";
+    public const string Menu = "Menu";
     public const string Orders = "Orders";
     public const string Inventory = "Inventory";
     public const string Reports = "Reports";
     public const string PosBilling = "POS Billing";
     public const string Users = "Users";
+    public const string Roles = "Roles";
+    public const string Branches = "Branches";
+    public const string Businesses = "Businesses";
 
     public static readonly IReadOnlyList<string> All =
     [
         Categories,
+        SubCategories,
         Products,
+        Menu,
         Orders,
         Inventory,
         Reports,
         PosBilling,
-        Users
+        Users,
+        Roles,
+        Branches,
+        Businesses
     ];
 }

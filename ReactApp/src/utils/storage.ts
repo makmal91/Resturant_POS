@@ -1,3 +1,5 @@
+import type { ModulePermission } from '../types/permissions'
+
 export interface StoredUser {
   id: number
   username: string
@@ -5,6 +7,7 @@ export interface StoredUser {
   businessId?: number
   roleId?: number
   roleName?: string
+  isMasterUser?: boolean
 }
 
 export interface StoredBranch {
@@ -17,6 +20,7 @@ export interface AuthStorageSnapshot {
   token: string | null
   branches: StoredBranch[]
   selectedBranchId: number | null
+  permissions: ModulePermission[]
 }
 
 const STORAGE_KEYS = {
@@ -24,6 +28,7 @@ const STORAGE_KEYS = {
   token: 'token',
   branches: 'branches',
   selectedBranchId: 'selectedBranchId',
+  permissions: 'permissions',
 } as const
 
 const parseJson = <T>(value: string | null): T | null => {
@@ -78,7 +83,7 @@ export const authStorage = {
     }
 
     const parsed = Number(raw)
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
   },
 
   setSelectedBranchId(branchId: number | null): void {
@@ -89,12 +94,21 @@ export const authStorage = {
     }
   },
 
+  getPermissions(): ModulePermission[] {
+    return parseJson<ModulePermission[]>(localStorage.getItem(STORAGE_KEYS.permissions)) ?? []
+  },
+
+  setPermissions(permissions: ModulePermission[]): void {
+    localStorage.setItem(STORAGE_KEYS.permissions, JSON.stringify(permissions))
+  },
+
   getSnapshot(): AuthStorageSnapshot {
     return {
       user: this.getUser(),
       token: this.getToken(),
       branches: this.getBranches(),
       selectedBranchId: this.getSelectedBranchId(),
+      permissions: this.getPermissions(),
     }
   },
 
@@ -103,11 +117,15 @@ export const authStorage = {
     token: string
     branches: StoredBranch[]
     selectedBranchId: number | null
+    permissions?: ModulePermission[]
   }): void {
     this.setUser(data.user)
     this.setToken(data.token)
     this.setBranches(data.branches)
     this.setSelectedBranchId(data.selectedBranchId)
+    if (data.permissions) {
+      this.setPermissions(data.permissions)
+    }
   },
 
   clear(): void {
@@ -115,6 +133,7 @@ export const authStorage = {
     localStorage.removeItem(STORAGE_KEYS.token)
     localStorage.removeItem(STORAGE_KEYS.branches)
     localStorage.removeItem(STORAGE_KEYS.selectedBranchId)
+    localStorage.removeItem(STORAGE_KEYS.permissions)
     localStorage.removeItem('tenantSession')
     localStorage.removeItem('businessId')
     localStorage.removeItem('branchId')

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using POSSystem.Domain;
 
 namespace POSSystem.Infrastructure.Data;
 
@@ -48,6 +49,10 @@ public static class UserManagementDatabaseInitializer
                 ALTER TABLE [Roles] ADD [Description] NVARCHAR(500) NOT NULL CONSTRAINT [DF_Roles_Description] DEFAULT '';
             IF COL_LENGTH('Roles', 'IsActive') IS NULL
                 ALTER TABLE [Roles] ADD [IsActive] BIT NOT NULL CONSTRAINT [DF_Roles_IsActive] DEFAULT 1;
+            IF COL_LENGTH('RolePermissions', 'CanExport') IS NULL
+                ALTER TABLE [RolePermissions] ADD [CanExport] BIT NOT NULL CONSTRAINT [DF_RolePermissions_CanExport] DEFAULT 0;
+            IF COL_LENGTH('RolePermissions', 'CanUpload') IS NULL
+                ALTER TABLE [RolePermissions] ADD [CanUpload] BIT NOT NULL CONSTRAINT [DF_RolePermissions_CanUpload] DEFAULT 0;
             """,
             """
             IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_role_branchid_name' AND object_id = OBJECT_ID('Roles'))
@@ -77,6 +82,7 @@ public static class UserManagementDatabaseInitializer
         }
 
         await SeedRolesAsync(context, logger);
+        await SeedAdminUserAsync(context, logger);
     }
 
     private static async Task SeedRolesAsync(POSDbContext context, ILogger logger)
@@ -104,6 +110,82 @@ public static class UserManagementDatabaseInitializer
             {
                 logger.LogWarning(ex, "Failed to seed role {RoleName}", role.Name);
             }
+        }
+    }
+
+    private static async Task SeedAdminUserAsync(POSDbContext context, ILogger logger)
+    {
+        const string adminUsername = "admin";
+        const string defaultPassword = "Admin@123";
+
+        try
+        {
+            var adminExists = await context.Users
+                .IgnoreQueryFilters()
+                .AnyAsync(u => u.Username.ToLower() == adminUsername && !u.IsDeleted);
+
+            if (adminExists)
+                return;
+
+            var systemAdminRoleId = await context.Roles
+                .Where(r => r.Name == RoleNames.SystemAdmin && r.IsActive)
+                .Select(r => r.Id)
+                .FirstOrDefaultAsync();
+
+            if (systemAdminRoleId == 0)
+            {
+                logger.LogWarning("Default admin user was not seeded because the System Admin role is missing.");
+                return;
+            }
+
+            var businessId = await context.Businesses
+                .OrderBy(b => b.Id)
+                .Select(b => b.Id)
+                .FirstOrDefaultAsync();
+
+            if (businessId == 0)
+            {
+                logger.LogWarning("Default admin user was not seeded because no business exists.");
+                return;
+            }
+
+            var branchId = await context.Branches
+                .Where(b => b.BusinessId == businessId && b.IsActive)
+                .OrderBy(b => b.Id)
+                .Select(b => b.Id)
+                .FirstOrDefaultAsync();
+
+            var passwordHash = BCrypt.Net.BCrypt.HashPassword(defaultPassword);
+
+            await context.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO [Users] (
+                    [FullName], [Username], [PasswordHash], [Phone], [Email], [RoleId], [BusinessId], [BranchId],
+                    [IsActive], [Salary], [ShiftType], [Status], [CreatedDate], [IsDeleted])
+                VALUES (
+                    {"System Administrator"}, {adminUsername}, {passwordHash}, {"+1234567890"}, {"admin@restaurant.com"},
+                    {systemAdminRoleId}, {businessId}, {branchId}, {true}, {0m}, {(int)ShiftType.Flexible},
+                    {(int)UserStatus.Active}, {DateTime.UtcNow}, {false});
+                """);
+
+            var adminUserId = await context.Users
+                .IgnoreQueryFilters()
+                .Where(u => u.Username.ToLower() == adminUsername && !u.IsDeleted)
+                .Select(u => u.Id)
+                .FirstAsync();
+
+            if (branchId > 0)
+            {
+                await context.Database.ExecuteSqlInterpolatedAsync($"""
+                    IF NOT EXISTS (SELECT 1 FROM [UserBranches] WHERE [UserId] = {adminUserId} AND [BranchId] = {branchId})
+                        INSERT INTO [UserBranches] ([UserId], [BranchId]) VALUES ({adminUserId}, {branchId});
+                    """);
+            }
+
+            logger.LogInformation("Seeded default admin user '{AdminUsername}'.", adminUsername);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to seed default admin user.");
         }
     }
 }

@@ -24,6 +24,7 @@ public class POSDbContext : DbContext
     public DbSet<User> Users { get; set; } = null!;
     public DbSet<UserBranch> UserBranches { get; set; } = null!;
     public DbSet<RolePermission> RolePermissions { get; set; } = null!;
+    public DbSet<AppMenu> Menus { get; set; } = null!;
     public DbSet<MenuCategory> MenuCategories { get; set; } = null!;
     public DbSet<SubCategory> SubCategories { get; set; } = null!;
     public DbSet<MenuItem> MenuItems { get; set; } = null!;
@@ -52,6 +53,7 @@ public class POSDbContext : DbContext
         modelBuilder.ApplyConfiguration(new UserConfiguration());
         modelBuilder.ApplyConfiguration(new UserBranchConfiguration());
         modelBuilder.ApplyConfiguration(new RolePermissionConfiguration());
+        modelBuilder.ApplyConfiguration(new AppMenuConfiguration());
         modelBuilder.ApplyConfiguration(new MenuCategoryConfiguration());
         modelBuilder.ApplyConfiguration(new SubCategoryConfiguration());
         modelBuilder.ApplyConfiguration(new MenuItemConfiguration());
@@ -285,7 +287,7 @@ public class POSDbContext : DbContext
         var isDeletedProperty = Expression.Property(parameter, nameof(BaseEntity.IsDeleted));
         var notDeleted = Expression.Equal(isDeletedProperty, Expression.Constant(false));
 
-        var isSuperAdmin = _tenantContext.IsSuperAdmin;
+        var isSuperAdmin = _tenantContext.IsMasterUser || _tenantContext.IsSuperAdmin;
         var businessId = _tenantContext.BusinessId;
         var branchId = _tenantContext.BranchId;
 
@@ -327,7 +329,7 @@ public class POSDbContext : DbContext
         var isDeletedProperty = Expression.Property(parameter, nameof(BaseEntity.IsDeleted));
         var notDeleted = Expression.Equal(isDeletedProperty, Expression.Constant(false));
 
-        var isSuperAdmin = _tenantContext.IsSuperAdmin;
+        var isSuperAdmin = _tenantContext.IsMasterUser || _tenantContext.IsSuperAdmin;
         var businessId = _tenantContext.BusinessId;
 
         Expression predicate;

@@ -7,7 +7,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import { FormModalProvider } from './contexts/FormModalContext';
 import { ConfirmDialogProvider } from './contexts/ConfirmDialogContext';
 import { AuthProvider } from './contexts/AuthContext';
-import { navigationItems } from './navigationConfig';
+import { routeRegistry } from './routeRegistry';
 import LoginPage from './pages/LoginPage';
 import BranchSelectionPage from './pages/BranchSelectionPage';
 
@@ -33,8 +33,20 @@ function App() {
                   <ProtectedRoute>
                     <Layout>
                       <Routes>
-                        {navigationItems.map((item) => (
-                          <Route key={item.path} path={item.path} element={<item.component />} />
+                        {routeRegistry.map((item) => (
+                          <Route
+                            key={item.path}
+                            path={item.path}
+                            element={
+                              item.module ? (
+                                <ProtectedRoute module={item.module}>
+                                  <item.component />
+                                </ProtectedRoute>
+                              ) : (
+                                <item.component />
+                              )
+                            }
+                          />
                         ))}
                         <Route path="*" element={<Navigate to="/" replace />} />
                       </Routes>

@@ -1,5 +1,11 @@
 namespace POSSystem.Application.Branch.DTOs;
 
+public class BranchSummaryDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+}
+
 public class BranchListItemDto
 {
     public int Id { get; set; }

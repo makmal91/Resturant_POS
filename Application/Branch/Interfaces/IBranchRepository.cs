@@ -4,6 +4,7 @@ namespace POSSystem.Application.Branch.Interfaces;
 
 public interface IBranchRepository
 {
+    Task<IReadOnlyList<BranchSummaryDto>> GetAllActiveSummariesAsync();
     Task<IReadOnlyList<BranchListItemDto>> GetByBusinessIdAsync(int businessId);
     Task<BranchDetailDto?> GetDetailByIdAsync(int id, int businessId);
     Task<Domain.Branch?> GetTrackedByIdAsync(int id, int businessId);

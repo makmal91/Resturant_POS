@@ -96,7 +96,9 @@ public class RoleService : IRoleService
                 CanView = p.CanView,
                 CanCreate = p.CanCreate,
                 CanEdit = p.CanEdit,
-                CanDelete = p.CanDelete
+                CanDelete = p.CanDelete,
+                CanExport = p.CanExport,
+                CanUpload = p.CanUpload
             })
             .ToList();
 
@@ -113,7 +115,9 @@ public class RoleService : IRoleService
                 CanView = false,
                 CanCreate = false,
                 CanEdit = false,
-                CanDelete = false
+                CanDelete = false,
+                CanExport = false,
+                CanUpload = false
             })
             .ToList();
 

@@ -15,6 +15,20 @@ public class BranchRepository : IBranchRepository
         _context = context;
     }
 
+    public async Task<IReadOnlyList<BranchSummaryDto>> GetAllActiveSummariesAsync()
+    {
+        return await _context.Branches
+            .AsNoTracking()
+            .Where(b => b.IsActive && !b.IsDeleted)
+            .OrderBy(b => b.Name)
+            .Select(b => new BranchSummaryDto
+            {
+                Id = b.Id,
+                Name = b.Name
+            })
+            .ToListAsync();
+    }
+
     public async Task<IReadOnlyList<BranchListItemDto>> GetByBusinessIdAsync(int businessId)
     {
         var query =

@@ -13,4 +13,9 @@ public static class MiddlewareExtensions
     {
         return app.UseMiddleware<BranchAccessMiddleware>();
     }
+
+    public static IApplicationBuilder UsePermissionAuthorizationMiddleware(this IApplicationBuilder app)
+    {
+        return app.UseMiddleware<PermissionAuthorizationMiddleware>();
+    }
 }

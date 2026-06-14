@@ -21,6 +21,8 @@ public class RolePermissionDto
     public bool CanCreate { get; set; }
     public bool CanEdit { get; set; }
     public bool CanDelete { get; set; }
+    public bool CanExport { get; set; }
+    public bool CanUpload { get; set; }
 }
 
 public class CreateRoleDto

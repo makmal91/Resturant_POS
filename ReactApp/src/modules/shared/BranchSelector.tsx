@@ -1,6 +1,7 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
+import { useIsMasterUser } from '../../hooks/usePermission'
 import { useBranchStore } from '../../stores/useBranchStore'
 import { useTenantStore } from '../../stores/useTenantStore'
 
@@ -25,8 +26,9 @@ const BranchSelector: React.FC<BranchSelectorProps> = ({
   const selectedBranchId = useBranchStore((state) => state.selectedBranchId)
   const setSelectedBranchId = useBranchStore((state) => state.setSelectedBranchId)
   const role = useTenantStore((state) => state.session.role)
-  const globalViewRoles = ['SuperAdmin', 'Super Admin', 'System Admin', 'Admin']
-  const canUseAllBranches = allowAllBranches && globalViewRoles.includes(role)
+  const isMasterUser = useIsMasterUser()
+  const globalViewRoles = ['SuperAdmin', 'Super Admin', 'Admin']
+  const canUseAllBranches = allowAllBranches && (isMasterUser || globalViewRoles.includes(role))
 
   return (
     <div className={className}>

@@ -14,6 +14,7 @@ public class AuthUserDto
     public int BusinessId { get; set; }
     public int RoleId { get; set; }
     public string RoleName { get; set; } = string.Empty;
+    public bool IsMasterUser { get; set; }
 }
 
 public class AuthBranchDto
@@ -27,4 +28,5 @@ public class LoginResponseDto
     public string Token { get; set; } = string.Empty;
     public AuthUserDto User { get; set; } = new();
     public IReadOnlyList<AuthBranchDto> Branches { get; set; } = Array.Empty<AuthBranchDto>();
+    public IReadOnlyList<Users.DTOs.RolePermissionDto> Permissions { get; set; } = Array.Empty<Users.DTOs.RolePermissionDto>();
 }

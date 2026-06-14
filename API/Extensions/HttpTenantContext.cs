@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using POSSystem.Application.Interfaces;
+using POSSystem.Domain;
 
 namespace POSSystem.API.Extensions;
 
@@ -24,32 +25,46 @@ public class HttpTenantContext : ITenantContext
         TryReadIntHeader("X-Branch-Id") ??
         TryReadIntQuery("branchId");
 
+    public bool IsMasterUser
+    {
+        get
+        {
+            var roleName = ResolveRoleName();
+            return RoleNames.IsMasterUser(roleName ?? string.Empty);
+        }
+    }
+
     public bool IsSuperAdmin
     {
         get
         {
-            var principal = _httpContextAccessor.HttpContext?.User;
-            if (principal == null)
-            {
-                var headerRole = _httpContextAccessor.HttpContext?.Request?.Headers["X-User-Role"].FirstOrDefault();
-                return IsGlobalAdminRole(headerRole);
-            }
-
-            if (principal.IsInRole("SuperAdmin") ||
-                principal.IsInRole("Super Admin") ||
-                principal.IsInRole("System Admin"))
+            if (IsMasterUser)
                 return true;
 
-            return principal.Claims.Any(c =>
-                c.Type == ClaimTypes.Role &&
-                IsGlobalAdminRole(c.Value));
+            var roleName = ResolveRoleName();
+            return IsGlobalAdminRole(roleName);
         }
+    }
+
+    private string? ResolveRoleName()
+    {
+        var principal = _httpContextAccessor.HttpContext?.User;
+        if (principal == null)
+            return _httpContextAccessor.HttpContext?.Request?.Headers["X-User-Role"].FirstOrDefault();
+
+        if (principal.IsInRole(RoleNames.SystemAdmin))
+            return RoleNames.SystemAdmin;
+
+        if (principal.IsInRole("SuperAdmin") || principal.IsInRole(RoleNames.SuperAdmin))
+            return RoleNames.SuperAdmin;
+
+        return principal.FindFirstValue(ClaimTypes.Role);
     }
 
     private static bool IsGlobalAdminRole(string? roleName) =>
         string.Equals(roleName, "SuperAdmin", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(roleName, "Super Admin", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(roleName, "System Admin", StringComparison.OrdinalIgnoreCase);
+        string.Equals(roleName, RoleNames.SuperAdmin, StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(roleName, RoleNames.SystemAdmin, StringComparison.OrdinalIgnoreCase);
 
     private int? TryReadIntClaim(string claimType)
     {
