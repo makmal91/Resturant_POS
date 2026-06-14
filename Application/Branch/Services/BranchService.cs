@@ -66,8 +66,7 @@ public class BranchService : IBranchService
             IsActive = dto.IsActive,
             BusinessId = businessId,
             CountryId = dto.CountryId,
-            CityId = dto.CityId,
-            BranchId = 1
+            CityId = dto.CityId
         };
 
         await _repository.AddAsync(branch);

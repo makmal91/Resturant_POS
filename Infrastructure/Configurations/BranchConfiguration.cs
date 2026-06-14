@@ -8,6 +8,13 @@ public class BranchConfiguration : IEntityTypeConfiguration<Branch>
 {
     public void Configure(EntityTypeBuilder<Branch> builder)
     {
+        builder.Ignore(b => b.BranchId);
+        builder.Ignore(b => b.CreatedByName);
+        builder.Ignore(b => b.ModifiedByName);
+        builder.Ignore(b => b.Business);
+        builder.Ignore(b => b.Country);
+        builder.Ignore(b => b.City);
+
         builder.HasKey(b => b.Id);
 
         builder.Property(b => b.Name)
@@ -48,21 +55,6 @@ public class BranchConfiguration : IEntityTypeConfiguration<Branch>
 
         builder.HasIndex(b => b.CityId)
             .HasDatabaseName("idx_branch_cityid");
-
-        builder.HasOne(b => b.Business)
-            .WithMany(bs => bs.Branches)
-            .HasForeignKey(b => b.BusinessId)
-            .OnDelete(DeleteBehavior.Restrict);
-
-        builder.HasOne(b => b.Country)
-            .WithMany()
-            .HasForeignKey(b => b.CountryId)
-            .OnDelete(DeleteBehavior.Restrict);
-
-        builder.HasOne(b => b.City)
-            .WithMany()
-            .HasForeignKey(b => b.CityId)
-            .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasMany(b => b.Users)
             .WithOne(u => u.Branch)

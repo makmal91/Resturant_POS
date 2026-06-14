@@ -80,13 +80,16 @@ public class POSDbContext : DbContext
                 .HasIndex("BusinessId")
                 .HasDatabaseName($"idx_{entityType.GetTableName()?.ToLowerInvariant()}_businessid");
 
-            modelBuilder.Entity(entityType.ClrType)
-                .HasIndex("BranchId")
-                .HasDatabaseName($"idx_{entityType.GetTableName()?.ToLowerInvariant()}_branchid");
+            if (entityType.ClrType != typeof(Branch))
+            {
+                modelBuilder.Entity(entityType.ClrType)
+                    .HasIndex("BranchId")
+                    .HasDatabaseName($"idx_{entityType.GetTableName()?.ToLowerInvariant()}_branchid");
 
-            modelBuilder.Entity(entityType.ClrType)
-                .HasIndex("BusinessId", "BranchId")
-                .HasDatabaseName($"idx_{entityType.GetTableName()?.ToLowerInvariant()}_business_branch");
+                modelBuilder.Entity(entityType.ClrType)
+                    .HasIndex("BusinessId", "BranchId")
+                    .HasDatabaseName($"idx_{entityType.GetTableName()?.ToLowerInvariant()}_business_branch");
+            }
 
             modelBuilder.Entity(entityType.ClrType)
                 .HasQueryFilter(BuildTenantFilter(entityType.ClrType));
@@ -155,7 +158,6 @@ public class POSDbContext : DbContext
             ClosingTime = new TimeSpan(22, 0, 0),
             IsActive = true,
             BusinessId = 1,
-            BranchId = 1,
             CreatedDate = DateTime.UtcNow
         };
 
@@ -236,7 +238,7 @@ public class POSDbContext : DbContext
             if (entry.Entity.BusinessId <= 0)
                 entry.Entity.BusinessId = businessId;
 
-            if (entry.Entity.BranchId <= 0)
+            if (entry.Entity is not Branch && entry.Entity.BranchId <= 0)
                 entry.Entity.BranchId = branchId;
         }
     }
@@ -245,7 +247,6 @@ public class POSDbContext : DbContext
     {
         var parameter = Expression.Parameter(clrType, "e");
         var businessProperty = Expression.Property(parameter, nameof(BaseEntity.BusinessId));
-        var branchProperty = Expression.Property(parameter, nameof(BaseEntity.BranchId));
         var isDeletedProperty = Expression.Property(parameter, nameof(BaseEntity.IsDeleted));
         var notDeleted = Expression.Equal(isDeletedProperty, Expression.Constant(false));
 
@@ -268,8 +269,9 @@ public class POSDbContext : DbContext
                 scopedPredicate = Expression.Equal(businessProperty, Expression.Constant(businessId.Value));
             }
 
-            if (branchId.HasValue)
+            if (branchId.HasValue && clrType != typeof(Branch))
             {
+                var branchProperty = Expression.Property(parameter, nameof(BaseEntity.BranchId));
                 var branchPredicate = Expression.Equal(branchProperty, Expression.Constant(branchId.Value));
                 scopedPredicate = scopedPredicate == null
                     ? branchPredicate

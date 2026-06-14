@@ -8,7 +8,12 @@ public class CountryConfiguration : IEntityTypeConfiguration<Country>
 {
     public void Configure(EntityTypeBuilder<Country> builder)
     {
+        builder.Ignore(c => c.Cities);
+
         builder.HasKey(c => c.Id);
+
+        builder.Property(c => c.Id)
+            .ValueGeneratedNever();
 
         builder.Property(c => c.Name)
             .IsRequired()
@@ -22,9 +27,5 @@ public class CountryConfiguration : IEntityTypeConfiguration<Country>
             .IsUnique()
             .HasDatabaseName("idx_country_code");
 
-        builder.HasMany(c => c.Cities)
-            .WithOne(city => city.Country)
-            .HasForeignKey(city => city.CountryId)
-            .OnDelete(DeleteBehavior.Restrict);
     }
 }

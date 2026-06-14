@@ -10,6 +10,7 @@ public class BusinessConfiguration : IEntityTypeConfiguration<Business>
     {
         builder.Ignore(b => b.BusinessId);
         builder.Ignore(b => b.BranchId);
+        builder.Ignore(b => b.Branches);
 
         builder.HasKey(b => b.Id);
 

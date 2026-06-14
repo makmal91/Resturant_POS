@@ -126,9 +126,22 @@ public class BusinessRepository : IBusinessRepository
 
     public Task<BusinessEntity?> GetTrackedWithBranchesAsync(int id)
     {
-        return _context.Businesses
-            .Include(b => b.Branches)
+        return GetTrackedWithBranchesInternalAsync(id);
+    }
+
+    private async Task<BusinessEntity?> GetTrackedWithBranchesInternalAsync(int id)
+    {
+        var business = await _context.Businesses
             .FirstOrDefaultAsync(b => b.Id == id && !b.IsDeleted);
+
+        if (business == null)
+            return null;
+
+        business.Branches = await _context.Branches
+            .Where(b => b.BusinessId == id)
+            .ToListAsync();
+
+        return business;
     }
 
     public async Task AddAsync(BusinessEntity business)

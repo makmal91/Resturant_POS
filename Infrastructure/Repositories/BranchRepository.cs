@@ -17,53 +17,61 @@ public class BranchRepository : IBranchRepository
 
     public async Task<IReadOnlyList<BranchListItemDto>> GetByBusinessIdAsync(int businessId)
     {
-        return await _context.Branches
-            .AsNoTracking()
-            .Where(b => b.BusinessId == businessId)
-            .OrderBy(b => b.Name)
-            .Select(b => new BranchListItemDto
+        var query =
+            from branch in _context.Branches.AsNoTracking()
+            join business in _context.Businesses.AsNoTracking() on branch.BusinessId equals business.Id
+            join country in _context.Countries.AsNoTracking() on branch.CountryId equals country.Id
+            join city in _context.Cities.AsNoTracking() on branch.CityId equals city.Id
+            where branch.BusinessId == businessId
+            orderby branch.Name
+            select new BranchListItemDto
             {
-                Id = b.Id,
-                Name = b.Name,
-                Code = b.Code,
-                Address = b.Address,
-                Phone = b.Phone,
-                BusinessId = b.BusinessId,
-                BusinessName = b.Business.Name,
-                CountryId = b.CountryId,
-                CountryName = b.Country.Name,
-                CityId = b.CityId,
-                CityName = b.City.Name,
-                IsActive = b.IsActive,
-                CreatedDate = b.CreatedDate
-            })
-            .ToListAsync();
+                Id = branch.Id,
+                Name = branch.Name,
+                Code = branch.Code,
+                Address = branch.Address,
+                Phone = branch.Phone,
+                BusinessId = branch.BusinessId,
+                BusinessName = business.Name,
+                CountryId = branch.CountryId,
+                CountryName = country.Name,
+                CityId = branch.CityId,
+                CityName = city.Name,
+                IsActive = branch.IsActive,
+                CreatedDate = branch.CreatedDate
+            };
+
+        return await query.ToListAsync();
     }
 
     public async Task<BranchDetailDto?> GetDetailByIdAsync(int id, int businessId)
     {
-        return await _context.Branches
-            .AsNoTracking()
-            .Where(b => b.Id == id && b.BusinessId == businessId)
-            .Select(b => new BranchDetailDto
+        var query =
+            from branch in _context.Branches.AsNoTracking()
+            join business in _context.Businesses.AsNoTracking() on branch.BusinessId equals business.Id
+            join country in _context.Countries.AsNoTracking() on branch.CountryId equals country.Id
+            join city in _context.Cities.AsNoTracking() on branch.CityId equals city.Id
+            where branch.Id == id && branch.BusinessId == businessId
+            select new BranchDetailDto
             {
-                Id = b.Id,
-                Name = b.Name,
-                Code = b.Code,
-                Address = b.Address,
-                Phone = b.Phone,
-                Email = b.Email,
-                BusinessId = b.BusinessId,
-                BusinessName = b.Business.Name,
-                CountryId = b.CountryId,
-                CountryName = b.Country.Name,
-                CityId = b.CityId,
-                CityName = b.City.Name,
-                IsActive = b.IsActive,
-                CreatedDate = b.CreatedDate,
-                UpdatedDate = b.UpdatedDate
-            })
-            .FirstOrDefaultAsync();
+                Id = branch.Id,
+                Name = branch.Name,
+                Code = branch.Code,
+                Address = branch.Address,
+                Phone = branch.Phone,
+                Email = branch.Email,
+                BusinessId = branch.BusinessId,
+                BusinessName = business.Name,
+                CountryId = branch.CountryId,
+                CountryName = country.Name,
+                CityId = branch.CityId,
+                CityName = city.Name,
+                IsActive = branch.IsActive,
+                CreatedDate = branch.CreatedDate,
+                UpdatedDate = branch.UpdatedDate
+            };
+
+        return await query.FirstOrDefaultAsync();
     }
 
     public Task<BranchEntity?> GetTrackedByIdAsync(int id, int businessId)

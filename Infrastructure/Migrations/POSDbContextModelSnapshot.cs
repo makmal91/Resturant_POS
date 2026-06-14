@@ -35,9 +35,6 @@ namespace POSSystem.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
-                    b.Property<int>("BranchId")
-                        .HasColumnType("int");
-
                     b.Property<int>("BusinessId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int")
@@ -60,9 +57,6 @@ namespace POSSystem.Infrastructure.Migrations
                     b.Property<int?>("CreatedById")
                         .HasColumnType("int");
 
-                    b.Property<string>("CreatedByName")
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<DateTime>("CreatedDate")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("datetime2")
@@ -82,9 +76,6 @@ namespace POSSystem.Infrastructure.Migrations
                     b.Property<int?>("ModifiedById")
                         .HasColumnType("int");
 
-                    b.Property<string>("ModifiedByName")
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -102,9 +93,6 @@ namespace POSSystem.Infrastructure.Migrations
                         .HasColumnType("datetime2");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("BranchId")
-                        .HasDatabaseName("idx_branches_branchid");
 
                     b.HasIndex("BusinessId")
                         .HasDatabaseName("idx_branches_businessid");
@@ -125,9 +113,6 @@ namespace POSSystem.Infrastructure.Migrations
                     b.HasIndex("Phone")
                         .HasDatabaseName("idx_branch_phone");
 
-                    b.HasIndex("BusinessId", "BranchId")
-                        .HasDatabaseName("idx_branches_business_branch");
-
                     b.ToTable("Branches");
 
                     b.HasData(
@@ -135,13 +120,12 @@ namespace POSSystem.Infrastructure.Migrations
                         {
                             Id = 1,
                             Address = "123 Main Street",
-                            BranchId = 1,
                             BusinessId = 1,
                             CityId = 1,
                             ClosingTime = new TimeSpan(0, 22, 0, 0, 0),
                             Code = "MAIN",
                             CountryId = 1,
-                            CreatedDate = new DateTime(2026, 6, 14, 10, 19, 27, 440, DateTimeKind.Utc).AddTicks(3949),
+                            CreatedDate = new DateTime(2026, 6, 14, 10, 57, 54, 129, DateTimeKind.Utc).AddTicks(8445),
                             Email = "main@restaurant.com",
                             IsActive = true,
                             IsDeleted = false,
@@ -249,7 +233,7 @@ namespace POSSystem.Infrastructure.Migrations
                         {
                             Id = 1,
                             Address = "123 Main Street",
-                            CreatedDate = new DateTime(2026, 6, 14, 10, 19, 27, 440, DateTimeKind.Utc).AddTicks(2423),
+                            CreatedDate = new DateTime(2026, 6, 14, 10, 57, 54, 129, DateTimeKind.Utc).AddTicks(8049),
                             Currency = "USD",
                             Email = "owner@restaurant.com",
                             IsActive = true,
@@ -1395,7 +1379,7 @@ namespace POSSystem.Infrastructure.Migrations
                             Id = 1,
                             BranchId = 1,
                             BusinessId = 1,
-                            CreatedDate = new DateTime(2026, 6, 14, 10, 19, 27, 440, DateTimeKind.Utc).AddTicks(4060),
+                            CreatedDate = new DateTime(2026, 6, 14, 10, 57, 54, 129, DateTimeKind.Utc).AddTicks(8492),
                             IsDeleted = false,
                             Name = "Admin",
                             Permissions = "all_permissions"
@@ -1757,7 +1741,7 @@ namespace POSSystem.Infrastructure.Migrations
                             Id = 1,
                             BranchId = 1,
                             BusinessId = 1,
-                            CreatedDate = new DateTime(2026, 6, 14, 10, 19, 27, 440, DateTimeKind.Utc).AddTicks(4200),
+                            CreatedDate = new DateTime(2026, 6, 14, 10, 57, 54, 129, DateTimeKind.Utc).AddTicks(8539),
                             Email = "admin@restaurant.com",
                             FullName = "System Administrator",
                             IsDeleted = false,
@@ -1769,44 +1753,6 @@ namespace POSSystem.Infrastructure.Migrations
                             Status = 0,
                             Username = "admin"
                         });
-                });
-
-            modelBuilder.Entity("POSSystem.Domain.Branch", b =>
-                {
-                    b.HasOne("POSSystem.Domain.Business", "Business")
-                        .WithMany("Branches")
-                        .HasForeignKey("BusinessId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("POSSystem.Domain.City", "City")
-                        .WithMany()
-                        .HasForeignKey("CityId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("POSSystem.Domain.Country", "Country")
-                        .WithMany()
-                        .HasForeignKey("CountryId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Business");
-
-                    b.Navigation("City");
-
-                    b.Navigation("Country");
-                });
-
-            modelBuilder.Entity("POSSystem.Domain.City", b =>
-                {
-                    b.HasOne("POSSystem.Domain.Country", "Country")
-                        .WithMany("Cities")
-                        .HasForeignKey("CountryId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Country");
                 });
 
             modelBuilder.Entity("POSSystem.Domain.Customer", b =>
@@ -2128,16 +2074,6 @@ namespace POSSystem.Infrastructure.Migrations
                     b.Navigation("Tables");
 
                     b.Navigation("Users");
-                });
-
-            modelBuilder.Entity("POSSystem.Domain.Business", b =>
-                {
-                    b.Navigation("Branches");
-                });
-
-            modelBuilder.Entity("POSSystem.Domain.Country", b =>
-                {
-                    b.Navigation("Cities");
                 });
 
             modelBuilder.Entity("POSSystem.Domain.Customer", b =>
