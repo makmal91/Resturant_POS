@@ -22,10 +22,6 @@ public class BranchConfiguration : IEntityTypeConfiguration<Branch>
             .IsRequired()
             .HasMaxLength(500);
 
-        builder.Property(b => b.City)
-            .IsRequired()
-            .HasMaxLength(100);
-
         builder.Property(b => b.Phone)
             .IsRequired()
             .HasMaxLength(20);
@@ -34,10 +30,6 @@ public class BranchConfiguration : IEntityTypeConfiguration<Branch>
             .IsRequired()
             .HasMaxLength(100);
 
-        builder.Property(b => b.TaxRate)
-            .HasPrecision(5, 2);
-
-        // Indexes
         builder.HasIndex(b => b.Code)
             .IsUnique()
             .HasDatabaseName("idx_branch_code");
@@ -51,12 +43,27 @@ public class BranchConfiguration : IEntityTypeConfiguration<Branch>
         builder.HasIndex(b => b.BusinessId)
             .HasDatabaseName("idx_branch_businessid");
 
+        builder.HasIndex(b => b.CountryId)
+            .HasDatabaseName("idx_branch_countryid");
+
+        builder.HasIndex(b => b.CityId)
+            .HasDatabaseName("idx_branch_cityid");
+
         builder.HasOne(b => b.Business)
             .WithMany(bs => bs.Branches)
             .HasForeignKey(b => b.BusinessId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        // Relationships
+        builder.HasOne(b => b.Country)
+            .WithMany()
+            .HasForeignKey(b => b.CountryId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(b => b.City)
+            .WithMany()
+            .HasForeignKey(b => b.CityId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         builder.HasMany(b => b.Users)
             .WithOne(u => u.Branch)
             .HasForeignKey(u => u.BranchId)

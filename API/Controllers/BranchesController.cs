@@ -1,8 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using POSSystem.API.Extensions;
-using POSSystem.Domain;
-using POSSystem.Infrastructure.Data;
+using POSSystem.Application.Branch.DTOs;
+using POSSystem.Application.Branch.Interfaces;
 
 namespace POSSystem.API.Controllers;
 
@@ -10,47 +9,20 @@ namespace POSSystem.API.Controllers;
 [Route("api/[controller]")]
 public class BranchesController : ControllerBase
 {
-    private readonly POSDbContext _context;
+    private readonly IBranchService _branchService;
     private readonly ILogger<BranchesController> _logger;
 
-    public BranchesController(POSDbContext context, ILogger<BranchesController> logger)
+    public BranchesController(IBranchService branchService, ILogger<BranchesController> logger)
     {
-        _context = context;
+        _branchService = branchService;
         _logger = logger;
-    }
-
-    public sealed class CreateBranchDto
-    {
-        public string? Name { get; set; }
-        public string? Code { get; set; }
-        public string? Address { get; set; }
-        public string? City { get; set; }
-        public string? Phone { get; set; }
-        public string? Email { get; set; }
-        public decimal? TaxRate { get; set; }
-        public bool? IsActive { get; set; }
-        public int BusinessId { get; set; }
-        public int CompanyId { get; set; }
     }
 
     [HttpGet]
     public async Task<IActionResult> GetBranches([FromQuery] int? businessId = null)
     {
         var resolvedBusinessId = this.ResolveBusinessId(businessId);
-
-        var branches = await _context.Branches
-            .Where(b => b.BusinessId == resolvedBusinessId)
-            .OrderBy(b => b.Name)
-            .Select(b => new
-            {
-                b.Id,
-                b.Name,
-                b.Code,
-                b.IsActive,
-                b.BusinessId
-            })
-            .ToListAsync();
-
+        var branches = await _branchService.GetBranchesAsync(resolvedBusinessId);
         return Ok(branches);
     }
 
@@ -58,23 +30,7 @@ public class BranchesController : ControllerBase
     public async Task<IActionResult> GetBranchById(int id, [FromQuery] int? businessId = null)
     {
         var resolvedBusinessId = this.ResolveBusinessId(businessId);
-
-        var branch = await _context.Branches
-            .Where(b => b.Id == id && b.BusinessId == resolvedBusinessId)
-            .Select(b => new
-            {
-                b.Id,
-                b.Name,
-                b.Code,
-                b.Address,
-                b.City,
-                b.Phone,
-                b.Email,
-                b.IsActive,
-                b.BusinessId
-            })
-            .FirstOrDefaultAsync();
-
+        var branch = await _branchService.GetBranchByIdAsync(id, resolvedBusinessId);
         if (branch == null)
             return NotFound();
 
@@ -87,83 +43,71 @@ public class BranchesController : ControllerBase
         if (dto == null)
             return BadRequest("Request body is null");
 
-        if (string.IsNullOrWhiteSpace(dto.Name))
-            return BadRequest("Branch name is required");
-
-        if (string.IsNullOrWhiteSpace(dto.Code))
-            return BadRequest("Branch code is required");
-
-        var resolvedBusinessId = dto.BusinessId > 0
-            ? dto.BusinessId
-            : (dto.CompanyId > 0 ? dto.CompanyId : this.ResolveBusinessId());
-
-        if (resolvedBusinessId <= 0)
-            return BadRequest("BusinessId is required");
-
         try
         {
-            var normalizedCode = dto.Code.Trim().ToUpperInvariant();
-
-            var companyExists = await _context.Businesses
-                .AnyAsync(b => b.Id == resolvedBusinessId);
-
-            if (!companyExists)
-                return BadRequest(new { message = "Invalid BusinessId. Business does not exist." });
-
-            var codeExists = await _context.Branches
-                .AnyAsync(b => b.Code == normalizedCode);
-
-            if (codeExists)
-                return Conflict(new { message = "Branch code already exists." });
-
-            var branch = new Branch
-            {
-                Name = dto.Name.Trim(),
-                Code = normalizedCode,
-                Address = dto.Address?.Trim() ?? string.Empty,
-                City = dto.City?.Trim() ?? string.Empty,
-                Phone = dto.Phone?.Trim() ?? string.Empty,
-                Email = dto.Email?.Trim() ?? string.Empty,
-                OpeningTime = new TimeSpan(8, 0, 0),
-                ClosingTime = new TimeSpan(23, 0, 0),
-                TaxRate = dto.TaxRate ?? 0m,
-                IsActive = dto.IsActive ?? true,
-                BusinessId = resolvedBusinessId,
-                BranchId = 1
-            };
-
-            _context.Branches.Add(branch);
-            await _context.SaveChangesAsync();
-
-            return CreatedAtAction(nameof(GetBranchById), new { id = branch.Id }, new
-            {
-                branch.Id,
-                branch.Name,
-                branch.Code,
-                branch.Address,
-                branch.City,
-                branch.Phone,
-                branch.Email,
-                branch.TaxRate,
-                branch.IsActive,
-                businessId = branch.BusinessId,
-                companyId = branch.BusinessId
-            });
+            var resolvedBusinessId = this.ResolveBusinessId();
+            var branch = await _branchService.CreateBranchAsync(dto, resolvedBusinessId);
+            return CreatedAtAction(nameof(GetBranchById), new { id = branch.Id }, branch);
         }
-        catch (DbUpdateException dbEx) when (dbEx.InnerException?.Message.Contains("idx_branch_code", StringComparison.OrdinalIgnoreCase) == true)
+        catch (InvalidOperationException ex)
         {
-            _logger.LogWarning(dbEx, "Duplicate branch code while creating branch.");
-            return Conflict(new { message = "Branch code already exists." });
+            if (ex.Message.Contains("already exists", StringComparison.OrdinalIgnoreCase))
+                return Conflict(new { message = ex.Message });
+
+            return BadRequest(new { message = ex.Message });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error while creating branch");
+            return StatusCode(500, new { message = "Internal server error while creating branch", detail = ex.Message });
+        }
+    }
 
-            return StatusCode(500, new
-            {
-                message = "Internal server error while creating branch",
-                detail = ex.Message
-            });
+    [HttpPut("{id:int}")]
+    public async Task<IActionResult> UpdateBranch(int id, [FromBody] UpdateBranchDto dto, [FromQuery] int? businessId = null)
+    {
+        if (dto == null)
+            return BadRequest("Request body is null");
+
+        try
+        {
+            var resolvedBusinessId = this.ResolveBusinessId(businessId);
+            var branch = await _branchService.UpdateBranchAsync(id, dto, resolvedBusinessId);
+            if (branch == null)
+                return NotFound();
+
+            return Ok(branch);
+        }
+        catch (InvalidOperationException ex)
+        {
+            if (ex.Message.Contains("already exists", StringComparison.OrdinalIgnoreCase))
+                return Conflict(new { message = ex.Message });
+
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error while updating branch {BranchId}", id);
+            return StatusCode(500, new { message = "Internal server error while updating branch", detail = ex.Message });
+        }
+    }
+
+    [HttpDelete("{id:int}")]
+    public async Task<IActionResult> DeleteBranch(int id, [FromQuery] int? businessId = null)
+    {
+        try
+        {
+            var resolvedBusinessId = this.ResolveBusinessId(businessId);
+            var deleted = await _branchService.DeleteBranchAsync(id, resolvedBusinessId);
+            if (!deleted)
+                return NotFound();
+
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error while deleting branch {BranchId}", id);
+            return StatusCode(500, new { message = "Internal server error while deleting branch", detail = ex.Message });
         }
     }
 }

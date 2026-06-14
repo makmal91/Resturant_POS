@@ -10,6 +10,8 @@ using POSSystem.Application.Recipe.Interfaces;
 using POSSystem.Application.Recipe.Services;
 using POSSystem.Application.Business.Interfaces;
 using POSSystem.Application.Business.Services;
+using POSSystem.Application.Branch.Interfaces;
+using POSSystem.Application.Branch.Services;
 
 namespace POSSystem.Application;
 
@@ -34,6 +36,9 @@ public static class ServiceRegistration
 
         // Register business services
         services.AddScoped<IBusinessService, BusinessService>();
+
+        // Register branch services
+        services.AddScoped<IBranchService, BranchService>();
 
         // Add other application services here
 

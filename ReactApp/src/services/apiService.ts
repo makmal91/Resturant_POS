@@ -3,39 +3,52 @@ import apiClient from './api';
 const DEFAULT_BRANCH_ID = 1;
 
 export const BranchService = {
-  getAll: () => apiClient.get('/branches'),
-  getById: (id: number) => apiClient.get(`/branches/${id}`),
+  getAll: (businessId?: number) =>
+    apiClient.get('/branches', {
+      params: businessId && businessId > 0 ? { businessId } : undefined,
+    }),
+  getById: (id: number, businessId?: number) =>
+    apiClient.get(`/branches/${id}`, {
+      params: businessId && businessId > 0 ? { businessId } : undefined,
+    }),
   create: (data: any) => {
     const payload = {
       name: String(data?.name ?? ''),
       code: String(data?.code ?? ''),
       address: String(data?.address ?? ''),
-      city: String(data?.city ?? ''),
       phone: String(data?.phone ?? ''),
       email: String(data?.email ?? ''),
-      taxRate: Number(data?.taxRate ?? 0),
-      currency: String(data?.currency ?? 'USD'),
       businessId: Number(data?.businessId ?? data?.companyId ?? 1),
-      companyId: Number(data?.companyId ?? 0),
-      isActive: Boolean(data?.isActive ?? true),
+      companyId: Number(data?.companyId ?? data?.businessId ?? 0),
+      countryId: Number(data?.countryId ?? 0),
+      cityId: Number(data?.cityId ?? 0),
+      isActive: Boolean(data?.isActive ?? String(data?.status ?? 'Active').toLowerCase() !== 'inactive'),
     };
 
     return apiClient.post('/branches', payload);
   },
-  update: (id: number, data: any) => apiClient.put(`/branches/${id}`, {
-    name: String(data?.name ?? ''),
-    code: String(data?.code ?? ''),
-    address: String(data?.address ?? ''),
-    city: String(data?.city ?? ''),
-    phone: String(data?.phone ?? ''),
-    email: String(data?.email ?? ''),
-    taxRate: Number(data?.taxRate ?? 0),
-    currency: String(data?.currency ?? 'USD'),
-    businessId: Number(data?.businessId ?? data?.companyId ?? 1),
-    companyId: Number(data?.companyId ?? 0),
-    isActive: Boolean(data?.isActive ?? true),
-  }),
-  delete: (id: number) => apiClient.delete(`/branches/${id}`),
+  update: (id: number, data: any) =>
+    apiClient.put(`/branches/${id}`, {
+      name: String(data?.name ?? ''),
+      code: String(data?.code ?? ''),
+      address: String(data?.address ?? ''),
+      phone: String(data?.phone ?? ''),
+      email: String(data?.email ?? ''),
+      businessId: Number(data?.businessId ?? data?.companyId ?? 1),
+      companyId: Number(data?.companyId ?? data?.businessId ?? 0),
+      countryId: Number(data?.countryId ?? 0),
+      cityId: Number(data?.cityId ?? 0),
+      isActive: Boolean(data?.isActive ?? String(data?.status ?? 'Active').toLowerCase() !== 'inactive'),
+    }),
+  delete: (id: number, businessId?: number) =>
+    apiClient.delete(`/branches/${id}`, {
+      params: businessId && businessId > 0 ? { businessId } : undefined,
+    }),
+};
+
+export const CountryService = {
+  getAll: () => apiClient.get('/countries'),
+  getCitiesByCountry: (countryId: number) => apiClient.get(`/countries/${countryId}/cities`),
 };
 
 export const BusinessService = {

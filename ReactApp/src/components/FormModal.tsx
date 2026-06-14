@@ -142,16 +142,18 @@ const FormModal: React.FC = () => {
     setError(null);
     setSuccessMessage(null);
 
-    const selectedCompanyId = Number(data?.companyId ?? 1);
+    const selectedBusinessId = Number(data?.businessId ?? 0);
     const payload = {
       name: String(data?.name ?? '').trim(),
       code: String(data?.code ?? '').trim(),
       address: String(data?.address ?? '').trim(),
-      city: String(data?.city ?? '').trim(),
       phone: String(data?.phone ?? '').trim(),
-      taxRate: Number(data?.taxRate ?? 0),
+      email: String(data?.email ?? '').trim(),
+      businessId: Number.isFinite(selectedBusinessId) ? selectedBusinessId : 0,
+      companyId: Number.isFinite(selectedBusinessId) ? selectedBusinessId : 0,
+      countryId: Number(data?.countryId ?? 0),
+      cityId: Number(data?.cityId ?? 0),
       status: String(data?.status ?? 'Active'),
-      companyId: Number.isFinite(selectedCompanyId) ? selectedCompanyId : 0,
       isActive: String(data?.status ?? 'Active').toLowerCase() !== 'inactive',
     };
 
@@ -161,8 +163,14 @@ const FormModal: React.FC = () => {
       return;
     }
 
-    if (payload.companyId <= 0) {
-      setError('CompanyId is required.');
+    if (payload.businessId <= 0) {
+      setError('Business is required.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (payload.countryId <= 0 || payload.cityId <= 0) {
+      setError('Country and City are required.');
       setIsSubmitting(false);
       return;
     }
@@ -396,7 +404,7 @@ const FormModal: React.FC = () => {
 
   if (!isRendered) return null;
 
-  const panelWidthClass = formType === 'business' ? 'max-w-4xl' : 'max-w-2xl';
+  const panelWidthClass = formType === 'business' || formType === 'branch' ? 'max-w-4xl' : 'max-w-2xl';
 
   return (
     <>

@@ -43,10 +43,8 @@ namespace POSSystem.Infrastructure.Migrations
                         .HasColumnType("int")
                         .HasDefaultValue(1);
 
-                    b.Property<string>("City")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
+                    b.Property<int>("CityId")
+                        .HasColumnType("int");
 
                     b.Property<TimeSpan>("ClosingTime")
                         .HasColumnType("time");
@@ -55,6 +53,9 @@ namespace POSSystem.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
+
+                    b.Property<int>("CountryId")
+                        .HasColumnType("int");
 
                     b.Property<int?>("CreatedById")
                         .HasColumnType("int");
@@ -97,10 +98,6 @@ namespace POSSystem.Infrastructure.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
-                    b.Property<decimal>("TaxRate")
-                        .HasPrecision(5, 2)
-                        .HasColumnType("decimal(5,2)");
-
                     b.Property<DateTime?>("UpdatedDate")
                         .HasColumnType("datetime2");
 
@@ -112,9 +109,15 @@ namespace POSSystem.Infrastructure.Migrations
                     b.HasIndex("BusinessId")
                         .HasDatabaseName("idx_branches_businessid");
 
+                    b.HasIndex("CityId")
+                        .HasDatabaseName("idx_branch_cityid");
+
                     b.HasIndex("Code")
                         .IsUnique()
                         .HasDatabaseName("idx_branch_code");
+
+                    b.HasIndex("CountryId")
+                        .HasDatabaseName("idx_branch_countryid");
 
                     b.HasIndex("Email")
                         .HasDatabaseName("idx_branch_email");
@@ -134,17 +137,17 @@ namespace POSSystem.Infrastructure.Migrations
                             Address = "123 Main Street",
                             BranchId = 1,
                             BusinessId = 1,
-                            City = "Default City",
+                            CityId = 1,
                             ClosingTime = new TimeSpan(0, 22, 0, 0, 0),
                             Code = "MAIN",
-                            CreatedDate = new DateTime(2026, 6, 14, 7, 29, 46, 995, DateTimeKind.Utc).AddTicks(9232),
+                            CountryId = 1,
+                            CreatedDate = new DateTime(2026, 6, 14, 10, 19, 27, 440, DateTimeKind.Utc).AddTicks(3949),
                             Email = "main@restaurant.com",
                             IsActive = true,
                             IsDeleted = false,
                             Name = "Main Branch",
                             OpeningTime = new TimeSpan(0, 11, 0, 0, 0),
-                            Phone = "+1234567890",
-                            TaxRate = 10.00m
+                            Phone = "+1234567890"
                         });
                 });
 
@@ -246,7 +249,7 @@ namespace POSSystem.Infrastructure.Migrations
                         {
                             Id = 1,
                             Address = "123 Main Street",
-                            CreatedDate = new DateTime(2026, 6, 14, 7, 29, 46, 995, DateTimeKind.Utc).AddTicks(8259),
+                            CreatedDate = new DateTime(2026, 6, 14, 10, 19, 27, 440, DateTimeKind.Utc).AddTicks(2423),
                             Currency = "USD",
                             Email = "owner@restaurant.com",
                             IsActive = true,
@@ -256,6 +259,156 @@ namespace POSSystem.Infrastructure.Migrations
                             Phone = "+1234567890",
                             TaxNumber = "NTN-0001",
                             TimeZone = "UTC"
+                        });
+                });
+
+            modelBuilder.Entity("POSSystem.Domain.City", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("int");
+
+                    b.Property<int>("CountryId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CountryId")
+                        .HasDatabaseName("idx_city_countryid");
+
+                    b.HasIndex("CountryId", "Name")
+                        .IsUnique()
+                        .HasDatabaseName("idx_city_country_name");
+
+                    b.ToTable("Cities");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            CountryId = 1,
+                            IsActive = true,
+                            Name = "New York"
+                        },
+                        new
+                        {
+                            Id = 2,
+                            CountryId = 1,
+                            IsActive = true,
+                            Name = "Los Angeles"
+                        },
+                        new
+                        {
+                            Id = 3,
+                            CountryId = 2,
+                            IsActive = true,
+                            Name = "London"
+                        },
+                        new
+                        {
+                            Id = 4,
+                            CountryId = 2,
+                            IsActive = true,
+                            Name = "Manchester"
+                        },
+                        new
+                        {
+                            Id = 5,
+                            CountryId = 3,
+                            IsActive = true,
+                            Name = "Karachi"
+                        },
+                        new
+                        {
+                            Id = 6,
+                            CountryId = 3,
+                            IsActive = true,
+                            Name = "Lahore"
+                        },
+                        new
+                        {
+                            Id = 7,
+                            CountryId = 3,
+                            IsActive = true,
+                            Name = "Islamabad"
+                        },
+                        new
+                        {
+                            Id = 8,
+                            CountryId = 4,
+                            IsActive = true,
+                            Name = "Dubai"
+                        },
+                        new
+                        {
+                            Id = 9,
+                            CountryId = 4,
+                            IsActive = true,
+                            Name = "Abu Dhabi"
+                        });
+                });
+
+            modelBuilder.Entity("POSSystem.Domain.Country", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("idx_country_code");
+
+                    b.ToTable("Countries");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            Code = "US",
+                            IsActive = true,
+                            Name = "United States"
+                        },
+                        new
+                        {
+                            Id = 2,
+                            Code = "GB",
+                            IsActive = true,
+                            Name = "United Kingdom"
+                        },
+                        new
+                        {
+                            Id = 3,
+                            Code = "PK",
+                            IsActive = true,
+                            Name = "Pakistan"
+                        },
+                        new
+                        {
+                            Id = 4,
+                            Code = "AE",
+                            IsActive = true,
+                            Name = "United Arab Emirates"
                         });
                 });
 
@@ -1242,7 +1395,7 @@ namespace POSSystem.Infrastructure.Migrations
                             Id = 1,
                             BranchId = 1,
                             BusinessId = 1,
-                            CreatedDate = new DateTime(2026, 6, 14, 7, 29, 46, 996, DateTimeKind.Utc).AddTicks(124),
+                            CreatedDate = new DateTime(2026, 6, 14, 10, 19, 27, 440, DateTimeKind.Utc).AddTicks(4060),
                             IsDeleted = false,
                             Name = "Admin",
                             Permissions = "all_permissions"
@@ -1604,7 +1757,7 @@ namespace POSSystem.Infrastructure.Migrations
                             Id = 1,
                             BranchId = 1,
                             BusinessId = 1,
-                            CreatedDate = new DateTime(2026, 6, 14, 7, 29, 46, 996, DateTimeKind.Utc).AddTicks(336),
+                            CreatedDate = new DateTime(2026, 6, 14, 10, 19, 27, 440, DateTimeKind.Utc).AddTicks(4200),
                             Email = "admin@restaurant.com",
                             FullName = "System Administrator",
                             IsDeleted = false,
@@ -1626,7 +1779,34 @@ namespace POSSystem.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("POSSystem.Domain.City", "City")
+                        .WithMany()
+                        .HasForeignKey("CityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("POSSystem.Domain.Country", "Country")
+                        .WithMany()
+                        .HasForeignKey("CountryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.Navigation("Business");
+
+                    b.Navigation("City");
+
+                    b.Navigation("Country");
+                });
+
+            modelBuilder.Entity("POSSystem.Domain.City", b =>
+                {
+                    b.HasOne("POSSystem.Domain.Country", "Country")
+                        .WithMany("Cities")
+                        .HasForeignKey("CountryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Country");
                 });
 
             modelBuilder.Entity("POSSystem.Domain.Customer", b =>
@@ -1953,6 +2133,11 @@ namespace POSSystem.Infrastructure.Migrations
             modelBuilder.Entity("POSSystem.Domain.Business", b =>
                 {
                     b.Navigation("Branches");
+                });
+
+            modelBuilder.Entity("POSSystem.Domain.Country", b =>
+                {
+                    b.Navigation("Cities");
                 });
 
             modelBuilder.Entity("POSSystem.Domain.Customer", b =>

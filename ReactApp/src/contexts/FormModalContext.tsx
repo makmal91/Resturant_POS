@@ -6,10 +6,11 @@ const DEFAULT_BRANCH_FORM_DATA = {
   name: '',
   code: '',
   address: '',
-  city: '',
   phone: '',
-  taxRate: '',
-  companyId: 1,
+  email: '',
+  businessId: 0,
+  countryId: 0,
+  cityId: 0,
   status: 'Active',
 };
 

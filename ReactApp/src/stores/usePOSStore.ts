@@ -55,7 +55,6 @@ interface POSState {
   selectedCategory: number | null
   cart: CartItem[]
   discount: number
-  taxRate: number // overall tax rate if needed, but tax is per item
   selectedItem: MenuItem | null
   showItemModal: boolean
   fetchMenu: (branchId: number) => Promise<void>
@@ -79,7 +78,6 @@ export const usePOSStore = create<POSState>((set, get) => ({
   selectedCategory: null,
   cart: [],
   discount: 0,
-  taxRate: 0,
   selectedItem: null,
   showItemModal: false,
 

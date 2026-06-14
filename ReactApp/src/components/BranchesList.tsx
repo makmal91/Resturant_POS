@@ -4,15 +4,22 @@ import Badge from './Badge';
 import { useFormModal } from '../contexts/FormModalContext';
 import { useConfirmDialog } from '../contexts/ConfirmDialogContext';
 import { BranchService } from '../services/apiService';
+import { getApiErrorMessage } from '../services/api';
 import { safeString } from '../utils/safeValues';
 
 interface Branch {
   id: number;
   name: string;
+  code: string;
   address: string;
-  city: string;
   phone: string;
-  taxRate: number;
+  email: string;
+  businessId: number;
+  businessName: string;
+  countryId: number;
+  countryName: string;
+  cityId: number;
+  cityName: string;
   status: string;
   createdAt: string;
 }
@@ -20,24 +27,41 @@ interface Branch {
 const BranchesList: React.FC = () => {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pageSize, setPageSize] = useState(5);
+  const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const { openForm, isOpen } = useFormModal();
   const { showConfirm } = useConfirmDialog();
+
+  const showNotification = useCallback((type: 'success' | 'error', message: string) => {
+    setNotification({ type, message });
+    setTimeout(() => {
+      setNotification(null);
+    }, 4000);
+  }, []);
 
   const normalizeBranches = (payload: unknown): Branch[] => {
     const rows = Array.isArray(payload) ? payload : [];
 
     return rows
       .map((row): Branch => {
-        const item = row as Partial<Branch>;
+        const item = row as Partial<Branch & { isActive?: boolean; createdDate?: string }>;
+        const isActive = item?.isActive ?? String(item?.status ?? 'Active').toLowerCase() !== 'inactive';
+
         return {
           id: Number(item?.id ?? 0),
           name: safeString(item?.name),
+          code: safeString(item?.code),
           address: safeString(item?.address),
-          city: safeString(item?.city),
           phone: safeString(item?.phone),
-          taxRate: Number(item?.taxRate ?? 0),
-          status: safeString(item?.status, 'Active') || 'Active',
-          createdAt: safeString(item?.createdAt),
+          email: safeString(item?.email),
+          businessId: Number(item?.businessId ?? 0),
+          businessName: safeString(item?.businessName),
+          countryId: Number(item?.countryId ?? 0),
+          countryName: safeString(item?.countryName),
+          cityId: Number(item?.cityId ?? 0),
+          cityName: safeString(item?.cityName),
+          status: isActive ? 'Active' : 'Inactive',
+          createdAt: safeString(item?.createdAt ?? item?.createdDate),
         };
       })
       .filter((branch) => branch.id > 0);
@@ -46,57 +70,21 @@ const BranchesList: React.FC = () => {
   const fetchBranches = useCallback(async () => {
     setLoading(true);
     try {
-      // Try API first, fall back to mock data
-      try {
-        const response = await BranchService.getAll();
-        setBranches(normalizeBranches(response?.data));
-      } catch (err) {
-        // Use mock data if API fails
-        console.log('Using mock data for branches');
-        setBranches([
-          {
-            id: 1,
-            name: 'Main Branch',
-            address: '123 Main St',
-            city: 'New York',
-            phone: '+1-555-0123',
-            taxRate: 8.5,
-            status: 'Active',
-            createdAt: '2024-01-15'
-          },
-          {
-            id: 2,
-            name: 'Downtown Branch',
-            address: '456 Downtown Ave',
-            city: 'New York',
-            phone: '+1-555-0124',
-            taxRate: 8.5,
-            status: 'Active',
-            createdAt: '2024-02-20'
-          },
-          {
-            id: 3,
-            name: 'Airport Branch',
-            address: '789 Airport Rd',
-            city: 'New York',
-            phone: '+1-555-0125',
-            taxRate: 8.5,
-            status: 'Inactive',
-            createdAt: '2024-03-10'
-          }
-        ]);
-      }
+      const response = await BranchService.getAll();
+      setBranches(normalizeBranches(response?.data));
+    } catch (err) {
+      console.error('Failed to load branches:', err);
+      setBranches([]);
+      showNotification('error', getApiErrorMessage(err, 'Failed to load branches.'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [showNotification]);
 
-  // Fetch branches on mount and when modal closes
   useEffect(() => {
     fetchBranches();
   }, [fetchBranches]);
 
-  // Refresh list when modal closes (form was submitted)
   useEffect(() => {
     if (!isOpen) {
       fetchBranches();
@@ -107,25 +95,51 @@ const BranchesList: React.FC = () => {
     openForm('branch');
   };
 
-  const handleEditBranch = (branch: Branch) => {
-    openForm('branch', branch);
+  const handleEditBranch = async (branch: Branch) => {
+    try {
+      const response = await BranchService.getById(branch.id, branch.businessId);
+      const detail = response?.data ?? branch;
+      openForm('branch', {
+        ...detail,
+        status: detail?.isActive ? 'Active' : 'Inactive',
+      });
+    } catch (error) {
+      console.error('Failed to load branch details:', error);
+      openForm('branch', {
+        id: branch.id,
+        name: branch.name,
+        code: branch.code,
+        address: branch.address,
+        phone: branch.phone,
+        email: branch.email,
+        businessId: branch.businessId,
+        countryId: branch.countryId,
+        cityId: branch.cityId,
+        status: branch.status,
+        isActive: branch.status === 'Active',
+      });
+    }
   };
 
   const handleDeleteBranch = (branch: Branch) => {
     showConfirm({
-      title: 'Delete Branch',
-      message: `Are you sure you want to delete "${branch.name}"? This action cannot be undone.`,
-      confirmLabel: 'Delete',
-      cancelLabel: 'Cancel',
+      title: 'Delete Branch?',
+      message: 'This branch will be removed from the system. If it is used by related records, deletion may be blocked.',
+      highlightText: branch.name,
+      variant: 'danger',
+      confirmLabel: 'Yes, Delete',
+      cancelLabel: 'Keep Branch',
       onConfirm: async () => {
         try {
-          await BranchService.delete(branch.id);
-          setBranches(branches.filter(b => b.id !== branch.id));
-        } catch (error) {
+          await BranchService.delete(branch.id, branch.businessId);
+          await fetchBranches();
+          showNotification('success', `Branch "${branch.name}" deleted successfully.`);
+        } catch (error: any) {
           console.error('Failed to delete branch:', error);
-          alert('Failed to delete branch. Please try again.');
+          const errorMessage = error?.response?.data?.message || 'Failed to delete branch. Please try again.';
+          showNotification('error', errorMessage);
         }
-      }
+      },
     });
   };
 
@@ -136,13 +150,28 @@ const BranchesList: React.FC = () => {
       sortable: true,
     },
     {
+      key: 'code',
+      header: 'Code',
+      sortable: true,
+    },
+    {
+      key: 'businessName',
+      header: 'Business',
+      sortable: true,
+    },
+    {
       key: 'address',
       header: 'Address',
       sortable: true,
     },
     {
-      key: 'city',
+      key: 'cityName',
       header: 'City',
+      sortable: true,
+    },
+    {
+      key: 'countryName',
+      header: 'Country',
       sortable: true,
     },
     {
@@ -150,13 +179,9 @@ const BranchesList: React.FC = () => {
       header: 'Phone',
     },
     {
-      key: 'taxRate',
-      header: 'Tax Rate',
-      render: (value) => `${value}%`,
-    },
-    {
       key: 'status',
       header: 'Status',
+      sortable: true,
       render: (value) => (
         <Badge variant={value === 'Active' ? 'success' : 'danger'} size="sm" dot>
           {safeString(value)}
@@ -167,22 +192,52 @@ const BranchesList: React.FC = () => {
 
   const actions: Action<Branch>[] = [
     {
-      label: 'Edit',
+      label: '',
       onClick: handleEditBranch,
-      variant: 'primary',
+      icon: (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" title="Edit">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+        </svg>
+      ),
+      variant: 'secondary',
     },
     {
-      label: 'Delete',
+      label: '',
       onClick: handleDeleteBranch,
+      icon: (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" title="Delete">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+        </svg>
+      ),
       variant: 'danger',
     },
   ];
 
   return (
     <div>
+      {notification && (
+        <div
+          className={`mb-6 p-4 rounded-md flex items-center ${
+            notification.type === 'success'
+              ? 'bg-green-50 text-green-800'
+              : 'bg-red-50 text-red-800'
+          }`}
+        >
+          {notification.type === 'success' ? (
+            <svg className="w-5 h-5 mr-3" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+            </svg>
+          ) : (
+            <svg className="w-5 h-5 mr-3" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+            </svg>
+          )}
+          <span className="font-medium">{notification.message}</span>
+        </div>
+      )}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Branches</h1>
-        <p className="text-gray-600">Manage your restaurant branches and locations</p>
+        <p className="text-gray-600">Manage branch locations, business links, and active status</p>
       </div>
 
       <div className="mb-6 flex justify-between items-center">
@@ -204,8 +259,11 @@ const BranchesList: React.FC = () => {
         actions={actions}
         loading={loading}
         searchable={true}
+        searchPlaceholder="Search by branch, code, business, city, country, or phone..."
         pagination={true}
-        pageSize={10}
+        pageSize={pageSize}
+        pageSizeOptions={[5, 10, 25, 50]}
+        onPageSizeChange={setPageSize}
         emptyMessage="No branches found"
       />
     </div>

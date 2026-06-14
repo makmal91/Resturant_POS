@@ -8,15 +8,17 @@ public class Branch : BaseEntity
     public string Name { get; set; } = string.Empty;
     public string Code { get; set; } = string.Empty;
     public string Address { get; set; } = string.Empty;
-    public string City { get; set; } = string.Empty;
+    public int CountryId { get; set; }
+    public int CityId { get; set; }
     public string Phone { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
     public TimeSpan OpeningTime { get; set; }
     public TimeSpan ClosingTime { get; set; }
-    public decimal TaxRate { get; set; }
     public bool IsActive { get; set; } = true;
 
     public virtual Business Business { get; set; } = null!;
+    public virtual Country Country { get; set; } = null!;
+    public virtual City City { get; set; } = null!;
     public virtual ICollection<User> Users { get; set; } = new List<User>();
     public virtual ICollection<Role> Roles { get; set; } = new List<Role>();
     public virtual ICollection<MenuCategory> MenuCategories { get; set; } = new List<MenuCategory>();

@@ -17,6 +17,8 @@ public class POSDbContext : DbContext
 
     #region DbSets
     public DbSet<Business> Businesses { get; set; } = null!;
+    public DbSet<Country> Countries { get; set; } = null!;
+    public DbSet<City> Cities { get; set; } = null!;
     public DbSet<Branch> Branches { get; set; } = null!;
     public DbSet<Role> Roles { get; set; } = null!;
     public DbSet<User> Users { get; set; } = null!;
@@ -41,6 +43,8 @@ public class POSDbContext : DbContext
 
         // Apply all entity configurations
         modelBuilder.ApplyConfiguration(new BusinessConfiguration());
+        modelBuilder.ApplyConfiguration(new CountryConfiguration());
+        modelBuilder.ApplyConfiguration(new CityConfiguration());
         modelBuilder.ApplyConfiguration(new BranchConfiguration());
         modelBuilder.ApplyConfiguration(new RoleConfiguration());
         modelBuilder.ApplyConfiguration(new UserConfiguration());
@@ -111,6 +115,31 @@ public class POSDbContext : DbContext
 
         modelBuilder.Entity<Business>().HasData(defaultBusiness);
 
+        var countries = new[]
+        {
+            new Country { Id = 1, Name = "United States", Code = "US", IsActive = true },
+            new Country { Id = 2, Name = "United Kingdom", Code = "GB", IsActive = true },
+            new Country { Id = 3, Name = "Pakistan", Code = "PK", IsActive = true },
+            new Country { Id = 4, Name = "United Arab Emirates", Code = "AE", IsActive = true }
+        };
+
+        modelBuilder.Entity<Country>().HasData(countries);
+
+        var cities = new[]
+        {
+            new City { Id = 1, Name = "New York", CountryId = 1, IsActive = true },
+            new City { Id = 2, Name = "Los Angeles", CountryId = 1, IsActive = true },
+            new City { Id = 3, Name = "London", CountryId = 2, IsActive = true },
+            new City { Id = 4, Name = "Manchester", CountryId = 2, IsActive = true },
+            new City { Id = 5, Name = "Karachi", CountryId = 3, IsActive = true },
+            new City { Id = 6, Name = "Lahore", CountryId = 3, IsActive = true },
+            new City { Id = 7, Name = "Islamabad", CountryId = 3, IsActive = true },
+            new City { Id = 8, Name = "Dubai", CountryId = 4, IsActive = true },
+            new City { Id = 9, Name = "Abu Dhabi", CountryId = 4, IsActive = true }
+        };
+
+        modelBuilder.Entity<City>().HasData(cities);
+
         // Seed Default Branch
         var defaultBranch = new Branch
         {
@@ -118,12 +147,12 @@ public class POSDbContext : DbContext
             Name = "Main Branch",
             Code = "MAIN",
             Address = "123 Main Street",
-            City = "Default City",
+            CountryId = 1,
+            CityId = 1,
             Phone = "+1234567890",
             Email = "main@restaurant.com",
             OpeningTime = new TimeSpan(11, 0, 0),
             ClosingTime = new TimeSpan(22, 0, 0),
-            TaxRate = 10.00m,
             IsActive = true,
             BusinessId = 1,
             BranchId = 1,
