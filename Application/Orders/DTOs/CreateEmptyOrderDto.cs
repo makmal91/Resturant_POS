@@ -9,5 +9,6 @@ public class CreateEmptyOrderDto
     public int? CustomerId { get; set; }
     public int? WaiterId { get; set; }
     public string Notes { get; set; } = string.Empty;
+    public int BusinessId { get; set; }
     public int BranchId { get; set; }
 }

@@ -12,6 +12,9 @@ public class AdjustStockDto
     public decimal QuantityDelta { get; set; }
 
     [Required]
+    public int BusinessId { get; set; }
+
+    [Required]
     public int BranchId { get; set; }
 
     [MaxLength(250)]

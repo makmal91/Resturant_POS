@@ -8,6 +8,8 @@ using POSSystem.Application.Inventory.Interfaces;
 using POSSystem.Application.Inventory.Services;
 using POSSystem.Application.Recipe.Interfaces;
 using POSSystem.Application.Recipe.Services;
+using POSSystem.Application.Business.Interfaces;
+using POSSystem.Application.Business.Services;
 
 namespace POSSystem.Application;
 
@@ -29,6 +31,9 @@ public static class ServiceRegistration
 
         // Register recipe services
         services.AddScoped<IRecipeService, RecipeService>();
+
+        // Register business services
+        services.AddScoped<IBusinessService, BusinessService>();
 
         // Add other application services here
 

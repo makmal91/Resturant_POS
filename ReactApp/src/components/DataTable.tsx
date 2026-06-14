@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 
 export interface Column<T> {
   key: keyof T | string;
@@ -25,6 +25,32 @@ interface DataTableProps<T> {
   pageSize?: number;
   loading?: boolean;
   emptyMessage?: string;
+  serverSide?: boolean;
+  totalRecords?: number;
+  totalPages?: number;
+  currentPage?: number;
+  onPageChange?: (page: number) => void;
+  searchTerm?: string;
+  onSearchChange?: (value: string) => void;
+  sortColumn?: string | null;
+  sortDirection?: 'asc' | 'desc';
+  onSortChange?: (column: string, direction: 'asc' | 'desc') => void;
+  pageSizeOptions?: number[];
+  onPageSizeChange?: (pageSize: number) => void;
+}
+
+function getVisiblePageNumbers(currentPage: number, totalPages: number): number[] {
+  const safeTotalPages = Math.max(1, totalPages);
+
+  if (safeTotalPages <= 7) {
+    return Array.from({ length: safeTotalPages }, (_, index) => index + 1);
+  }
+
+  let start = Math.max(1, currentPage - 2);
+  let end = Math.min(safeTotalPages, start + 4);
+  start = Math.max(1, end - 4);
+
+  return Array.from({ length: end - start + 1 }, (_, index) => start + index);
 }
 
 function DataTable<T extends Record<string, any>>({
@@ -37,15 +63,33 @@ function DataTable<T extends Record<string, any>>({
   pageSize = 10,
   loading = false,
   emptyMessage = 'No data available',
+  serverSide = false,
+  totalRecords,
+  totalPages: serverTotalPages,
+  currentPage: controlledCurrentPage,
+  onPageChange,
+  searchTerm: controlledSearchTerm,
+  onSearchChange,
+  sortColumn: controlledSortColumn,
+  sortDirection: controlledSortDirection,
+  onSortChange,
+  pageSizeOptions,
+  onPageSizeChange,
 }: DataTableProps<T>) {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [sortColumn, setSortColumn] = useState<string | null>(null);
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [internalSearchTerm, setInternalSearchTerm] = useState('');
+  const [internalCurrentPage, setInternalCurrentPage] = useState(1);
+  const [internalSortColumn, setInternalSortColumn] = useState<string | null>(null);
+  const [internalSortDirection, setInternalSortDirection] = useState<'asc' | 'desc'>('asc');
 
-  // Filter data based on search term
+  const searchTerm = controlledSearchTerm ?? internalSearchTerm;
+  const currentPage = controlledCurrentPage ?? internalCurrentPage;
+  const sortColumn = controlledSortColumn ?? internalSortColumn;
+  const sortDirection = controlledSortDirection ?? internalSortDirection;
+
   const filteredData = useMemo(() => {
-    if (!searchTerm) return data;
+    if (serverSide || !searchTerm) {
+      return data;
+    }
 
     return data.filter((item) =>
       columns.some((column) => {
@@ -53,11 +97,12 @@ function DataTable<T extends Record<string, any>>({
         return value?.toString().toLowerCase().includes(searchTerm.toLowerCase());
       })
     );
-  }, [data, searchTerm, columns]);
+  }, [data, searchTerm, columns, serverSide]);
 
-  // Sort data
   const sortedData = useMemo(() => {
-    if (!sortColumn) return filteredData;
+    if (serverSide || !sortColumn) {
+      return filteredData;
+    }
 
     return [...filteredData].sort((a, b) => {
       const aValue = a[sortColumn as keyof T];
@@ -67,34 +112,73 @@ function DataTable<T extends Record<string, any>>({
       if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [filteredData, sortColumn, sortDirection]);
+  }, [filteredData, sortColumn, sortDirection, serverSide]);
 
-  // Paginate data
   const paginatedData = useMemo(() => {
-    if (!pagination) return sortedData;
+    if (!pagination || serverSide) {
+      return sortedData;
+    }
 
     const startIndex = (currentPage - 1) * pageSize;
     return sortedData.slice(startIndex, startIndex + pageSize);
-  }, [sortedData, currentPage, pageSize, pagination]);
+  }, [sortedData, currentPage, pageSize, pagination, serverSide]);
 
-  const totalPages = Math.ceil(sortedData.length / pageSize);
+  const resolvedTotalRecords = serverSide ? (totalRecords ?? data.length) : sortedData.length;
+  const resolvedTotalPages = serverSide
+    ? Math.max(
+        serverTotalPages ?? 0,
+        resolvedTotalRecords > 0 ? Math.ceil(resolvedTotalRecords / pageSize) : 1
+      )
+    : Math.max(1, Math.ceil(sortedData.length / pageSize));
+
+  const visiblePages = getVisiblePageNumbers(currentPage, resolvedTotalPages);
+  const displayFrom = resolvedTotalRecords === 0 ? 0 : ((currentPage - 1) * pageSize) + 1;
+  const displayTo = resolvedTotalRecords === 0 ? 0 : Math.min(currentPage * pageSize, resolvedTotalRecords);
+  const canGoPrevious = currentPage > 1;
+  const canGoNext = currentPage < resolvedTotalPages && resolvedTotalRecords > 0;
 
   const handleSort = (columnKey: string) => {
+    if (serverSide && onSortChange) {
+      const nextDirection =
+        sortColumn === columnKey && sortDirection === 'asc' ? 'desc' : 'asc';
+      onSortChange(columnKey, nextDirection);
+      return;
+    }
+
     if (sortColumn === columnKey) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+      setInternalSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
-      setSortColumn(columnKey);
-      setSortDirection('asc');
+      setInternalSortColumn(columnKey);
+      setInternalSortDirection('asc');
     }
   };
 
-  const resetPagination = () => {
-    setCurrentPage(1);
+  const handleSearchChange = (value: string) => {
+    if (onSearchChange) {
+      onSearchChange(value);
+    } else {
+      setInternalSearchTerm(value);
+      setInternalCurrentPage(1);
+    }
   };
 
-  React.useEffect(() => {
-    resetPagination();
-  }, [searchTerm]);
+  const handlePageChange = (page: number) => {
+    if (page < 1 || page > resolvedTotalPages) {
+      return;
+    }
+
+    if (onPageChange) {
+      onPageChange(page);
+    } else {
+      setInternalCurrentPage(page);
+    }
+  };
+
+  useEffect(() => {
+    if (!serverSide) {
+      setInternalCurrentPage(1);
+    }
+  }, [searchTerm, serverSide]);
 
   if (loading) {
     return (
@@ -109,15 +193,14 @@ function DataTable<T extends Record<string, any>>({
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-      {/* Search Bar */}
       {searchable && (
-        <div className="p-4 border-b border-gray-200">
-          <div className="relative max-w-md">
+        <div className="p-4 border-b border-gray-200 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative max-w-md w-full">
             <input
               type="text"
               placeholder={searchPlaceholder}
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -126,10 +209,27 @@ function DataTable<T extends Record<string, any>>({
               </svg>
             </div>
           </div>
+
+          {pageSizeOptions && pageSizeOptions.length > 0 && onPageSizeChange && (
+            <div className="flex items-center gap-2 text-sm text-gray-700">
+              <label htmlFor="page-size-select">Rows per page</label>
+              <select
+                id="page-size-select"
+                value={pageSize}
+                onChange={(e) => onPageSizeChange(Number(e.target.value))}
+                className="rounded-md border border-gray-300 px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {pageSizeOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Table */}
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
@@ -138,7 +238,7 @@ function DataTable<T extends Record<string, any>>({
                 <th
                   key={column.key as string}
                   className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ${
-                    column.sortable ? 'cursor-pointer hover:bg-gray-100' : ''
+                    column.sortable ? 'cursor-pointer hover:bg-gray-100 select-none' : ''
                   }`}
                   style={{ width: column.width }}
                   onClick={() => column.sortable && handleSort(column.key as string)}
@@ -179,7 +279,7 @@ function DataTable<T extends Record<string, any>>({
                     </td>
                   ))}
                   {actions.length > 0 && (
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       {actions.map((action, actionIndex) => (
                         <button
                           key={actionIndex}
@@ -205,40 +305,52 @@ function DataTable<T extends Record<string, any>>({
         </table>
       </div>
 
-      {/* Pagination */}
-      {pagination && totalPages > 1 && (
-        <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between">
+      {pagination && (
+        <div className="px-4 py-3 border-t border-gray-200 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-sm text-gray-700">
-            Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, sortedData.length)} of {sortedData.length} results
+            {resolvedTotalRecords === 0
+              ? 'No results found'
+              : `Showing ${displayFrom} to ${displayTo} of ${resolvedTotalRecords} results`}
+            {searchTerm && resolvedTotalRecords > 0 && (
+              <span className="text-gray-500"> (filtered)</span>
+            )}
           </div>
-          <div className="flex space-x-1">
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm text-gray-500 mr-1">
+              Page {currentPage} of {resolvedTotalPages}
+            </span>
+
             <button
-              onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-              disabled={currentPage === 1}
-              className="px-3 py-1 text-sm border border-gray-300 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+              type="button"
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={!canGoPrevious}
+              className="px-3 py-1.5 text-sm border border-gray-300 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
             >
               Previous
             </button>
-            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-              const pageNumber = Math.max(1, Math.min(totalPages - 4, currentPage - 2)) + i;
-              return (
-                <button
-                  key={pageNumber}
-                  onClick={() => setCurrentPage(pageNumber)}
-                  className={`px-3 py-1 text-sm border rounded-md ${
-                    currentPage === pageNumber
-                      ? 'bg-blue-600 text-white border-blue-600'
-                      : 'border-gray-300 hover:bg-gray-50'
-                  }`}
-                >
-                  {pageNumber}
-                </button>
-              );
-            })}
+
+            {visiblePages.map((pageNumber) => (
+              <button
+                key={pageNumber}
+                type="button"
+                onClick={() => handlePageChange(pageNumber)}
+                disabled={resolvedTotalRecords === 0}
+                className={`min-w-[2.25rem] px-3 py-1.5 text-sm border rounded-md ${
+                  currentPage === pageNumber
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'border-gray-300 hover:bg-gray-50'
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                {pageNumber}
+              </button>
+            ))}
+
             <button
-              onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-              disabled={currentPage === totalPages}
-              className="px-3 py-1 text-sm border border-gray-300 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+              type="button"
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={!canGoNext}
+              className="px-3 py-1.5 text-sm border border-gray-300 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
             >
               Next
             </button>

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using POSSystem.API.Extensions;
 using POSSystem.Domain;
 using POSSystem.Infrastructure.Data;
 
@@ -27,22 +28,26 @@ public class BranchesController : ControllerBase
         public string? Phone { get; set; }
         public string? Email { get; set; }
         public decimal? TaxRate { get; set; }
-        public string? Currency { get; set; }
         public bool? IsActive { get; set; }
+        public int BusinessId { get; set; }
         public int CompanyId { get; set; }
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetBranches()
+    public async Task<IActionResult> GetBranches([FromQuery] int? businessId = null)
     {
+        var resolvedBusinessId = this.ResolveBusinessId(businessId);
+
         var branches = await _context.Branches
+            .Where(b => b.BusinessId == resolvedBusinessId)
             .OrderBy(b => b.Name)
             .Select(b => new
             {
                 b.Id,
                 b.Name,
                 b.Code,
-                b.IsActive
+                b.IsActive,
+                b.BusinessId
             })
             .ToListAsync();
 
@@ -50,10 +55,12 @@ public class BranchesController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
-    public async Task<IActionResult> GetBranchById(int id)
+    public async Task<IActionResult> GetBranchById(int id, [FromQuery] int? businessId = null)
     {
+        var resolvedBusinessId = this.ResolveBusinessId(businessId);
+
         var branch = await _context.Branches
-            .Where(b => b.Id == id)
+            .Where(b => b.Id == id && b.BusinessId == resolvedBusinessId)
             .Select(b => new
             {
                 b.Id,
@@ -63,7 +70,8 @@ public class BranchesController : ControllerBase
                 b.City,
                 b.Phone,
                 b.Email,
-                b.IsActive
+                b.IsActive,
+                b.BusinessId
             })
             .FirstOrDefaultAsync();
 
@@ -85,18 +93,22 @@ public class BranchesController : ControllerBase
         if (string.IsNullOrWhiteSpace(dto.Code))
             return BadRequest("Branch code is required");
 
-        if (dto.CompanyId <= 0)
-            return BadRequest("CompanyId is required");
+        var resolvedBusinessId = dto.BusinessId > 0
+            ? dto.BusinessId
+            : (dto.CompanyId > 0 ? dto.CompanyId : this.ResolveBusinessId());
+
+        if (resolvedBusinessId <= 0)
+            return BadRequest("BusinessId is required");
 
         try
         {
             var normalizedCode = dto.Code.Trim().ToUpperInvariant();
 
-            var companyExists = await _context.Branches
-                .AnyAsync(b => b.Id == dto.CompanyId);
+            var companyExists = await _context.Businesses
+                .AnyAsync(b => b.Id == resolvedBusinessId);
 
             if (!companyExists)
-                return BadRequest(new { message = "Invalid CompanyId. Company does not exist." });
+                return BadRequest(new { message = "Invalid BusinessId. Business does not exist." });
 
             var codeExists = await _context.Branches
                 .AnyAsync(b => b.Code == normalizedCode);
@@ -115,9 +127,9 @@ public class BranchesController : ControllerBase
                 OpeningTime = new TimeSpan(8, 0, 0),
                 ClosingTime = new TimeSpan(23, 0, 0),
                 TaxRate = dto.TaxRate ?? 0m,
-                Currency = string.IsNullOrWhiteSpace(dto.Currency) ? "USD" : dto.Currency.Trim().ToUpperInvariant(),
                 IsActive = dto.IsActive ?? true,
-                BranchId = dto.CompanyId
+                BusinessId = resolvedBusinessId,
+                BranchId = 1
             };
 
             _context.Branches.Add(branch);
@@ -133,9 +145,9 @@ public class BranchesController : ControllerBase
                 branch.Phone,
                 branch.Email,
                 branch.TaxRate,
-                branch.Currency,
                 branch.IsActive,
-                companyId = branch.BranchId
+                businessId = branch.BusinessId,
+                companyId = branch.BusinessId
             });
         }
         catch (DbUpdateException dbEx) when (dbEx.InnerException?.Message.Contains("idx_branch_code", StringComparison.OrdinalIgnoreCase) == true)

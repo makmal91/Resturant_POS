@@ -4,12 +4,16 @@ interface ConfirmDialogContextType {
   isOpen: boolean;
   title: string;
   message: string;
+  highlightText: string;
+  variant: 'default' | 'danger';
   confirmLabel: string;
   cancelLabel: string;
   isLoading: boolean;
   showConfirm: (options: {
     title: string;
     message: string;
+    highlightText?: string;
+    variant?: 'default' | 'danger';
     confirmLabel?: string;
     cancelLabel?: string;
     onConfirm: () => void | Promise<void>;
@@ -24,6 +28,8 @@ export const ConfirmDialogProvider: React.FC<{ children: React.ReactNode }> = ({
   const [isOpen, setIsOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
+  const [highlightText, setHighlightText] = useState('');
+  const [variant, setVariant] = useState<'default' | 'danger'>('default');
   const [confirmLabel, setConfirmLabel] = useState('Confirm');
   const [cancelLabel, setCancelLabel] = useState('Cancel');
   const [isLoading, setIsLoading] = useState(false);
@@ -32,12 +38,16 @@ export const ConfirmDialogProvider: React.FC<{ children: React.ReactNode }> = ({
   const showConfirm = (options: {
     title: string;
     message: string;
+    highlightText?: string;
+    variant?: 'default' | 'danger';
     confirmLabel?: string;
     cancelLabel?: string;
     onConfirm: () => void | Promise<void>;
   }) => {
     setTitle(options.title);
     setMessage(options.message);
+    setHighlightText(options.highlightText ?? '');
+    setVariant(options.variant ?? 'default');
     setConfirmLabel(options.confirmLabel || 'Confirm');
     setCancelLabel(options.cancelLabel || 'Cancel');
     setOnConfirmCallback(() => options.onConfirm);
@@ -70,6 +80,8 @@ export const ConfirmDialogProvider: React.FC<{ children: React.ReactNode }> = ({
         isOpen,
         title,
         message,
+        highlightText,
+        variant,
         confirmLabel,
         cancelLabel,
         isLoading,

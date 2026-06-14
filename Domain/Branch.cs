@@ -14,9 +14,9 @@ public class Branch : BaseEntity
     public TimeSpan OpeningTime { get; set; }
     public TimeSpan ClosingTime { get; set; }
     public decimal TaxRate { get; set; }
-    public string Currency { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;
 
+    public virtual Business Business { get; set; } = null!;
     public virtual ICollection<User> Users { get; set; } = new List<User>();
     public virtual ICollection<Role> Roles { get; set; } = new List<Role>();
     public virtual ICollection<MenuCategory> MenuCategories { get; set; } = new List<MenuCategory>();

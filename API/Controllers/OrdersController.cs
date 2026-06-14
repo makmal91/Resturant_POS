@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using POSSystem.API.Extensions;
 using POSSystem.Application.Orders.DTOs;
 using POSSystem.Application.Orders.Interfaces;
 using POSSystem.Domain;
@@ -24,6 +25,8 @@ public class OrdersController : ControllerBase
 
         try
         {
+            dto.BusinessId = this.ResolveBusinessId(dto.BusinessId > 0 ? dto.BusinessId : null);
+            dto.BranchId = this.ResolveBranchId(dto.BranchId > 0 ? dto.BranchId : null);
             var order = await _orderService.CreateEmptyOrderAsync(dto);
             return CreatedAtAction(nameof(GetOrder), new { id = order.Id }, order);
         }
@@ -41,7 +44,9 @@ public class OrdersController : ControllerBase
 
         try
         {
-            var orderItem = await _orderService.AddOrderItemAsync(request.OrderId, request.Item);
+            var businessId = this.ResolveBusinessId();
+            var branchId = this.ResolveBranchId();
+            var orderItem = await _orderService.AddOrderItemAsync(request.OrderId, businessId, branchId, request.Item);
             return Ok(orderItem);
         }
         catch (Exception ex)
@@ -58,7 +63,9 @@ public class OrdersController : ControllerBase
 
         try
         {
-            var order = await _orderService.CompleteOrderAsync(request.OrderId);
+            var businessId = this.ResolveBusinessId();
+            var branchId = this.ResolveBranchId();
+            var order = await _orderService.CompleteOrderAsync(request.OrderId, businessId, branchId);
             return Ok(order);
         }
         catch (Exception ex)
@@ -68,11 +75,13 @@ public class OrdersController : ControllerBase
     }
 
     [HttpGet("{id}")]
-    public async Task<IActionResult> GetOrder(int id)
+    public async Task<IActionResult> GetOrder(int id, [FromQuery] int? businessId = null, [FromQuery] int? branchId = null)
     {
         try
         {
-            var order = await _orderService.GetOrderAsync(id);
+            var resolvedBusinessId = this.ResolveBusinessId(businessId);
+            var resolvedBranchId = this.ResolveBranchId(branchId);
+            var order = await _orderService.GetOrderAsync(id, resolvedBusinessId, resolvedBranchId);
             if (order == null)
                 return NotFound();
 

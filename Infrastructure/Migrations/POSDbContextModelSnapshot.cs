@@ -38,6 +38,11 @@ namespace POSSystem.Infrastructure.Migrations
                     b.Property<int>("BranchId")
                         .HasColumnType("int");
 
+                    b.Property<int>("BusinessId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
                     b.Property<string>("City")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -61,11 +66,6 @@ namespace POSSystem.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("datetime2")
                         .HasDefaultValueSql("GETUTCDATE()");
-
-                    b.Property<string>("Currency")
-                        .IsRequired()
-                        .HasMaxLength(10)
-                        .HasColumnType("nvarchar(10)");
 
                     b.Property<string>("Email")
                         .IsRequired()
@@ -106,6 +106,12 @@ namespace POSSystem.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("BranchId")
+                        .HasDatabaseName("idx_branches_branchid");
+
+                    b.HasIndex("BusinessId")
+                        .HasDatabaseName("idx_branches_businessid");
+
                     b.HasIndex("Code")
                         .IsUnique()
                         .HasDatabaseName("idx_branch_code");
@@ -116,6 +122,9 @@ namespace POSSystem.Infrastructure.Migrations
                     b.HasIndex("Phone")
                         .HasDatabaseName("idx_branch_phone");
 
+                    b.HasIndex("BusinessId", "BranchId")
+                        .HasDatabaseName("idx_branches_business_branch");
+
                     b.ToTable("Branches");
 
                     b.HasData(
@@ -124,11 +133,11 @@ namespace POSSystem.Infrastructure.Migrations
                             Id = 1,
                             Address = "123 Main Street",
                             BranchId = 1,
+                            BusinessId = 1,
                             City = "Default City",
                             ClosingTime = new TimeSpan(0, 22, 0, 0, 0),
                             Code = "MAIN",
-                            CreatedDate = new DateTime(2026, 4, 19, 11, 0, 35, 292, DateTimeKind.Utc).AddTicks(9337),
-                            Currency = "USD",
+                            CreatedDate = new DateTime(2026, 6, 14, 7, 29, 46, 995, DateTimeKind.Utc).AddTicks(9232),
                             Email = "main@restaurant.com",
                             IsActive = true,
                             IsDeleted = false,
@@ -136,6 +145,117 @@ namespace POSSystem.Infrastructure.Migrations
                             OpeningTime = new TimeSpan(0, 11, 0, 0, 0),
                             Phone = "+1234567890",
                             TaxRate = 10.00m
+                        });
+                });
+
+            modelBuilder.Entity("POSSystem.Domain.Business", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Address")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int?>("CreatedById")
+                        .HasColumnType("int");
+
+                    b.Property<string>("CreatedByName")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreatedDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("LegalName")
+                        .IsRequired()
+                        .HasMaxLength(250)
+                        .HasColumnType("nvarchar(250)");
+
+                    b.Property<byte[]>("Logo")
+                        .HasColumnType("varbinary(max)");
+
+                    b.Property<string>("LogoContentType")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("LogoFileName")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<int?>("ModifiedById")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ModifiedByName")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("Phone")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("TaxNumber")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("TimeZone")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime?>("UpdatedDate")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Email")
+                        .HasDatabaseName("idx_business_email");
+
+                    b.HasIndex("Name")
+                        .HasDatabaseName("idx_business_name");
+
+                    b.ToTable("Businesses");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            Address = "123 Main Street",
+                            CreatedDate = new DateTime(2026, 6, 14, 7, 29, 46, 995, DateTimeKind.Utc).AddTicks(8259),
+                            Currency = "USD",
+                            Email = "owner@restaurant.com",
+                            IsActive = true,
+                            IsDeleted = false,
+                            LegalName = "Main Business Pvt Ltd",
+                            Name = "Main Business",
+                            Phone = "+1234567890",
+                            TaxNumber = "NTN-0001",
+                            TimeZone = "UTC"
                         });
                 });
 
@@ -154,6 +274,11 @@ namespace POSSystem.Infrastructure.Migrations
 
                     b.Property<int>("BranchId")
                         .HasColumnType("int");
+
+                    b.Property<int>("BusinessId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
 
                     b.Property<int?>("CreatedById")
                         .HasColumnType("int");
@@ -199,7 +324,10 @@ namespace POSSystem.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("BranchId")
-                        .HasDatabaseName("idx_customer_branchid");
+                        .HasDatabaseName("idx_customers_branchid");
+
+                    b.HasIndex("BusinessId")
+                        .HasDatabaseName("idx_customers_businessid");
 
                     b.HasIndex("Email")
                         .HasDatabaseName("idx_customer_email");
@@ -210,6 +338,9 @@ namespace POSSystem.Infrastructure.Migrations
                     b.HasIndex("BranchId", "Phone")
                         .IsUnique()
                         .HasDatabaseName("idx_customer_branch_phone");
+
+                    b.HasIndex("BusinessId", "BranchId")
+                        .HasDatabaseName("idx_customers_business_branch");
 
                     b.ToTable("Customers");
                 });
@@ -224,6 +355,11 @@ namespace POSSystem.Infrastructure.Migrations
 
                     b.Property<int>("BranchId")
                         .HasColumnType("int");
+
+                    b.Property<int>("BusinessId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
 
                     b.Property<string>("Category")
                         .IsRequired()
@@ -293,7 +429,10 @@ namespace POSSystem.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("BranchId")
-                        .HasDatabaseName("idx_inventoryitem_branchid");
+                        .HasDatabaseName("idx_inventoryitems_branchid");
+
+                    b.HasIndex("BusinessId")
+                        .HasDatabaseName("idx_inventoryitems_businessid");
 
                     b.HasIndex("Category")
                         .HasDatabaseName("idx_inventoryitem_category");
@@ -301,6 +440,9 @@ namespace POSSystem.Infrastructure.Migrations
                     b.HasIndex("BranchId", "Name")
                         .IsUnique()
                         .HasDatabaseName("idx_inventoryitem_branch_name");
+
+                    b.HasIndex("BusinessId", "BranchId")
+                        .HasDatabaseName("idx_inventoryitems_business_branch");
 
                     b.HasIndex("BranchId", "IsInventoryItem", "ProductType")
                         .HasDatabaseName("idx_inventoryitem_branch_inventory_type");
@@ -319,10 +461,25 @@ namespace POSSystem.Infrastructure.Migrations
                     b.Property<int>("BranchId")
                         .HasColumnType("int");
 
+                    b.Property<int>("BusinessId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
                     b.Property<int>("CategoryType")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int")
                         .HasDefaultValue(0);
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("Color")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
 
                     b.Property<int?>("CreatedById")
                         .HasColumnType("int");
@@ -336,6 +493,19 @@ namespace POSSystem.Infrastructure.Migrations
                         .HasDefaultValueSql("GETUTCDATE()");
 
                     b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Icon")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("ImageUrl")
                         .IsRequired()
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
@@ -354,20 +524,35 @@ namespace POSSystem.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<bool>("Status")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
                     b.Property<DateTime?>("UpdatedDate")
                         .HasColumnType("datetime2");
 
                     b.HasKey("Id");
 
                     b.HasIndex("BranchId")
-                        .HasDatabaseName("idx_menucategory_branchid");
+                        .HasDatabaseName("idx_menucategories_branchid");
+
+                    b.HasIndex("BusinessId")
+                        .HasDatabaseName("idx_menucategories_businessid");
 
                     b.HasIndex("BranchId", "CategoryType")
                         .HasDatabaseName("idx_menucategory_branch_type");
 
+                    b.HasIndex("BranchId", "Code")
+                        .IsUnique()
+                        .HasDatabaseName("idx_menucategory_branch_code");
+
                     b.HasIndex("BranchId", "Name")
                         .IsUnique()
                         .HasDatabaseName("idx_menucategory_branch_name");
+
+                    b.HasIndex("BusinessId", "BranchId")
+                        .HasDatabaseName("idx_menucategories_business_branch");
 
                     b.ToTable("MenuCategories");
                 });
@@ -382,6 +567,11 @@ namespace POSSystem.Infrastructure.Migrations
 
                     b.Property<int>("BranchId")
                         .HasColumnType("int");
+
+                    b.Property<int>("BusinessId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
 
                     b.Property<decimal>("CostPrice")
                         .HasPrecision(10, 2)
@@ -459,7 +649,9 @@ namespace POSSystem.Infrastructure.Migrations
                         .HasColumnType("decimal(10,2)");
 
                     b.Property<int>("ProductType")
-                        .HasColumnType("int");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
 
                     b.Property<decimal>("TaxPercentage")
                         .HasPrecision(5, 2)
@@ -471,13 +663,19 @@ namespace POSSystem.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("BranchId")
-                        .HasDatabaseName("idx_menuitem_branchid");
+                        .HasDatabaseName("idx_menuitems_branchid");
+
+                    b.HasIndex("BusinessId")
+                        .HasDatabaseName("idx_menuitems_businessid");
 
                     b.HasIndex("MenuCategoryId")
                         .HasDatabaseName("idx_menuitem_categoryid");
 
                     b.HasIndex("BranchId", "IsAvailable")
                         .HasDatabaseName("idx_menuitem_branch_available");
+
+                    b.HasIndex("BusinessId", "BranchId")
+                        .HasDatabaseName("idx_menuitems_business_branch");
 
                     b.HasIndex("BranchId", "IsSaleable", "ProductType")
                         .HasDatabaseName("idx_menuitem_branch_saleable_type");
@@ -496,6 +694,11 @@ namespace POSSystem.Infrastructure.Migrations
                     b.Property<int>("BranchId")
                         .HasColumnType("int");
 
+                    b.Property<int>("BusinessId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
                     b.Property<int?>("CreatedById")
                         .HasColumnType("int");
 
@@ -534,10 +737,16 @@ namespace POSSystem.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("BranchId")
-                        .HasDatabaseName("idx_addon_branchid");
+                        .HasDatabaseName("idx_menuitemaddons_branchid");
+
+                    b.HasIndex("BusinessId")
+                        .HasDatabaseName("idx_menuitemaddons_businessid");
 
                     b.HasIndex("MenuItemId")
                         .HasDatabaseName("idx_addon_menuitemid");
+
+                    b.HasIndex("BusinessId", "BranchId")
+                        .HasDatabaseName("idx_menuitemaddons_business_branch");
 
                     b.ToTable("MenuItemAddons");
                 });
@@ -553,6 +762,11 @@ namespace POSSystem.Infrastructure.Migrations
                     b.Property<int>("BranchId")
                         .HasColumnType("int");
 
+                    b.Property<int>("BusinessId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
                     b.Property<int?>("CreatedById")
                         .HasColumnType("int");
 
@@ -591,10 +805,16 @@ namespace POSSystem.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("BranchId")
-                        .HasDatabaseName("idx_variant_branchid");
+                        .HasDatabaseName("idx_menuitemvariants_branchid");
+
+                    b.HasIndex("BusinessId")
+                        .HasDatabaseName("idx_menuitemvariants_businessid");
 
                     b.HasIndex("MenuItemId")
                         .HasDatabaseName("idx_variant_menuitemid");
+
+                    b.HasIndex("BusinessId", "BranchId")
+                        .HasDatabaseName("idx_menuitemvariants_business_branch");
 
                     b.ToTable("MenuItemVariants");
                 });
@@ -609,6 +829,11 @@ namespace POSSystem.Infrastructure.Migrations
 
                     b.Property<int>("BranchId")
                         .HasColumnType("int");
+
+                    b.Property<int>("BusinessId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
 
                     b.Property<int?>("CreatedById")
                         .HasColumnType("int");
@@ -672,7 +897,10 @@ namespace POSSystem.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("BranchId")
-                        .HasDatabaseName("idx_order_branchid");
+                        .HasDatabaseName("idx_orders_branchid");
+
+                    b.HasIndex("BusinessId")
+                        .HasDatabaseName("idx_orders_businessid");
 
                     b.HasIndex("CustomerId")
                         .HasDatabaseName("idx_order_customerid");
@@ -689,6 +917,9 @@ namespace POSSystem.Infrastructure.Migrations
                     b.HasIndex("BranchId", "CreatedDate")
                         .HasDatabaseName("idx_order_branchid_createddate");
 
+                    b.HasIndex("BusinessId", "BranchId")
+                        .HasDatabaseName("idx_orders_business_branch");
+
                     b.ToTable("Orders");
                 });
 
@@ -702,6 +933,11 @@ namespace POSSystem.Infrastructure.Migrations
 
                     b.Property<int>("BranchId")
                         .HasColumnType("int");
+
+                    b.Property<int>("BusinessId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
 
                     b.Property<int?>("CreatedById")
                         .HasColumnType("int");
@@ -763,13 +999,19 @@ namespace POSSystem.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("BranchId")
-                        .HasDatabaseName("idx_orderitem_branchid");
+                        .HasDatabaseName("idx_orderitems_branchid");
+
+                    b.HasIndex("BusinessId")
+                        .HasDatabaseName("idx_orderitems_businessid");
 
                     b.HasIndex("MenuItemId")
                         .HasDatabaseName("idx_orderitem_menuitemid");
 
                     b.HasIndex("OrderId")
                         .HasDatabaseName("idx_orderitem_orderid");
+
+                    b.HasIndex("BusinessId", "BranchId")
+                        .HasDatabaseName("idx_orderitems_business_branch");
 
                     b.ToTable("OrderItems");
                 });
@@ -788,6 +1030,11 @@ namespace POSSystem.Infrastructure.Migrations
 
                     b.Property<int>("BranchId")
                         .HasColumnType("int");
+
+                    b.Property<int>("BusinessId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
 
                     b.Property<int?>("CreatedById")
                         .HasColumnType("int");
@@ -826,7 +1073,10 @@ namespace POSSystem.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("BranchId")
-                        .HasDatabaseName("idx_payment_branchid");
+                        .HasDatabaseName("idx_payments_branchid");
+
+                    b.HasIndex("BusinessId")
+                        .HasDatabaseName("idx_payments_businessid");
 
                     b.HasIndex("OrderId")
                         .HasDatabaseName("idx_payment_orderid");
@@ -836,6 +1086,9 @@ namespace POSSystem.Infrastructure.Migrations
 
                     b.HasIndex("BranchId", "CreatedDate")
                         .HasDatabaseName("idx_payment_branch_createddate");
+
+                    b.HasIndex("BusinessId", "BranchId")
+                        .HasDatabaseName("idx_payments_business_branch");
 
                     b.ToTable("Payments");
                 });
@@ -850,6 +1103,11 @@ namespace POSSystem.Infrastructure.Migrations
 
                     b.Property<int>("BranchId")
                         .HasColumnType("int");
+
+                    b.Property<int>("BusinessId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
 
                     b.Property<int?>("CreatedById")
                         .HasColumnType("int");
@@ -892,13 +1150,19 @@ namespace POSSystem.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("BranchId")
-                        .HasDatabaseName("idx_recipe_branchid");
+                        .HasDatabaseName("idx_recipes_branchid");
+
+                    b.HasIndex("BusinessId")
+                        .HasDatabaseName("idx_recipes_businessid");
 
                     b.HasIndex("IngredientId")
                         .HasDatabaseName("idx_recipe_ingredientid");
 
                     b.HasIndex("MenuItemId")
                         .HasDatabaseName("idx_recipe_menuitemid");
+
+                    b.HasIndex("BusinessId", "BranchId")
+                        .HasDatabaseName("idx_recipes_business_branch");
 
                     b.HasIndex("MenuItemId", "IngredientId")
                         .IsUnique()
@@ -917,6 +1181,11 @@ namespace POSSystem.Infrastructure.Migrations
 
                     b.Property<int>("BranchId")
                         .HasColumnType("int");
+
+                    b.Property<int>("BusinessId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
 
                     b.Property<int?>("CreatedById")
                         .HasColumnType("int");
@@ -952,9 +1221,18 @@ namespace POSSystem.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("BranchId")
+                        .HasDatabaseName("idx_roles_branchid");
+
+                    b.HasIndex("BusinessId")
+                        .HasDatabaseName("idx_roles_businessid");
+
                     b.HasIndex("BranchId", "Name")
                         .IsUnique()
                         .HasDatabaseName("idx_role_branchid_name");
+
+                    b.HasIndex("BusinessId", "BranchId")
+                        .HasDatabaseName("idx_roles_business_branch");
 
                     b.ToTable("Roles");
 
@@ -963,7 +1241,8 @@ namespace POSSystem.Infrastructure.Migrations
                         {
                             Id = 1,
                             BranchId = 1,
-                            CreatedDate = new DateTime(2026, 4, 19, 11, 0, 35, 292, DateTimeKind.Utc).AddTicks(9498),
+                            BusinessId = 1,
+                            CreatedDate = new DateTime(2026, 6, 14, 7, 29, 46, 996, DateTimeKind.Utc).AddTicks(124),
                             IsDeleted = false,
                             Name = "Admin",
                             Permissions = "all_permissions"
@@ -986,6 +1265,11 @@ namespace POSSystem.Infrastructure.Migrations
 
                     b.Property<int?>("BranchToId")
                         .HasColumnType("int");
+
+                    b.Property<int>("BusinessId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
 
                     b.Property<int?>("CreatedById")
                         .HasColumnType("int");
@@ -1025,9 +1309,12 @@ namespace POSSystem.Infrastructure.Migrations
                     b.HasIndex("BranchFromId");
 
                     b.HasIndex("BranchId")
-                        .HasDatabaseName("idx_stockmovement_branchid");
+                        .HasDatabaseName("idx_stockmovements_branchid");
 
                     b.HasIndex("BranchToId");
+
+                    b.HasIndex("BusinessId")
+                        .HasDatabaseName("idx_stockmovements_businessid");
 
                     b.HasIndex("ItemId")
                         .HasDatabaseName("idx_stockmovement_itemid");
@@ -1038,7 +1325,98 @@ namespace POSSystem.Infrastructure.Migrations
                     b.HasIndex("BranchId", "CreatedDate")
                         .HasDatabaseName("idx_stockmovement_branch_createddate");
 
+                    b.HasIndex("BusinessId", "BranchId")
+                        .HasDatabaseName("idx_stockmovements_business_branch");
+
                     b.ToTable("StockMovements");
+                });
+
+            modelBuilder.Entity("POSSystem.Domain.SubCategory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("BranchId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("BusinessId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.Property<int>("CategoryId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("CreatedById")
+                        .HasColumnType("int");
+
+                    b.Property<string>("CreatedByName")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreatedDate")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("GETUTCDATE()");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Icon")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<int?>("ModifiedById")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ModifiedByName")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<bool>("Status")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<DateTime?>("UpdatedDate")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BranchId")
+                        .HasDatabaseName("idx_subcategories_branchid");
+
+                    b.HasIndex("BusinessId")
+                        .HasDatabaseName("idx_subcategories_businessid");
+
+                    b.HasIndex("CategoryId");
+
+                    b.HasIndex("BranchId", "CategoryId")
+                        .HasDatabaseName("idx_subcategory_branch_category");
+
+                    b.HasIndex("BranchId", "Name")
+                        .IsUnique()
+                        .HasDatabaseName("idx_subcategory_branch_name");
+
+                    b.HasIndex("BusinessId", "BranchId")
+                        .HasDatabaseName("idx_subcategories_business_branch");
+
+                    b.ToTable("SubCategories");
                 });
 
             modelBuilder.Entity("POSSystem.Domain.Table", b =>
@@ -1051,6 +1429,11 @@ namespace POSSystem.Infrastructure.Migrations
 
                     b.Property<int>("BranchId")
                         .HasColumnType("int");
+
+                    b.Property<int>("BusinessId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
 
                     b.Property<int>("Capacity")
                         .HasColumnType("int");
@@ -1095,7 +1478,10 @@ namespace POSSystem.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("BranchId")
-                        .HasDatabaseName("idx_table_branchid");
+                        .HasDatabaseName("idx_tables_branchid");
+
+                    b.HasIndex("BusinessId")
+                        .HasDatabaseName("idx_tables_businessid");
 
                     b.HasIndex("Status")
                         .HasDatabaseName("idx_table_status");
@@ -1103,6 +1489,9 @@ namespace POSSystem.Infrastructure.Migrations
                     b.HasIndex("BranchId", "TableNumber")
                         .IsUnique()
                         .HasDatabaseName("idx_table_branch_number");
+
+                    b.HasIndex("BusinessId", "BranchId")
+                        .HasDatabaseName("idx_tables_business_branch");
 
                     b.ToTable("Tables");
                 });
@@ -1117,6 +1506,11 @@ namespace POSSystem.Infrastructure.Migrations
 
                     b.Property<int>("BranchId")
                         .HasColumnType("int");
+
+                    b.Property<int>("BusinessId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
 
                     b.Property<int?>("CreatedById")
                         .HasColumnType("int");
@@ -1181,7 +1575,10 @@ namespace POSSystem.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("BranchId")
-                        .HasDatabaseName("idx_user_branchid");
+                        .HasDatabaseName("idx_users_branchid");
+
+                    b.HasIndex("BusinessId")
+                        .HasDatabaseName("idx_users_businessid");
 
                     b.HasIndex("Email")
                         .HasDatabaseName("idx_user_email");
@@ -1196,6 +1593,9 @@ namespace POSSystem.Infrastructure.Migrations
                         .IsUnique()
                         .HasDatabaseName("idx_user_username");
 
+                    b.HasIndex("BusinessId", "BranchId")
+                        .HasDatabaseName("idx_users_business_branch");
+
                     b.ToTable("Users");
 
                     b.HasData(
@@ -1203,7 +1603,8 @@ namespace POSSystem.Infrastructure.Migrations
                         {
                             Id = 1,
                             BranchId = 1,
-                            CreatedDate = new DateTime(2026, 4, 19, 11, 0, 35, 292, DateTimeKind.Utc).AddTicks(9533),
+                            BusinessId = 1,
+                            CreatedDate = new DateTime(2026, 6, 14, 7, 29, 46, 996, DateTimeKind.Utc).AddTicks(336),
                             Email = "admin@restaurant.com",
                             FullName = "System Administrator",
                             IsDeleted = false,
@@ -1215,6 +1616,17 @@ namespace POSSystem.Infrastructure.Migrations
                             Status = 0,
                             Username = "admin"
                         });
+                });
+
+            modelBuilder.Entity("POSSystem.Domain.Branch", b =>
+                {
+                    b.HasOne("POSSystem.Domain.Business", "Business")
+                        .WithMany("Branches")
+                        .HasForeignKey("BusinessId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Business");
                 });
 
             modelBuilder.Entity("POSSystem.Domain.Customer", b =>
@@ -1454,6 +1866,25 @@ namespace POSSystem.Infrastructure.Migrations
                     b.Navigation("Item");
                 });
 
+            modelBuilder.Entity("POSSystem.Domain.SubCategory", b =>
+                {
+                    b.HasOne("POSSystem.Domain.Branch", "Branch")
+                        .WithMany("SubCategories")
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("POSSystem.Domain.MenuCategory", "Category")
+                        .WithMany("SubCategories")
+                        .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Branch");
+
+                    b.Navigation("Category");
+                });
+
             modelBuilder.Entity("POSSystem.Domain.Table", b =>
                 {
                     b.HasOne("POSSystem.Domain.Branch", "Branch")
@@ -1473,6 +1904,12 @@ namespace POSSystem.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("POSSystem.Domain.Business", "Business")
+                        .WithMany()
+                        .HasForeignKey("BusinessId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("POSSystem.Domain.Role", "Role")
                         .WithMany("Users")
                         .HasForeignKey("RoleId")
@@ -1480,6 +1917,8 @@ namespace POSSystem.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Branch");
+
+                    b.Navigation("Business");
 
                     b.Navigation("Role");
                 });
@@ -1504,9 +1943,16 @@ namespace POSSystem.Infrastructure.Migrations
 
                     b.Navigation("StockMovements");
 
+                    b.Navigation("SubCategories");
+
                     b.Navigation("Tables");
 
                     b.Navigation("Users");
+                });
+
+            modelBuilder.Entity("POSSystem.Domain.Business", b =>
+                {
+                    b.Navigation("Branches");
                 });
 
             modelBuilder.Entity("POSSystem.Domain.Customer", b =>
@@ -1524,6 +1970,8 @@ namespace POSSystem.Infrastructure.Migrations
             modelBuilder.Entity("POSSystem.Domain.MenuCategory", b =>
                 {
                     b.Navigation("MenuItems");
+
+                    b.Navigation("SubCategories");
                 });
 
             modelBuilder.Entity("POSSystem.Domain.MenuItem", b =>

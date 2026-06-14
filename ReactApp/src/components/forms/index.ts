@@ -3,6 +3,7 @@ export { default as FormSelect } from './FormSelect';
 export { default as FormButton } from './FormButton';
 export { default as FormTextarea } from './FormTextarea';
 export { default as BranchForm } from './BranchForm';
+export { default as BusinessForm } from './BusinessForm';
 export { default as UserForm } from './UserForm';
 export { default as MenuForm } from './MenuForm';
 export { default as InventoryForm } from './InventoryForm';

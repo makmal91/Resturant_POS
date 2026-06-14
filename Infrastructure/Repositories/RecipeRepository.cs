@@ -41,6 +41,11 @@ public class RecipeRepository : IRecipeRepository
         await _context.Recipes.AddAsync(recipe);
     }
 
+    public void RemoveRecipe(POSSystem.Domain.Recipe recipe)
+    {
+        _context.Recipes.Remove(recipe);
+    }
+
     public async Task SaveChangesAsync()
     {
         await _context.SaveChangesAsync();

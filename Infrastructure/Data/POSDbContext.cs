@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using System.Linq.Expressions;
+using POSSystem.Application.Interfaces;
 using POSSystem.Domain;
 using POSSystem.Infrastructure.Configurations;
 
@@ -6,11 +8,15 @@ namespace POSSystem.Infrastructure.Data;
 
 public class POSDbContext : DbContext
 {
-    public POSDbContext(DbContextOptions<POSDbContext> options) : base(options)
+    private readonly ITenantContext _tenantContext;
+
+    public POSDbContext(DbContextOptions<POSDbContext> options, ITenantContext tenantContext) : base(options)
     {
+        _tenantContext = tenantContext;
     }
 
     #region DbSets
+    public DbSet<Business> Businesses { get; set; } = null!;
     public DbSet<Branch> Branches { get; set; } = null!;
     public DbSet<Role> Roles { get; set; } = null!;
     public DbSet<User> Users { get; set; } = null!;
@@ -34,6 +40,7 @@ public class POSDbContext : DbContext
         base.OnModelCreating(modelBuilder);
 
         // Apply all entity configurations
+        modelBuilder.ApplyConfiguration(new BusinessConfiguration());
         modelBuilder.ApplyConfiguration(new BranchConfiguration());
         modelBuilder.ApplyConfiguration(new RoleConfiguration());
         modelBuilder.ApplyConfiguration(new UserConfiguration());
@@ -54,12 +61,31 @@ public class POSDbContext : DbContext
         // Configure BaseEntity default values
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
         {
-            if (typeof(BaseEntity).IsAssignableFrom(entityType.ClrType))
-            {
-                modelBuilder.Entity(entityType.ClrType)
-                    .Property<DateTime>("CreatedDate")
-                    .HasDefaultValueSql("GETUTCDATE()");
-            }
+            if (!typeof(BaseEntity).IsAssignableFrom(entityType.ClrType) || entityType.ClrType == typeof(Business))
+                continue;
+
+            modelBuilder.Entity(entityType.ClrType)
+                .Property<DateTime>("CreatedDate")
+                .HasDefaultValueSql("GETUTCDATE()");
+
+            modelBuilder.Entity(entityType.ClrType)
+                .Property<int>("BusinessId")
+                .HasDefaultValue(1);
+
+            modelBuilder.Entity(entityType.ClrType)
+                .HasIndex("BusinessId")
+                .HasDatabaseName($"idx_{entityType.GetTableName()?.ToLowerInvariant()}_businessid");
+
+            modelBuilder.Entity(entityType.ClrType)
+                .HasIndex("BranchId")
+                .HasDatabaseName($"idx_{entityType.GetTableName()?.ToLowerInvariant()}_branchid");
+
+            modelBuilder.Entity(entityType.ClrType)
+                .HasIndex("BusinessId", "BranchId")
+                .HasDatabaseName($"idx_{entityType.GetTableName()?.ToLowerInvariant()}_business_branch");
+
+            modelBuilder.Entity(entityType.ClrType)
+                .HasQueryFilter(BuildTenantFilter(entityType.ClrType));
         }
 
         // Seed data
@@ -68,6 +94,23 @@ public class POSDbContext : DbContext
 
     private void SeedData(ModelBuilder modelBuilder)
     {
+        var defaultBusiness = new Business
+        {
+            Id = 1,
+            Name = "Main Business",
+            LegalName = "Main Business Pvt Ltd",
+            Phone = "+1234567890",
+            Email = "owner@restaurant.com",
+            Address = "123 Main Street",
+            TaxNumber = "NTN-0001",
+            Currency = "USD",
+            TimeZone = "UTC",
+            IsActive = true,
+            CreatedDate = DateTime.UtcNow
+        };
+
+        modelBuilder.Entity<Business>().HasData(defaultBusiness);
+
         // Seed Default Branch
         var defaultBranch = new Branch
         {
@@ -81,8 +124,8 @@ public class POSDbContext : DbContext
             OpeningTime = new TimeSpan(11, 0, 0),
             ClosingTime = new TimeSpan(22, 0, 0),
             TaxRate = 10.00m,
-            Currency = "USD",
             IsActive = true,
+            BusinessId = 1,
             BranchId = 1,
             CreatedDate = DateTime.UtcNow
         };
@@ -95,6 +138,7 @@ public class POSDbContext : DbContext
             Id = 1,
             Name = "Admin",
             Permissions = "all_permissions",
+            BusinessId = 1,
             BranchId = 1,
             CreatedDate = DateTime.UtcNow
         };
@@ -112,6 +156,7 @@ public class POSDbContext : DbContext
             Phone = "+1234567890",
             Email = "admin@restaurant.com",
             RoleId = 1,
+            BusinessId = 1,
             BranchId = 1,
             Salary = 0,
             ShiftType = ShiftType.Flexible,
@@ -120,5 +165,92 @@ public class POSDbContext : DbContext
         };
 
         modelBuilder.Entity<User>().HasData(adminUser);
+    }
+
+    public override int SaveChanges()
+    {
+        ApplyTenantAssignments();
+        ApplySoftDelete();
+        return base.SaveChanges();
+    }
+
+    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        ApplyTenantAssignments();
+        ApplySoftDelete();
+        return base.SaveChangesAsync(cancellationToken);
+    }
+
+    private void ApplySoftDelete()
+    {
+        foreach (var entry in ChangeTracker.Entries<BaseEntity>())
+        {
+            if (entry.State != EntityState.Deleted)
+                continue;
+
+            entry.State = EntityState.Modified;
+            entry.Entity.IsDeleted = true;
+            entry.Entity.UpdatedDate = DateTime.UtcNow;
+        }
+    }
+
+    private void ApplyTenantAssignments()
+    {
+        var businessId = _tenantContext.BusinessId ?? 1;
+        var branchId = _tenantContext.BranchId ?? 1;
+
+        foreach (var entry in ChangeTracker.Entries<BaseEntity>())
+        {
+            if (entry.State != EntityState.Added || entry.Entity is Business)
+                continue;
+
+            if (entry.Entity.BusinessId <= 0)
+                entry.Entity.BusinessId = businessId;
+
+            if (entry.Entity.BranchId <= 0)
+                entry.Entity.BranchId = branchId;
+        }
+    }
+
+    private LambdaExpression BuildTenantFilter(Type clrType)
+    {
+        var parameter = Expression.Parameter(clrType, "e");
+        var businessProperty = Expression.Property(parameter, nameof(BaseEntity.BusinessId));
+        var branchProperty = Expression.Property(parameter, nameof(BaseEntity.BranchId));
+        var isDeletedProperty = Expression.Property(parameter, nameof(BaseEntity.IsDeleted));
+        var notDeleted = Expression.Equal(isDeletedProperty, Expression.Constant(false));
+
+        var isSuperAdmin = _tenantContext.IsSuperAdmin;
+        var businessId = _tenantContext.BusinessId;
+        var branchId = _tenantContext.BranchId;
+
+        Expression tenantPredicate;
+
+        if (isSuperAdmin)
+        {
+            tenantPredicate = notDeleted;
+        }
+        else
+        {
+            Expression? scopedPredicate = null;
+
+            if (businessId.HasValue)
+            {
+                scopedPredicate = Expression.Equal(businessProperty, Expression.Constant(businessId.Value));
+            }
+
+            if (branchId.HasValue)
+            {
+                var branchPredicate = Expression.Equal(branchProperty, Expression.Constant(branchId.Value));
+                scopedPredicate = scopedPredicate == null
+                    ? branchPredicate
+                    : Expression.AndAlso(scopedPredicate, branchPredicate);
+            }
+
+            tenantPredicate = scopedPredicate ?? Expression.Constant(true);
+            tenantPredicate = Expression.AndAlso(tenantPredicate, notDeleted);
+        }
+
+        return Expression.Lambda(tenantPredicate, parameter);
     }
 }

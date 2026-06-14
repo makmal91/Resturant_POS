@@ -29,6 +29,9 @@ public class RecipeService : IRecipeService
         if (ingredient.ProductType != ProductType.RawMaterial && ingredient.ProductType != ProductType.SemiFinished)
             throw new Exception("Recipe ingredient must be RawMaterial or SemiFinished");
 
+        if (ingredient.BusinessId != dto.BusinessId || menuItem.BusinessId != dto.BusinessId)
+            throw new Exception("Recipe item and ingredient must belong to the same business");
+
         if (ingredient.BranchId != dto.BranchId || menuItem.BranchId != dto.BranchId)
             throw new Exception("Recipe item and ingredient must belong to the same branch");
 
@@ -38,6 +41,7 @@ public class RecipeService : IRecipeService
             IngredientId = dto.IngredientId,
             QuantityRequired = dto.QuantityRequired,
             Unit = dto.Unit,
+            BusinessId = dto.BusinessId,
             BranchId = dto.BranchId
         };
 
@@ -65,10 +69,8 @@ public class RecipeService : IRecipeService
         var recipe = await _repository.GetRecipeAsync(id);
         if (recipe == null) throw new Exception("Recipe not found");
 
-        // Assuming soft delete or just remove
-        // For now, since no IsDeleted, just throw or implement delete
-
-        throw new NotImplementedException("Delete not implemented");
+        _repository.RemoveRecipe(recipe);
+        await _repository.SaveChangesAsync();
     }
 
     public async Task<POSSystem.Domain.Recipe?> GetRecipeAsync(int id)

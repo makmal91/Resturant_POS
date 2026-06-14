@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using POSSystem.API.Extensions;
 using POSSystem.Application.Inventory.DTOs;
 using POSSystem.Application.Inventory.Interfaces;
 
@@ -16,11 +17,13 @@ public class InventoryController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetInventory([FromQuery] int branchId)
+    public async Task<IActionResult> GetInventory([FromQuery] int branchId, [FromQuery] int? businessId = null)
     {
         try
         {
-            var items = await _inventoryService.GetInventoryItemsAsync(branchId);
+            var resolvedBusinessId = this.ResolveBusinessId(businessId);
+            var resolvedBranchId = this.ResolveBranchId(branchId);
+            var items = await _inventoryService.GetInventoryItemsAsync(resolvedBusinessId, resolvedBranchId);
             return Ok(new { items });
         }
         catch (Exception ex)
@@ -37,6 +40,8 @@ public class InventoryController : ControllerBase
 
         try
         {
+            dto.BusinessId = this.ResolveBusinessId(dto.BusinessId > 0 ? dto.BusinessId : null);
+            dto.BranchId = this.ResolveBranchId(dto.BranchId > 0 ? dto.BranchId : null);
             await _inventoryService.AddStockAsync(dto);
             return Ok(new { message = "Stock added successfully." });
         }
@@ -54,6 +59,8 @@ public class InventoryController : ControllerBase
 
         try
         {
+            dto.BusinessId = this.ResolveBusinessId(dto.BusinessId > 0 ? dto.BusinessId : null);
+            dto.BranchId = this.ResolveBranchId(dto.BranchId > 0 ? dto.BranchId : null);
             await _inventoryService.AdjustStockAsync(dto);
             return Ok(new { message = "Stock adjustment applied." });
         }

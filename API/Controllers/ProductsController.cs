@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using POSSystem.API.Extensions;
 using POSSystem.Application.Menu.DTOs;
 using POSSystem.Application.Menu.Interfaces;
 using POSSystem.Domain;
@@ -20,18 +21,23 @@ public class ProductsController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetProducts(
         [FromQuery] int branchId = DefaultBranchId,
+        [FromQuery] int? businessId = null,
         [FromQuery] ProductType? productType = null,
         [FromQuery] bool? isSaleable = null,
         [FromQuery] bool? isInventoryItem = null)
     {
-        var items = await _menuService.GetMenuItemsAsync(branchId, productType, isSaleable, isInventoryItem);
+        var resolvedBusinessId = this.ResolveBusinessId(businessId);
+        var resolvedBranchId = this.ResolveBranchId(branchId);
+        var items = await _menuService.GetMenuItemsAsync(resolvedBusinessId, resolvedBranchId, productType, isSaleable, isInventoryItem);
         return Ok(new { items });
     }
 
     [HttpGet("{id:int}")]
-    public async Task<IActionResult> GetProductById(int id, [FromQuery] int branchId = DefaultBranchId)
+    public async Task<IActionResult> GetProductById(int id, [FromQuery] int branchId = DefaultBranchId, [FromQuery] int? businessId = null)
     {
-        var item = await _menuService.GetMenuItemByIdAsync(id, branchId);
+        var resolvedBusinessId = this.ResolveBusinessId(businessId);
+        var resolvedBranchId = this.ResolveBranchId(branchId);
+        var item = await _menuService.GetMenuItemByIdAsync(id, resolvedBusinessId, resolvedBranchId);
         if (item == null)
             return NotFound();
 
@@ -41,27 +47,29 @@ public class ProductsController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> CreateProduct([FromBody] CreateMenuItemDto dto)
     {
-        if (dto.BranchId <= 0)
-            dto.BranchId = DefaultBranchId;
+        dto.BusinessId = this.ResolveBusinessId(dto.BusinessId > 0 ? dto.BusinessId : null);
+        dto.BranchId = this.ResolveBranchId(dto.BranchId > 0 ? dto.BranchId : DefaultBranchId);
 
         var item = await _menuService.AddMenuItemAsync(dto);
-        return CreatedAtAction(nameof(GetProductById), new { id = item.Id, branchId = item.BranchId }, item);
+        return CreatedAtAction(nameof(GetProductById), new { id = item.Id, businessId = item.BusinessId, branchId = item.BranchId }, item);
     }
 
     [HttpPut("{id:int}")]
     public async Task<IActionResult> UpdateProduct(int id, [FromBody] UpdateMenuItemDto dto)
     {
-        if (dto.BranchId <= 0)
-            dto.BranchId = DefaultBranchId;
+        dto.BusinessId = this.ResolveBusinessId(dto.BusinessId > 0 ? dto.BusinessId : null);
+        dto.BranchId = this.ResolveBranchId(dto.BranchId > 0 ? dto.BranchId : DefaultBranchId);
 
         var item = await _menuService.UpdateMenuItemAsync(id, dto);
         return Ok(item);
     }
 
     [HttpDelete("{id:int}")]
-    public async Task<IActionResult> DeleteProduct(int id, [FromQuery] int branchId = DefaultBranchId)
+    public async Task<IActionResult> DeleteProduct(int id, [FromQuery] int branchId = DefaultBranchId, [FromQuery] int? businessId = null)
     {
-        await _menuService.DeleteMenuItemAsync(id, branchId);
+        var resolvedBusinessId = this.ResolveBusinessId(businessId);
+        var resolvedBranchId = this.ResolveBranchId(branchId);
+        await _menuService.DeleteMenuItemAsync(id, resolvedBusinessId, resolvedBranchId);
         return NoContent();
     }
 }

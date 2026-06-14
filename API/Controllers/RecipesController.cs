@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using POSSystem.API.Extensions;
 using POSSystem.Application.Recipe.DTOs;
 using POSSystem.Application.Recipe.Interfaces;
 
@@ -18,6 +19,8 @@ public class RecipesController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> CreateRecipe([FromBody] CreateRecipeDto dto)
     {
+        dto.BusinessId = this.ResolveBusinessId(dto.BusinessId > 0 ? dto.BusinessId : null);
+        dto.BranchId = this.ResolveBranchId(dto.BranchId > 0 ? dto.BranchId : null);
         var recipe = await _recipeService.CreateRecipeAsync(dto);
         return CreatedAtAction(nameof(GetRecipeById), new { id = recipe.Id }, recipe);
     }

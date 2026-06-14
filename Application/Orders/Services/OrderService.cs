@@ -21,7 +21,7 @@ public class OrderService : IOrderService
     public async Task<Order> CreateOrderAsync(CreateOrderDto dto)
     {
         var menuItemIds = dto.OrderItems.Select(i => i.MenuItemId).Distinct().ToList();
-        var menuItems = await _repository.GetMenuItemsAsync(menuItemIds);
+        var menuItems = await _repository.GetMenuItemsAsync(menuItemIds, dto.BusinessId, dto.BranchId);
         var menuItemDict = menuItems.ToDictionary(m => m.Id, m => m);
 
         var order = new Order
@@ -31,6 +31,7 @@ public class OrderService : IOrderService
             CustomerId = dto.CustomerId,
             WaiterId = dto.WaiterId,
             Notes = dto.Notes,
+            BusinessId = dto.BusinessId,
             BranchId = dto.BranchId,
             Status = OrderStatus.Pending,
             OrderItems = new List<OrderItem>()
@@ -47,7 +48,7 @@ public class OrderService : IOrderService
             var price = menuItem.Price;
             if (itemDto.VariantId.HasValue)
             {
-                var variant = await _repository.GetVariantAsync(itemDto.VariantId.Value);
+                var variant = await _repository.GetVariantAsync(itemDto.VariantId.Value, dto.BusinessId, dto.BranchId);
                 if (variant == null || variant.MenuItemId != menuItem.Id)
                     throw new Exception("Invalid variant for selected menu item");
 
@@ -63,6 +64,7 @@ public class OrderService : IOrderService
                 Quantity = itemDto.Quantity,
                 Price = price,
                 Discount = itemDto.Discount,
+                BusinessId = dto.BusinessId,
                 BranchId = dto.BranchId
             };
             orderItem.Total = (orderItem.Price * orderItem.Quantity) - orderItem.Discount;
@@ -86,6 +88,7 @@ public class OrderService : IOrderService
             CustomerId = dto.CustomerId,
             WaiterId = dto.WaiterId,
             Notes = dto.Notes,
+            BusinessId = dto.BusinessId,
             BranchId = dto.BranchId,
             Status = OrderStatus.Pending,
             OrderItems = new List<OrderItem>()
@@ -97,12 +100,12 @@ public class OrderService : IOrderService
         return order;
     }
 
-    public async Task<OrderItem> AddOrderItemAsync(int orderId, AddOrderItemDto dto)
+    public async Task<OrderItem> AddOrderItemAsync(int orderId, int businessId, int branchId, AddOrderItemDto dto)
     {
-        var order = await _repository.GetOrderWithItemsAsync(orderId);
+        var order = await _repository.GetOrderWithItemsAsync(orderId, businessId, branchId);
         if (order == null) throw new Exception("Order not found");
 
-        var menuItem = await _repository.GetMenuItemAsync(dto.MenuItemId);
+        var menuItem = await _repository.GetMenuItemAsync(dto.MenuItemId, businessId, branchId);
         if (menuItem == null) throw new Exception("Menu item not found");
 
         if (!menuItem.IsSaleable || menuItem.ProductType != ProductType.FinishedGood)
@@ -111,7 +114,7 @@ public class OrderService : IOrderService
         var price = menuItem.Price;
         if (dto.VariantId.HasValue)
         {
-            var variant = await _repository.GetVariantAsync(dto.VariantId.Value);
+            var variant = await _repository.GetVariantAsync(dto.VariantId.Value, businessId, branchId);
             if (variant == null || variant.MenuItemId != menuItem.Id)
                 throw new Exception("Invalid variant for selected menu item");
 
@@ -130,6 +133,7 @@ public class OrderService : IOrderService
             Discount = dto.Discount,
             BranchId = order.BranchId
         };
+        orderItem.BusinessId = order.BusinessId;
         orderItem.Total = (orderItem.Price * orderItem.Quantity) - orderItem.Discount;
         order.OrderItems.Add(orderItem);
 
@@ -141,17 +145,17 @@ public class OrderService : IOrderService
         return orderItem;
     }
 
-    public async Task<Order> CalculateTotalsAsync(int orderId)
+    public async Task<Order> CalculateTotalsAsync(int orderId, int businessId, int branchId)
     {
-        var order = await _repository.GetOrderWithItemsAsync(orderId);
+        var order = await _repository.GetOrderWithItemsAsync(orderId, businessId, branchId);
         if (order == null) throw new Exception("Order not found");
 
         return await CalculateTotalsAsync(order);
     }
 
-    public async Task<Order> CompleteOrderAsync(int orderId)
+    public async Task<Order> CompleteOrderAsync(int orderId, int businessId, int branchId)
     {
-        var order = await _repository.GetOrderWithItemsAsync(orderId);
+        var order = await _repository.GetOrderWithItemsAsync(orderId, businessId, branchId);
         if (order == null) throw new Exception("Order not found");
 
         if (order.Status == OrderStatus.Completed) throw new Exception("Order already completed");
@@ -161,7 +165,7 @@ public class OrderService : IOrderService
 
         // Deduct inventory
         var menuItemIds = order.OrderItems.Select(oi => oi.MenuItemId).Distinct().ToList();
-        var recipes = await _repository.GetRecipesByMenuItemIdsAsync(menuItemIds);
+        var recipes = await _repository.GetRecipesByMenuItemIdsAsync(menuItemIds, businessId, branchId);
 
         foreach (var orderItem in order.OrderItems)
         {
@@ -172,7 +176,7 @@ public class OrderService : IOrderService
             foreach (var recipe in itemRecipes)
             {
                 var deductQuantity = recipe.QuantityRequired * orderItem.Quantity;
-                await _inventoryService.DeductStockAsync(recipe.IngredientId, deductQuantity, order.BranchId);
+                await _inventoryService.DeductStockAsync(recipe.IngredientId, deductQuantity, order.BusinessId, order.BranchId);
             }
         }
 
@@ -182,9 +186,9 @@ public class OrderService : IOrderService
         return order;
     }
 
-    public async Task<Order?> GetOrderAsync(int id)
+    public async Task<Order?> GetOrderAsync(int id, int businessId, int branchId)
     {
-        return await _repository.GetOrderWithItemsAsync(id);
+        return await _repository.GetOrderWithItemsAsync(id, businessId, branchId);
     }
 
     private async Task<Order> CalculateTotalsAsync(Order order)

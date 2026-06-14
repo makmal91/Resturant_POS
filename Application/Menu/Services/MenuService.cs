@@ -64,6 +64,7 @@ public class MenuService : IMenuService
             Color = category.Color,
             Status = category.Status,
             CategoryType = category.CategoryType,
+            BusinessId = category.BusinessId,
             BranchId = category.BranchId,
             BranchName = category.Branch?.Name ?? string.Empty,
             SubCategories = category.SubCategories.Select(MapSubCategoryDto).ToList(),
@@ -83,6 +84,7 @@ public class MenuService : IMenuService
             Icon = subCategory.Icon,
             CategoryId = subCategory.CategoryId,
             CategoryName = subCategory.Category?.Name ?? string.Empty,
+            BusinessId = subCategory.BusinessId,
             BranchId = subCategory.BranchId,
             BranchName = subCategory.Branch?.Name ?? string.Empty
         };
@@ -99,6 +101,7 @@ public class MenuService : IMenuService
             Tax = item.TaxPercentage,
             PreparationTime = item.PreparationTime,
             MenuCategoryId = item.MenuCategoryId,
+            BusinessId = item.BusinessId,
             BranchId = item.BranchId,
             ProductType = item.ProductType,
             IsSaleable = item.IsSaleable,
@@ -126,19 +129,22 @@ public class MenuService : IMenuService
         _cache = cache;
     }
 
-    private static string GetPosMenuCacheKey(int branchId) => $"pos-menu-{branchId}";
+    private static string GetPosMenuCacheKey(int businessId, int branchId) => $"pos-menu-{businessId}-{branchId}";
 
-    private async Task EnsureBranchExistsAsync(int branchId)
+    private async Task EnsureBranchExistsAsync(int businessId, int branchId)
     {
+        if (businessId <= 0)
+            throw new InvalidOperationException("BusinessId is required.");
+
         if (branchId <= 0)
             throw new InvalidOperationException("BranchId is required.");
 
-        var branchExists = await _repository.BranchExistsAsync(branchId);
+        var branchExists = await _repository.BranchExistsAsync(businessId, branchId);
         if (!branchExists)
             throw new InvalidOperationException("Selected branch does not exist.");
     }
 
-    private async Task ValidateCategoryInputAsync(string categoryName, string categoryCode, int branchId, int? excludeCategoryId = null)
+    private async Task ValidateCategoryInputAsync(string categoryName, string categoryCode, int businessId, int branchId, int? excludeCategoryId = null)
     {
         if (string.IsNullOrWhiteSpace(categoryName))
             throw new InvalidOperationException("Category name is required.");
@@ -146,16 +152,16 @@ public class MenuService : IMenuService
         if (string.IsNullOrWhiteSpace(categoryCode))
             throw new InvalidOperationException("Category code is required.");
 
-        await EnsureBranchExistsAsync(branchId);
+        await EnsureBranchExistsAsync(businessId, branchId);
 
-        var duplicateCategory = await _repository.GetCategoryByNameAsync(categoryName, branchId, excludeCategoryId);
+        var duplicateCategory = await _repository.GetCategoryByNameAsync(categoryName, businessId, branchId, excludeCategoryId);
         if (duplicateCategory != null)
             throw new InvalidOperationException("Category name must be unique per branch.");
     }
 
-    private async Task<MenuCategory> ValidateSubCategoryContextAsync(int categoryId, int branchId)
+    private async Task<MenuCategory> ValidateSubCategoryContextAsync(int categoryId, int businessId, int branchId)
     {
-        var category = await _repository.GetCategoryAsync(categoryId);
+        var category = await _repository.GetCategoryAsync(categoryId, businessId, branchId);
         if (category == null)
             throw new InvalidOperationException("Category not found.");
 
@@ -165,19 +171,19 @@ public class MenuService : IMenuService
         return category;
     }
 
-    public async Task<ICollection<MenuCategoryDto>> GetCategoriesAsync(int branchId, CategoryType? categoryType = null)
+    public async Task<ICollection<MenuCategoryDto>> GetCategoriesAsync(int businessId, int branchId, CategoryType? categoryType = null)
     {
-        await EnsureBranchExistsAsync(branchId);
+        await EnsureBranchExistsAsync(businessId, branchId);
 
-        var categories = await _repository.GetCategoriesByBranchAsync(branchId, categoryType);
+        var categories = await _repository.GetCategoriesByBranchAsync(businessId, branchId, categoryType);
         return categories.Select(MapCategoryDto).ToList();
     }
 
-    public async Task<MenuCategoryDto?> GetCategoryByIdAsync(int id, int branchId)
+    public async Task<MenuCategoryDto?> GetCategoryByIdAsync(int id, int businessId, int branchId)
     {
-        await EnsureBranchExistsAsync(branchId);
+        await EnsureBranchExistsAsync(businessId, branchId);
 
-        var category = await _repository.GetCategoryAsync(id, includeItems: true);
+        var category = await _repository.GetCategoryAsync(id, businessId, branchId, includeItems: true);
         if (category == null || category.BranchId != branchId)
             return null;
 
@@ -186,7 +192,7 @@ public class MenuService : IMenuService
 
     public async Task<MenuCategory> AddCategoryAsync(CreateMenuCategoryDto dto)
     {
-        await ValidateCategoryInputAsync(dto.Name, dto.Code, dto.BranchId);
+        await ValidateCategoryInputAsync(dto.Name, dto.Code, dto.BusinessId, dto.BranchId);
 
         var category = new MenuCategory
         {
@@ -199,23 +205,24 @@ public class MenuService : IMenuService
             Color = dto.Color,
             Status = dto.Status,
             CategoryType = dto.CategoryType,
+            BusinessId = dto.BusinessId,
             BranchId = dto.BranchId
         };
 
         await _repository.AddCategoryAsync(category);
         await _repository.SaveChangesAsync();
-        _cache.Remove(GetPosMenuCacheKey(dto.BranchId));
+        _cache.Remove(GetPosMenuCacheKey(dto.BusinessId, dto.BranchId));
 
         return category;
     }
 
     public async Task<MenuCategory> UpdateCategoryAsync(int id, UpdateMenuCategoryDto dto)
     {
-        var category = await _repository.GetCategoryAsync(id, includeItems: true);
+        var category = await _repository.GetCategoryAsync(id, dto.BusinessId, dto.BranchId, includeItems: true);
         if (category == null)
             throw new InvalidOperationException("Category not found.");
 
-        await ValidateCategoryInputAsync(dto.Name, dto.Code, dto.BranchId, excludeCategoryId: id);
+        await ValidateCategoryInputAsync(dto.Name, dto.Code, dto.BusinessId, dto.BranchId, excludeCategoryId: id);
 
         if (category.BranchId != dto.BranchId)
             throw new InvalidOperationException("Category branch mismatch.");
@@ -240,16 +247,16 @@ public class MenuService : IMenuService
         category.UpdatedDate = DateTime.UtcNow;
 
         await _repository.SaveChangesAsync();
-        _cache.Remove(GetPosMenuCacheKey(dto.BranchId));
+        _cache.Remove(GetPosMenuCacheKey(dto.BusinessId, dto.BranchId));
 
         return category;
     }
 
-    public async Task DeleteCategoryAsync(int id, int branchId)
+    public async Task DeleteCategoryAsync(int id, int businessId, int branchId)
     {
-        await EnsureBranchExistsAsync(branchId);
+        await EnsureBranchExistsAsync(businessId, branchId);
 
-        var category = await _repository.GetCategoryAsync(id, includeItems: true);
+        var category = await _repository.GetCategoryAsync(id, businessId, branchId, includeItems: true);
         if (category == null || category.BranchId != branchId)
             throw new InvalidOperationException("Category not found.");
 
@@ -258,27 +265,27 @@ public class MenuService : IMenuService
 
         _repository.RemoveCategory(category);
         await _repository.SaveChangesAsync();
-        _cache.Remove(GetPosMenuCacheKey(branchId));
+        _cache.Remove(GetPosMenuCacheKey(businessId, branchId));
     }
 
-    public async Task<ICollection<SubCategoryDto>> GetSubCategoriesAsync(int branchId, int? categoryId = null)
+    public async Task<ICollection<SubCategoryDto>> GetSubCategoriesAsync(int businessId, int branchId, int? categoryId = null)
     {
-        await EnsureBranchExistsAsync(branchId);
+        await EnsureBranchExistsAsync(businessId, branchId);
 
         if (categoryId.HasValue)
         {
-            await ValidateSubCategoryContextAsync(categoryId.Value, branchId);
+            await ValidateSubCategoryContextAsync(categoryId.Value, businessId, branchId);
         }
 
-        var subCategories = await _repository.GetSubCategoriesByBranchAsync(branchId, categoryId);
+        var subCategories = await _repository.GetSubCategoriesByBranchAsync(businessId, branchId, categoryId);
         return subCategories.Select(MapSubCategoryDto).ToList();
     }
 
-    public async Task<SubCategoryDto?> GetSubCategoryByIdAsync(int id, int branchId)
+    public async Task<SubCategoryDto?> GetSubCategoryByIdAsync(int id, int businessId, int branchId)
     {
-        await EnsureBranchExistsAsync(branchId);
+        await EnsureBranchExistsAsync(businessId, branchId);
 
-        var subCategory = await _repository.GetSubCategoryAsync(id);
+        var subCategory = await _repository.GetSubCategoryAsync(id, businessId, branchId);
         if (subCategory == null || subCategory.BranchId != branchId)
             return null;
 
@@ -290,10 +297,10 @@ public class MenuService : IMenuService
         if (string.IsNullOrWhiteSpace(dto.Name))
             throw new InvalidOperationException("SubCategory name is required.");
 
-        await EnsureBranchExistsAsync(dto.BranchId);
-        await ValidateSubCategoryContextAsync(dto.CategoryId, dto.BranchId);
+        await EnsureBranchExistsAsync(dto.BusinessId, dto.BranchId);
+        await ValidateSubCategoryContextAsync(dto.CategoryId, dto.BusinessId, dto.BranchId);
 
-        var duplicate = await _repository.GetSubCategoryByNameAsync(dto.Name, dto.BranchId);
+        var duplicate = await _repository.GetSubCategoryByNameAsync(dto.Name, dto.BusinessId, dto.BranchId);
         if (duplicate != null)
             throw new InvalidOperationException("SubCategory name must be unique per branch.");
 
@@ -305,6 +312,7 @@ public class MenuService : IMenuService
             Status = dto.Status,
             Icon = dto.Icon,
             CategoryId = dto.CategoryId,
+            BusinessId = dto.BusinessId,
             BranchId = dto.BranchId
         };
 
@@ -316,18 +324,18 @@ public class MenuService : IMenuService
 
     public async Task<SubCategory> UpdateSubCategoryAsync(int id, UpdateSubCategoryDto dto)
     {
-        var subCategory = await _repository.GetSubCategoryAsync(id);
+        var subCategory = await _repository.GetSubCategoryAsync(id, dto.BusinessId, dto.BranchId);
         if (subCategory == null)
             throw new InvalidOperationException("SubCategory not found.");
 
-        await EnsureBranchExistsAsync(dto.BranchId);
+        await EnsureBranchExistsAsync(dto.BusinessId, dto.BranchId);
 
         if (subCategory.BranchId != dto.BranchId)
             throw new InvalidOperationException("SubCategory branch mismatch.");
 
-        await ValidateSubCategoryContextAsync(dto.CategoryId, dto.BranchId);
+        await ValidateSubCategoryContextAsync(dto.CategoryId, dto.BusinessId, dto.BranchId);
 
-        var duplicate = await _repository.GetSubCategoryByNameAsync(dto.Name, dto.BranchId, id);
+        var duplicate = await _repository.GetSubCategoryByNameAsync(dto.Name, dto.BusinessId, dto.BranchId, id);
         if (duplicate != null)
             throw new InvalidOperationException("SubCategory name must be unique per branch.");
 
@@ -344,11 +352,11 @@ public class MenuService : IMenuService
         return subCategory;
     }
 
-    public async Task DeleteSubCategoryAsync(int id, int branchId)
+    public async Task DeleteSubCategoryAsync(int id, int businessId, int branchId)
     {
-        await EnsureBranchExistsAsync(branchId);
+        await EnsureBranchExistsAsync(businessId, branchId);
 
-        var subCategory = await _repository.GetSubCategoryAsync(id);
+        var subCategory = await _repository.GetSubCategoryAsync(id, businessId, branchId);
         if (subCategory == null || subCategory.BranchId != branchId)
             throw new InvalidOperationException("SubCategory not found.");
 
@@ -356,15 +364,15 @@ public class MenuService : IMenuService
         await _repository.SaveChangesAsync();
     }
 
-    public async Task<ICollection<MenuItemDto>> GetMenuItemsAsync(int branchId, ProductType? productType = null, bool? isSaleable = null, bool? isInventoryItem = null)
+    public async Task<ICollection<MenuItemDto>> GetMenuItemsAsync(int businessId, int branchId, ProductType? productType = null, bool? isSaleable = null, bool? isInventoryItem = null)
     {
-        var items = await _repository.GetMenuItemsByBranchAsync(branchId, productType, isSaleable, isInventoryItem);
+        var items = await _repository.GetMenuItemsByBranchAsync(businessId, branchId, productType, isSaleable, isInventoryItem);
         return items.Select(MapMenuItemDto).ToList();
     }
 
-    public async Task<MenuItemDto?> GetMenuItemByIdAsync(int id, int branchId)
+    public async Task<MenuItemDto?> GetMenuItemByIdAsync(int id, int businessId, int branchId)
     {
-        var item = await _repository.GetMenuItemAsync(id, includeOptions: true);
+        var item = await _repository.GetMenuItemAsync(id, businessId, branchId, includeOptions: true);
         if (item == null || item.BranchId != branchId)
             return null;
 
@@ -373,7 +381,7 @@ public class MenuService : IMenuService
 
     public async Task<MenuItem> AddMenuItemAsync(CreateMenuItemDto dto)
     {
-        var category = await _repository.GetCategoryAsync(dto.MenuCategoryId);
+        var category = await _repository.GetCategoryAsync(dto.MenuCategoryId, dto.BusinessId, dto.BranchId);
         if (category == null)
             throw new InvalidOperationException("Menu category not found.");
 
@@ -393,6 +401,7 @@ public class MenuService : IMenuService
             TaxPercentage = dto.Tax,
             PreparationTime = dto.PreparationTime,
             MenuCategoryId = dto.MenuCategoryId,
+            BusinessId = dto.BusinessId,
             BranchId = dto.BranchId,
             ProductType = dto.ProductType,
             IsSaleable = expectedFlags.isSaleable,
@@ -403,33 +412,35 @@ public class MenuService : IMenuService
             {
                 Name = v.Name,
                 Price = v.Price,
+                BusinessId = dto.BusinessId,
                 BranchId = dto.BranchId
             }).ToList(),
             Addons = dto.Addons.Select(a => new MenuItemAddon
             {
                 Name = a.Name,
                 Price = a.Price,
+                BusinessId = dto.BusinessId,
                 BranchId = dto.BranchId
             }).ToList()
         };
 
         await _repository.AddMenuItemAsync(menuItem);
         await _repository.SaveChangesAsync();
-        _cache.Remove(GetPosMenuCacheKey(dto.BranchId));
+        _cache.Remove(GetPosMenuCacheKey(dto.BusinessId, dto.BranchId));
 
         return menuItem;
     }
 
     public async Task<MenuItem> UpdateMenuItemAsync(int id, UpdateMenuItemDto dto)
     {
-        var menuItem = await _repository.GetMenuItemAsync(id, includeOptions: true);
+        var menuItem = await _repository.GetMenuItemAsync(id, dto.BusinessId, dto.BranchId, includeOptions: true);
         if (menuItem == null)
             throw new InvalidOperationException("Product not found.");
 
         if (menuItem.BranchId != dto.BranchId)
             throw new InvalidOperationException("Product branch mismatch.");
 
-        var category = await _repository.GetCategoryAsync(dto.MenuCategoryId);
+        var category = await _repository.GetCategoryAsync(dto.MenuCategoryId, dto.BusinessId, dto.BranchId);
         if (category == null)
             throw new InvalidOperationException("Menu category not found.");
 
@@ -455,59 +466,61 @@ public class MenuService : IMenuService
         menuItem.UpdatedDate = DateTime.UtcNow;
 
         await _repository.SaveChangesAsync();
-        _cache.Remove(GetPosMenuCacheKey(dto.BranchId));
+        _cache.Remove(GetPosMenuCacheKey(dto.BusinessId, dto.BranchId));
 
         return menuItem;
     }
 
-    public async Task DeleteMenuItemAsync(int id, int branchId)
+    public async Task DeleteMenuItemAsync(int id, int businessId, int branchId)
     {
-        var menuItem = await _repository.GetMenuItemAsync(id, includeOptions: true);
+        var menuItem = await _repository.GetMenuItemAsync(id, businessId, branchId, includeOptions: true);
         if (menuItem == null || menuItem.BranchId != branchId)
             throw new InvalidOperationException("Product not found.");
 
         _repository.RemoveMenuItem(menuItem);
         await _repository.SaveChangesAsync();
-        _cache.Remove(GetPosMenuCacheKey(branchId));
+        _cache.Remove(GetPosMenuCacheKey(businessId, branchId));
     }
 
-    public async Task<MenuItemVariant> AddVariantAsync(CreateMenuItemVariantDto dto, int menuItemId, int branchId)
+    public async Task<MenuItemVariant> AddVariantAsync(CreateMenuItemVariantDto dto, int menuItemId, int businessId, int branchId)
     {
         var variant = new MenuItemVariant
         {
             Name = dto.Name,
             Price = dto.Price,
             MenuItemId = menuItemId,
+            BusinessId = businessId,
             BranchId = branchId
         };
 
         await _repository.AddVariantAsync(variant);
         await _repository.SaveChangesAsync();
-        _cache.Remove(GetPosMenuCacheKey(branchId));
+        _cache.Remove(GetPosMenuCacheKey(businessId, branchId));
 
         return variant;
     }
 
-    public async Task<MenuItemAddon> AddAddonAsync(CreateMenuItemAddonDto dto, int menuItemId, int branchId)
+    public async Task<MenuItemAddon> AddAddonAsync(CreateMenuItemAddonDto dto, int menuItemId, int businessId, int branchId)
     {
         var addon = new MenuItemAddon
         {
             Name = dto.Name,
             Price = dto.Price,
             MenuItemId = menuItemId,
+            BusinessId = businessId,
             BranchId = branchId
         };
 
         await _repository.AddAddonAsync(addon);
         await _repository.SaveChangesAsync();
-        _cache.Remove(GetPosMenuCacheKey(branchId));
+        _cache.Remove(GetPosMenuCacheKey(businessId, branchId));
 
         return addon;
     }
 
-    public async Task<MenuDto> GetFullMenuAsync(int branchId)
+    public async Task<MenuDto> GetFullMenuAsync(int businessId, int branchId)
     {
-        var categories = await _repository.GetCategoriesWithItemsAsync(branchId);
+        var categories = await _repository.GetCategoriesWithItemsAsync(businessId, branchId);
 
         var menuDto = new MenuDto
         {
@@ -517,21 +530,21 @@ public class MenuService : IMenuService
         return menuDto;
     }
 
-    public async Task<MenuDto> GetPosMenuAsync(int branchId)
+    public async Task<MenuDto> GetPosMenuAsync(int businessId, int branchId)
     {
-        if (_cache.TryGetValue(GetPosMenuCacheKey(branchId), out MenuDto? cachedMenu) && cachedMenu != null)
+        if (_cache.TryGetValue(GetPosMenuCacheKey(businessId, branchId), out MenuDto? cachedMenu) && cachedMenu != null)
         {
             return cachedMenu;
         }
 
-        var categories = await _repository.GetPosCategoriesWithItemsAsync(branchId);
+        var categories = await _repository.GetPosCategoriesWithItemsAsync(businessId, branchId);
 
         var menu = new MenuDto
         {
             Categories = categories.Select(MapCategoryDto).ToList()
         };
 
-        _cache.Set(GetPosMenuCacheKey(branchId), menu, PosCacheDuration);
+        _cache.Set(GetPosMenuCacheKey(businessId, branchId), menu, PosCacheDuration);
 
         return menu;
     }

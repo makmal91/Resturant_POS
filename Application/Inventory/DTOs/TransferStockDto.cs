@@ -10,6 +10,8 @@ public class TransferStockDto
     [Range(0.01, double.MaxValue)]
     public decimal Quantity { get; set; }
     [Required]
+    public int BusinessId { get; set; }
+    [Required]
     public int FromBranchId { get; set; }
     [Required]
     public int ToBranchId { get; set; }

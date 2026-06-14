@@ -1,7 +1,7 @@
 import React, { useMemo, useEffect, useState } from 'react';
 import { useFormModal } from '../contexts/FormModalContext';
-import { BranchForm, UserForm, MenuForm, InventoryForm } from './forms';
-import { BranchService, UserService, MenuService, InventoryService } from '../services/apiService';
+import { BranchForm, BusinessForm, UserForm, MenuForm, InventoryForm } from './forms';
+import { BranchService, BusinessService, UserService, MenuService, InventoryService } from '../services/apiService';
 import { getApiErrorMessage } from '../services/api';
 
 interface MenuCategoryOption {
@@ -19,6 +19,8 @@ const EMPTY_MENU_FORM_DATA = {
   variants: [],
 };
 
+const PANEL_TRANSITION_MS = 300;
+
 const FormModal: React.FC = () => {
   const { isOpen, formType, editingData, closeForm } = useFormModal();
   const isEditMode = editingData?.id != null;
@@ -28,6 +30,35 @@ const FormModal: React.FC = () => {
   const [menuCategories, setMenuCategories] = useState<MenuCategoryOption[]>([]);
   const [isMenuCategoriesLoading, setIsMenuCategoriesLoading] = useState(false);
   const [menuCategoriesError, setMenuCategoriesError] = useState<string | null>(null);
+  const [isRendered, setIsRendered] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setIsRendered(true);
+      const frame = window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => setIsVisible(true));
+      });
+      return () => window.cancelAnimationFrame(frame);
+    }
+
+    setIsVisible(false);
+    const timer = window.setTimeout(() => setIsRendered(false), PANEL_TRANSITION_MS);
+    return () => window.clearTimeout(timer);
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isRendered) {
+      return undefined;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isRendered]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -171,6 +202,57 @@ const FormModal: React.FC = () => {
     }
   };
 
+  const handleBusinessSubmit = async (data: any) => {
+    setIsSubmitting(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    const name = String(data?.name ?? '').trim();
+    const legalName = String(data?.legalName ?? '').trim();
+
+    if (!name || !legalName) {
+      setError('Business name and legal name are required.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('name', name);
+    formData.append('legalName', legalName);
+    formData.append('phone', String(data?.phone ?? '').trim());
+    formData.append('email', String(data?.email ?? '').trim());
+    formData.append('address', String(data?.address ?? '').trim());
+    formData.append('taxNumber', String(data?.taxNumber ?? '').trim());
+    formData.append('currency', String(data?.currency ?? 'USD').trim().toUpperCase());
+    formData.append('timeZone', String(data?.timeZone ?? 'UTC').trim());
+    formData.append(
+      'isActive',
+      String(data?.status ?? 'Active').toLowerCase() !== 'inactive' ? 'true' : 'false'
+    );
+
+    if (data?.logoFile instanceof File) {
+      formData.append('logo', data.logoFile);
+    }
+
+    if (data?.removeLogo) {
+      formData.append('removeLogo', 'true');
+    }
+
+    try {
+      if (isEditMode) {
+        await BusinessService.update(editingData.id, formData);
+      } else {
+        await BusinessService.create(formData);
+      }
+
+      closeWithSuccess(isEditMode ? 'Business updated successfully.' : 'Business created successfully.');
+    } catch (err: any) {
+      setError(getApiErrorMessage(err, 'Failed to save business'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleMenuSubmit = async (data: any) => {
     setIsSubmitting(true);
     setError(null);
@@ -256,8 +338,6 @@ const FormModal: React.FC = () => {
     }
   };
 
-  if (!isOpen) return null;
-
   const getFormComponent = () => {
     switch (formType) {
       case 'branch':
@@ -276,6 +356,15 @@ const FormModal: React.FC = () => {
             onSubmit={handleUserSubmit}
             isLoading={isSubmitting}
             submitLabel={isEditMode ? 'Update User' : 'Create User'}
+          />
+        );
+      case 'business':
+        return (
+          <BusinessForm
+            initialData={editingData}
+            onSubmit={handleBusinessSubmit}
+            isLoading={isSubmitting}
+            submitLabel={isEditMode ? 'Update Business' : 'Create Business'}
           />
         );
       case 'menu':
@@ -305,57 +394,66 @@ const FormModal: React.FC = () => {
     }
   };
 
+  if (!isRendered) return null;
+
+  const panelWidthClass = formType === 'business' ? 'max-w-4xl' : 'max-w-2xl';
+
   return (
     <>
-      {/* Modal Backdrop */}
       <div
-        className="fixed inset-0 bg-black bg-opacity-50 z-40 transition-opacity"
+        className={`fixed inset-0 z-40 bg-black transition-opacity duration-300 ease-in-out ${
+          isVisible ? 'bg-opacity-50' : 'bg-opacity-0'
+        }`}
         onClick={closeForm}
+        aria-hidden="true"
       />
 
-      {/* Modal Container */}
-      <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center">
-        <div
-          className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {/* Modal Header */}
-          <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
+      <div
+        role="dialog"
+        aria-modal="true"
+        className={`fixed inset-y-0 right-0 z-50 h-full w-full ${panelWidthClass} bg-white shadow-2xl flex flex-col overflow-hidden border-l border-gray-200 transition-transform duration-300 ease-in-out ${
+          isVisible ? 'translate-x-0' : 'translate-x-full'
+        }`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="shrink-0 z-10 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
+          <div>
             <h2 className="text-xl font-semibold text-gray-900">
               {isEditMode ? 'Edit' : 'Create'} {formType?.charAt(0).toUpperCase() + formType?.slice(1)}
             </h2>
-            <button
-              onClick={closeForm}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
-            >
-              <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
+            <p className="text-sm text-gray-500 mt-0.5">Fill in the details below</p>
           </div>
+          <button
+            type="button"
+            onClick={closeForm}
+            className="rounded-lg p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+            aria-label="Close panel"
+          >
+            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+        </div>
 
-          {/* Error Message */}
-          {error && (
-            <div className="border-b border-red-200 bg-red-50 px-6 py-4">
-              <p className="text-sm text-red-700">{error}</p>
-            </div>
-          )}
-
-          {successMessage && (
-            <div className="border-b border-green-200 bg-green-50 px-6 py-4">
-              <p className="text-sm text-green-700">{successMessage}</p>
-            </div>
-          )}
-
-          {/* Modal Body */}
-          <div className="p-6">
-            {getFormComponent()}
+        {error && (
+          <div className="shrink-0 border-b border-red-200 bg-red-50 px-6 py-4">
+            <p className="text-sm text-red-700">{error}</p>
           </div>
+        )}
+
+        {successMessage && (
+          <div className="shrink-0 border-b border-green-200 bg-green-50 px-6 py-4">
+            <p className="text-sm text-green-700">{successMessage}</p>
+          </div>
+        )}
+
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          {getFormComponent()}
         </div>
       </div>
     </>

@@ -13,6 +13,7 @@ public class CreateMenuCategoryDto
     public string Color { get; set; } = string.Empty;
     public bool Status { get; set; } = true;
     public CategoryType CategoryType { get; set; } = CategoryType.Sale;
+    public int BusinessId { get; set; }
     public int BranchId { get; set; }
 }
 
@@ -27,6 +28,7 @@ public class UpdateMenuCategoryDto
     public string Color { get; set; } = string.Empty;
     public bool Status { get; set; } = true;
     public CategoryType CategoryType { get; set; } = CategoryType.Sale;
+    public int BusinessId { get; set; }
     public int BranchId { get; set; }
 }
 
@@ -38,6 +40,7 @@ public class CreateSubCategoryDto
     public bool Status { get; set; } = true;
     public string Icon { get; set; } = string.Empty;
     public int CategoryId { get; set; }
+    public int BusinessId { get; set; }
     public int BranchId { get; set; }
 }
 
@@ -49,6 +52,7 @@ public class UpdateSubCategoryDto
     public bool Status { get; set; } = true;
     public string Icon { get; set; } = string.Empty;
     public int CategoryId { get; set; }
+    public int BusinessId { get; set; }
     public int BranchId { get; set; }
 }
 
@@ -60,6 +64,7 @@ public class CreateMenuItemDto
     public decimal Tax { get; set; } // TaxPercentage
     public int PreparationTime { get; set; }
     public int MenuCategoryId { get; set; }
+    public int BusinessId { get; set; }
     public int BranchId { get; set; }
     public ProductType ProductType { get; set; } = ProductType.FinishedGood;
     public bool? IsSaleable { get; set; }
@@ -78,6 +83,7 @@ public class UpdateMenuItemDto
     public decimal Tax { get; set; }
     public int PreparationTime { get; set; }
     public int MenuCategoryId { get; set; }
+    public int BusinessId { get; set; }
     public int BranchId { get; set; }
     public ProductType ProductType { get; set; } = ProductType.FinishedGood;
     public bool? IsSaleable { get; set; }
@@ -115,6 +121,7 @@ public class MenuCategoryDto
     public string Color { get; set; } = string.Empty;
     public bool Status { get; set; } = true;
     public CategoryType CategoryType { get; set; } = CategoryType.Sale;
+    public int BusinessId { get; set; }
     public int BranchId { get; set; }
     public string BranchName { get; set; } = string.Empty;
     public List<SubCategoryDto> SubCategories { get; set; } = new();
@@ -131,6 +138,7 @@ public class SubCategoryDto
     public string Icon { get; set; } = string.Empty;
     public int CategoryId { get; set; }
     public string CategoryName { get; set; } = string.Empty;
+    public int BusinessId { get; set; }
     public int BranchId { get; set; }
     public string BranchName { get; set; } = string.Empty;
 }
@@ -144,6 +152,7 @@ public class MenuItemDto
     public decimal Tax { get; set; }
     public int PreparationTime { get; set; }
     public int MenuCategoryId { get; set; }
+    public int BusinessId { get; set; }
     public int BranchId { get; set; }
     public ProductType ProductType { get; set; } = ProductType.FinishedGood;
     public bool IsSaleable { get; set; }

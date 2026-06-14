@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import api, { getApiErrorMessage } from '../services/api'
+import { useTenantStore } from './useTenantStore'
 
 export interface BranchOption {
   id: number
@@ -50,6 +51,10 @@ export const useBranchStore = create<BranchState>((set, get) => ({
 
   setSelectedBranchId: (branchId) => {
     set({ selectedBranchId: branchId })
+
+    if (branchId && branchId > 0) {
+      useTenantStore.getState().setBranchId(branchId)
+    }
   },
 
   getSelectedBranch: () => {

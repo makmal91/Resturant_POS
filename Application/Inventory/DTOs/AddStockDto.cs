@@ -10,5 +10,7 @@ public class AddStockDto
     [Range(0.01, double.MaxValue)]
     public decimal Quantity { get; set; }
     [Required]
+    public int BusinessId { get; set; }
+    [Required]
     public int BranchId { get; set; }
 }

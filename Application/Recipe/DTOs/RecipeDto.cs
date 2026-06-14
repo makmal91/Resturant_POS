@@ -14,6 +14,8 @@ public class CreateRecipeDto
     [Required]
     public string Unit { get; set; } = string.Empty;
     [Required]
+    public int BusinessId { get; set; }
+    [Required]
     public int BranchId { get; set; }
 }
 

@@ -14,70 +14,72 @@ public class MenuRepository : IMenuRepository
         _context = context;
     }
 
-    public async Task<MenuCategory?> GetCategoryAsync(int id, bool includeItems = false)
+    public async Task<MenuCategory?> GetCategoryAsync(int id, int businessId, int branchId, bool includeItems = false)
     {
         if (!includeItems)
         {
-            return await _context.MenuCategories.FindAsync(id);
+            return await _context.MenuCategories
+                .FirstOrDefaultAsync(c => c.Id == id && c.BusinessId == businessId && c.BranchId == branchId);
         }
 
         return await _context.MenuCategories
             .Include(c => c.Branch)
             .Include(c => c.SubCategories)
             .Include(c => c.MenuItems)
-            .FirstOrDefaultAsync(c => c.Id == id);
+                .FirstOrDefaultAsync(c => c.Id == id && c.BusinessId == businessId && c.BranchId == branchId);
     }
 
-    public async Task<MenuCategory?> GetCategoryByNameAsync(string name, int branchId, int? excludeCategoryId = null)
+            public async Task<MenuCategory?> GetCategoryByNameAsync(string name, int businessId, int branchId, int? excludeCategoryId = null)
     {
         var normalized = name.Trim();
 
         return await _context.MenuCategories
-            .Where(c => c.BranchId == branchId && c.Name.ToLower() == normalized.ToLower())
+            .Where(c => c.BusinessId == businessId && c.BranchId == branchId && c.Name.ToLower() == normalized.ToLower())
             .Where(c => !excludeCategoryId.HasValue || c.Id != excludeCategoryId.Value)
             .FirstOrDefaultAsync();
     }
 
-    public async Task<bool> BranchExistsAsync(int branchId)
+    public async Task<bool> BranchExistsAsync(int businessId, int branchId)
     {
-        return await _context.Branches.AnyAsync(b => b.Id == branchId);
+        return await _context.Branches.AnyAsync(b => b.Id == branchId && b.BusinessId == businessId);
     }
 
-    public async Task<SubCategory?> GetSubCategoryAsync(int id)
+    public async Task<SubCategory?> GetSubCategoryAsync(int id, int businessId, int branchId)
     {
         return await _context.SubCategories
             .Include(sc => sc.Category)
             .Include(sc => sc.Branch)
-            .FirstOrDefaultAsync(sc => sc.Id == id);
+            .FirstOrDefaultAsync(sc => sc.Id == id && sc.BusinessId == businessId && sc.BranchId == branchId);
     }
 
-    public async Task<SubCategory?> GetSubCategoryByNameAsync(string name, int branchId, int? excludeSubCategoryId = null)
+    public async Task<SubCategory?> GetSubCategoryByNameAsync(string name, int businessId, int branchId, int? excludeSubCategoryId = null)
     {
         var normalized = name.Trim();
 
         return await _context.SubCategories
-            .Where(sc => sc.BranchId == branchId && sc.Name.ToLower() == normalized.ToLower())
+            .Where(sc => sc.BusinessId == businessId && sc.BranchId == branchId && sc.Name.ToLower() == normalized.ToLower())
             .Where(sc => !excludeSubCategoryId.HasValue || sc.Id != excludeSubCategoryId.Value)
             .FirstOrDefaultAsync();
     }
 
-    public async Task<MenuItem?> GetMenuItemAsync(int id, bool includeOptions = false)
+    public async Task<MenuItem?> GetMenuItemAsync(int id, int businessId, int branchId, bool includeOptions = false)
     {
         if (!includeOptions)
         {
-            return await _context.MenuItems.FindAsync(id);
+            return await _context.MenuItems
+                .FirstOrDefaultAsync(i => i.Id == id && i.BusinessId == businessId && i.BranchId == branchId);
         }
 
         return await _context.MenuItems
             .Include(i => i.Variants)
             .Include(i => i.Addons)
-            .FirstOrDefaultAsync(i => i.Id == id);
+                .FirstOrDefaultAsync(i => i.Id == id && i.BusinessId == businessId && i.BranchId == branchId);
     }
 
-    public async Task<ICollection<MenuCategory>> GetCategoriesByBranchAsync(int branchId, CategoryType? categoryType = null)
+            public async Task<ICollection<MenuCategory>> GetCategoriesByBranchAsync(int businessId, int branchId, CategoryType? categoryType = null)
     {
         var query = _context.MenuCategories
-            .Where(c => c.BranchId == branchId)
+                .Where(c => c.BusinessId == businessId && c.BranchId == branchId)
             .Include(c => c.Branch)
             .Include(c => c.SubCategories)
             .AsQueryable();
@@ -93,10 +95,10 @@ public class MenuRepository : IMenuRepository
             .ToListAsync();
     }
 
-    public async Task<ICollection<SubCategory>> GetSubCategoriesByBranchAsync(int branchId, int? categoryId = null)
+    public async Task<ICollection<SubCategory>> GetSubCategoriesByBranchAsync(int businessId, int branchId, int? categoryId = null)
     {
         var query = _context.SubCategories
-            .Where(sc => sc.BranchId == branchId)
+            .Where(sc => sc.BusinessId == businessId && sc.BranchId == branchId)
             .Include(sc => sc.Category)
             .Include(sc => sc.Branch)
             .AsQueryable();
@@ -112,10 +114,10 @@ public class MenuRepository : IMenuRepository
             .ToListAsync();
     }
 
-    public async Task<ICollection<MenuItem>> GetMenuItemsByBranchAsync(int branchId, ProductType? productType = null, bool? isSaleable = null, bool? isInventoryItem = null)
+    public async Task<ICollection<MenuItem>> GetMenuItemsByBranchAsync(int businessId, int branchId, ProductType? productType = null, bool? isSaleable = null, bool? isInventoryItem = null)
     {
         var query = _context.MenuItems
-            .Where(i => i.BranchId == branchId)
+            .Where(i => i.BusinessId == businessId && i.BranchId == branchId)
             .Include(i => i.MenuCategory)
             .Include(i => i.Variants)
             .Include(i => i.Addons)
@@ -141,10 +143,10 @@ public class MenuRepository : IMenuRepository
             .ToListAsync();
     }
 
-    public async Task<ICollection<MenuCategory>> GetCategoriesWithItemsAsync(int branchId)
+    public async Task<ICollection<MenuCategory>> GetCategoriesWithItemsAsync(int businessId, int branchId)
     {
         return await _context.MenuCategories
-            .Where(c => c.BranchId == branchId)
+            .Where(c => c.BusinessId == businessId && c.BranchId == branchId)
             .Include(c => c.Branch)
             .Include(c => c.SubCategories)
             .Include(c => c.MenuItems)
@@ -154,10 +156,10 @@ public class MenuRepository : IMenuRepository
             .ToListAsync();
     }
 
-    public async Task<ICollection<MenuCategory>> GetPosCategoriesWithItemsAsync(int branchId)
+    public async Task<ICollection<MenuCategory>> GetPosCategoriesWithItemsAsync(int businessId, int branchId)
     {
         return await _context.MenuCategories
-            .Where(c => c.BranchId == branchId && c.CategoryType == CategoryType.Sale)
+            .Where(c => c.BusinessId == businessId && c.BranchId == branchId && c.CategoryType == CategoryType.Sale)
             .Include(c => c.Branch)
             .Include(c => c.SubCategories)
             .Include(c => c.MenuItems.Where(i =>

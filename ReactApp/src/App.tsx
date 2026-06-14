@@ -6,8 +6,15 @@ import ConfirmDialog from './components/ConfirmDialog';
 import { FormModalProvider } from './contexts/FormModalContext';
 import { ConfirmDialogProvider } from './contexts/ConfirmDialogContext';
 import { navigationItems } from './navigationConfig';
+import { useTenantStore } from './stores/useTenantStore';
 
 function App() {
+  const hydrateTenant = useTenantStore((state) => state.hydrate);
+
+  React.useEffect(() => {
+    hydrateTenant();
+  }, [hydrateTenant]);
+
   return (
     <Router>
       <FormModalProvider>

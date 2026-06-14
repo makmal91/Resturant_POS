@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using POSSystem.API.Extensions;
 using POSSystem.Application.Menu.DTOs;
 using POSSystem.Application.Menu.Interfaces;
 
@@ -16,14 +17,17 @@ public class SubCategoriesController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetSubCategories([FromQuery] int branchId, [FromQuery] int? categoryId = null)
+    public async Task<IActionResult> GetSubCategories([FromQuery] int branchId, [FromQuery] int? businessId = null, [FromQuery] int? categoryId = null)
     {
-        if (branchId <= 0)
+        var resolvedBusinessId = this.ResolveBusinessId(businessId);
+        var resolvedBranchId = this.ResolveBranchId(branchId);
+
+        if (resolvedBranchId <= 0)
             return BadRequest(new { message = "branchId is required." });
 
         try
         {
-            var subCategories = await _menuService.GetSubCategoriesAsync(branchId, categoryId);
+            var subCategories = await _menuService.GetSubCategoriesAsync(resolvedBusinessId, resolvedBranchId, categoryId);
             return Ok(new { subCategories });
         }
         catch (InvalidOperationException ex)
@@ -33,12 +37,15 @@ public class SubCategoriesController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
-    public async Task<IActionResult> GetSubCategoryById(int id, [FromQuery] int branchId)
+    public async Task<IActionResult> GetSubCategoryById(int id, [FromQuery] int branchId, [FromQuery] int? businessId = null)
     {
-        if (branchId <= 0)
+        var resolvedBusinessId = this.ResolveBusinessId(businessId);
+        var resolvedBranchId = this.ResolveBranchId(branchId);
+
+        if (resolvedBranchId <= 0)
             return BadRequest(new { message = "branchId is required." });
 
-        var subCategory = await _menuService.GetSubCategoryByIdAsync(id, branchId);
+        var subCategory = await _menuService.GetSubCategoryByIdAsync(id, resolvedBusinessId, resolvedBranchId);
         if (subCategory == null)
             return NotFound();
 
@@ -48,6 +55,9 @@ public class SubCategoriesController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> CreateSubCategory([FromBody] CreateSubCategoryDto dto)
     {
+        dto.BusinessId = this.ResolveBusinessId(dto.BusinessId > 0 ? dto.BusinessId : null);
+        dto.BranchId = this.ResolveBranchId(dto.BranchId > 0 ? dto.BranchId : null);
+
         if (dto.BranchId <= 0)
             return BadRequest(new { message = "BranchId is required." });
 
@@ -57,7 +67,7 @@ public class SubCategoriesController : ControllerBase
         try
         {
             var subCategory = await _menuService.AddSubCategoryAsync(dto);
-            return CreatedAtAction(nameof(GetSubCategoryById), new { id = subCategory.Id, branchId = subCategory.BranchId }, subCategory);
+            return CreatedAtAction(nameof(GetSubCategoryById), new { id = subCategory.Id, businessId = subCategory.BusinessId, branchId = subCategory.BranchId }, subCategory);
         }
         catch (InvalidOperationException ex)
         {
@@ -68,6 +78,9 @@ public class SubCategoriesController : ControllerBase
     [HttpPut("{id:int}")]
     public async Task<IActionResult> UpdateSubCategory(int id, [FromBody] UpdateSubCategoryDto dto)
     {
+        dto.BusinessId = this.ResolveBusinessId(dto.BusinessId > 0 ? dto.BusinessId : null);
+        dto.BranchId = this.ResolveBranchId(dto.BranchId > 0 ? dto.BranchId : null);
+
         if (dto.BranchId <= 0)
             return BadRequest(new { message = "BranchId is required." });
 
@@ -86,14 +99,17 @@ public class SubCategoriesController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
-    public async Task<IActionResult> DeleteSubCategory(int id, [FromQuery] int branchId)
+    public async Task<IActionResult> DeleteSubCategory(int id, [FromQuery] int branchId, [FromQuery] int? businessId = null)
     {
-        if (branchId <= 0)
+        var resolvedBusinessId = this.ResolveBusinessId(businessId);
+        var resolvedBranchId = this.ResolveBranchId(branchId);
+
+        if (resolvedBranchId <= 0)
             return BadRequest(new { message = "branchId is required." });
 
         try
         {
-            await _menuService.DeleteSubCategoryAsync(id, branchId);
+            await _menuService.DeleteSubCategoryAsync(id, resolvedBusinessId, resolvedBranchId);
             return NoContent();
         }
         catch (InvalidOperationException ex)

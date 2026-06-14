@@ -15,7 +15,7 @@ public class InventoryService : IInventoryService
 
     public async Task AddStockAsync(AddStockDto dto)
     {
-        var item = await _repository.GetInventoryItemAsync(dto.ItemId);
+        var item = await _repository.GetInventoryItemAsync(dto.ItemId, dto.BusinessId, dto.BranchId);
         if (item == null) throw new Exception("Inventory item not found");
 
         if (!item.IsInventoryItem)
@@ -31,6 +31,7 @@ public class InventoryService : IInventoryService
             ItemId = dto.ItemId,
             Quantity = dto.Quantity,
             Type = StockMovementType.In,
+            BusinessId = dto.BusinessId,
             BranchToId = dto.BranchId
         };
 
@@ -43,7 +44,7 @@ public class InventoryService : IInventoryService
         if (dto.QuantityDelta == 0)
             throw new Exception("Adjustment quantity must not be zero");
 
-        var item = await _repository.GetInventoryItemAsync(dto.ItemId);
+        var item = await _repository.GetInventoryItemAsync(dto.ItemId, dto.BusinessId, dto.BranchId);
         if (item == null) throw new Exception("Inventory item not found");
         if (item.BranchId != dto.BranchId) throw new Exception("Item not in branch");
 
@@ -64,6 +65,7 @@ public class InventoryService : IInventoryService
             ItemId = dto.ItemId,
             Quantity = dto.QuantityDelta,
             Type = dto.QuantityDelta > 0 ? StockMovementType.In : StockMovementType.Out,
+            BusinessId = dto.BusinessId,
             BranchFromId = dto.QuantityDelta < 0 ? dto.BranchId : null,
             BranchToId = dto.QuantityDelta > 0 ? dto.BranchId : null
         };
@@ -74,7 +76,7 @@ public class InventoryService : IInventoryService
 
     public async Task TransferStockAsync(TransferStockDto dto)
     {
-        var fromItem = await _repository.GetInventoryItemAsync(dto.ItemId);
+        var fromItem = await _repository.GetInventoryItemAsync(dto.ItemId, dto.BusinessId, dto.FromBranchId);
         if (fromItem == null) throw new Exception("Inventory item not found");
         if (fromItem.BranchId != dto.FromBranchId) throw new Exception("Item not in from branch");
 
@@ -85,7 +87,7 @@ public class InventoryService : IInventoryService
 
         fromItem.CurrentStock -= dto.Quantity;
 
-        var toItem = await _repository.GetInventoryItemByNameAndBranchAsync(fromItem.Name, dto.ToBranchId);
+        var toItem = await _repository.GetInventoryItemByNameAndBranchAsync(fromItem.Name, dto.BusinessId, dto.ToBranchId);
         if (toItem == null) throw new Exception("Item not found in to branch");
 
         toItem.CurrentStock += dto.Quantity;
@@ -95,6 +97,7 @@ public class InventoryService : IInventoryService
             ItemId = fromItem.Id,
             Quantity = -dto.Quantity,
             Type = StockMovementType.Transfer,
+            BusinessId = dto.BusinessId,
             BranchFromId = dto.FromBranchId,
             BranchToId = dto.ToBranchId
         };
@@ -104,6 +107,7 @@ public class InventoryService : IInventoryService
             ItemId = toItem.Id,
             Quantity = dto.Quantity,
             Type = StockMovementType.Transfer,
+            BusinessId = dto.BusinessId,
             BranchFromId = dto.FromBranchId,
             BranchToId = dto.ToBranchId
         };
@@ -113,9 +117,9 @@ public class InventoryService : IInventoryService
         await _repository.SaveChangesAsync();
     }
 
-    public async Task DeductStockAsync(int itemId, decimal quantity, int branchId)
+    public async Task DeductStockAsync(int itemId, decimal quantity, int businessId, int branchId)
     {
-        var item = await _repository.GetInventoryItemAsync(itemId);
+        var item = await _repository.GetInventoryItemAsync(itemId, businessId, branchId);
         if (item == null) throw new Exception("Inventory item not found");
         if (item.BranchId != branchId) throw new Exception("Item not in branch");
 
@@ -134,6 +138,7 @@ public class InventoryService : IInventoryService
             ItemId = itemId,
             Quantity = -quantity,
             Type = StockMovementType.Out,
+            BusinessId = businessId,
             BranchFromId = branchId
         };
 
@@ -141,8 +146,8 @@ public class InventoryService : IInventoryService
         await _repository.SaveChangesAsync();
     }
 
-    public async Task<ICollection<InventoryItem>> GetInventoryItemsAsync(int branchId)
+    public async Task<ICollection<InventoryItem>> GetInventoryItemsAsync(int businessId, int branchId)
     {
-        return await _repository.GetInventoryItemsByBranchAsync(branchId);
+        return await _repository.GetInventoryItemsByBranchAsync(businessId, branchId);
     }
 }

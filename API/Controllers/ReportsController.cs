@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using POSSystem.API.Extensions;
 using POSSystem.Domain;
 using POSSystem.Infrastructure.Data;
 
@@ -17,13 +18,16 @@ public class ReportsController : ControllerBase
     }
 
     [HttpGet("sales")]
-    public async Task<IActionResult> GetSalesReport([FromQuery] int branchId, [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null)
+    public async Task<IActionResult> GetSalesReport([FromQuery] int branchId, [FromQuery] int? businessId = null, [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null)
     {
+        var resolvedBusinessId = this.ResolveBusinessId(businessId);
+        var resolvedBranchId = this.ResolveBranchId(branchId);
+
         var fromDate = from ?? DateTime.UtcNow.Date;
         var toDate = to ?? DateTime.UtcNow;
 
         var orderItems = await _db.OrderItems
-            .Where(oi => oi.BranchId == branchId)
+            .Where(oi => oi.BusinessId == resolvedBusinessId && oi.BranchId == resolvedBranchId)
             .Include(oi => oi.Order)
             .Include(oi => oi.MenuItem)
             .Where(oi => oi.Order.Status == OrderStatus.Completed &&
@@ -34,7 +38,7 @@ public class ReportsController : ControllerBase
 
         var menuItemIds = orderItems.Select(i => i.MenuItemId).Distinct().ToList();
         var recipes = await _db.Recipes
-            .Where(r => menuItemIds.Contains(r.MenuItemId))
+            .Where(r => r.BusinessId == resolvedBusinessId && r.BranchId == resolvedBranchId && menuItemIds.Contains(r.MenuItemId))
             .Include(r => r.Ingredient)
             .ToListAsync();
 
@@ -64,10 +68,14 @@ public class ReportsController : ControllerBase
     }
 
     [HttpGet("inventory")]
-    public async Task<IActionResult> GetInventoryReport([FromQuery] int branchId)
+    public async Task<IActionResult> GetInventoryReport([FromQuery] int branchId, [FromQuery] int? businessId = null)
     {
+        var resolvedBusinessId = this.ResolveBusinessId(businessId);
+        var resolvedBranchId = this.ResolveBranchId(branchId);
+
         var items = await _db.InventoryItems
-            .Where(i => i.BranchId == branchId &&
+            .Where(i => i.BusinessId == resolvedBusinessId &&
+                        i.BranchId == resolvedBranchId &&
                         (i.ProductType == ProductType.RawMaterial || i.ProductType == ProductType.SemiFinished))
             .Select(i => new
             {
@@ -86,6 +94,34 @@ public class ReportsController : ControllerBase
         {
             items,
             totalStockValue = items.Sum(i => i.stockValue)
+        });
+    }
+
+    [HttpGet("sales-by-business")]
+    public async Task<IActionResult> GetBusinessSalesReport([FromQuery] int? businessId = null, [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null)
+    {
+        var resolvedBusinessId = this.ResolveBusinessId(businessId);
+        var fromDate = from ?? DateTime.UtcNow.Date;
+        var toDate = to ?? DateTime.UtcNow;
+
+        var branchSales = await _db.Orders
+            .Where(o => o.BusinessId == resolvedBusinessId && o.Status == OrderStatus.Completed && o.CreatedDate >= fromDate && o.CreatedDate <= toDate)
+            .GroupBy(o => o.BranchId)
+            .Select(g => new
+            {
+                branchId = g.Key,
+                totalOrders = g.Count(),
+                totalSales = g.Sum(x => x.TotalAmount)
+            })
+            .ToListAsync();
+
+        return Ok(new
+        {
+            businessId = resolvedBusinessId,
+            from = fromDate,
+            to = toDate,
+            totalSales = branchSales.Sum(x => x.totalSales),
+            branches = branchSales
         });
     }
 }

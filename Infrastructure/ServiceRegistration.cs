@@ -6,6 +6,7 @@ using POSSystem.Application.Orders.Interfaces;
 using POSSystem.Application.Menu.Interfaces;
 using POSSystem.Application.Inventory.Interfaces;
 using POSSystem.Application.Recipe.Interfaces;
+using POSSystem.Application.Business.Interfaces;
 using POSSystem.Infrastructure.Data;
 using POSSystem.Infrastructure.Repositories;
 
@@ -23,6 +24,7 @@ public static class ServiceRegistration
         services.AddScoped<IMenuRepository, MenuRepository>();
         services.AddScoped<IInventoryRepository, InventoryRepository>();
         services.AddScoped<IRecipeRepository, RecipeRepository>();
+        services.AddScoped<IBusinessRepository, BusinessRepository>();
 
         // Add other infrastructure services here
 

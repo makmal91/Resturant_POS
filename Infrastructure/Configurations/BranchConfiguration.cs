@@ -34,10 +34,6 @@ public class BranchConfiguration : IEntityTypeConfiguration<Branch>
             .IsRequired()
             .HasMaxLength(100);
 
-        builder.Property(b => b.Currency)
-            .IsRequired()
-            .HasMaxLength(10);
-
         builder.Property(b => b.TaxRate)
             .HasPrecision(5, 2);
 
@@ -51,6 +47,14 @@ public class BranchConfiguration : IEntityTypeConfiguration<Branch>
 
         builder.HasIndex(b => b.Email)
             .HasDatabaseName("idx_branch_email");
+
+        builder.HasIndex(b => b.BusinessId)
+            .HasDatabaseName("idx_branch_businessid");
+
+        builder.HasOne(b => b.Business)
+            .WithMany(bs => bs.Branches)
+            .HasForeignKey(b => b.BusinessId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         // Relationships
         builder.HasMany(b => b.Users)

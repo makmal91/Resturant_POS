@@ -17,6 +17,19 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
     config.headers.Authorization = `Bearer ${token}`;
   }
 
+  if (config.data instanceof FormData) {
+    if (typeof config.headers.delete === 'function') {
+      config.headers.delete('Content-Type');
+    } else {
+      delete config.headers['Content-Type'];
+    }
+  }
+
+  const businessId = Number(localStorage.getItem('businessId') ?? 1);
+  const branchId = Number(localStorage.getItem('branchId') ?? 1);
+  config.headers['X-Business-Id'] = Number.isFinite(businessId) && businessId > 0 ? String(businessId) : '1';
+  config.headers['X-Branch-Id'] = Number.isFinite(branchId) && branchId > 0 ? String(branchId) : '1';
+
   const method = config.method?.toUpperCase() ?? 'GET';
   const requestUrl = `${config.baseURL ?? ''}${config.url ?? ''}`;
   console.log(`[API] ${method} ${requestUrl}`, config.params ?? config.data ?? '');

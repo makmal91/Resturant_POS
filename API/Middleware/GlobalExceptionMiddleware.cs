@@ -29,14 +29,26 @@ public class GlobalExceptionMiddleware
 
     private static async Task HandleExceptionAsync(HttpContext context, Exception exception)
     {
+        var statusCode = exception switch
+        {
+            InvalidOperationException => HttpStatusCode.BadRequest,
+            BadHttpRequestException => HttpStatusCode.BadRequest,
+            InvalidDataException => HttpStatusCode.BadRequest,
+            _ => HttpStatusCode.InternalServerError
+        };
+
         context.Response.ContentType = "application/json";
-        context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
+        context.Response.StatusCode = (int)statusCode;
+
+        var message = statusCode == HttpStatusCode.InternalServerError
+            ? "Internal Server Error"
+            : exception.Message;
 
         var response = new
         {
-            StatusCode = context.Response.StatusCode,
-            Message = "Internal Server Error",
-            Details = exception.Message
+            statusCode = context.Response.StatusCode,
+            message,
+            details = exception.Message
         };
 
         await context.Response.WriteAsync(JsonSerializer.Serialize(response));

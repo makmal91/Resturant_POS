@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using POSSystem.API.Extensions;
 using POSSystem.Domain;
 using POSSystem.Infrastructure.Data;
 
@@ -17,12 +18,14 @@ public class KitchenController : ControllerBase
     }
 
     [HttpGet("orders")]
-    public async Task<IActionResult> GetKitchenOrders([FromQuery] int branchId)
+    public async Task<IActionResult> GetKitchenOrders([FromQuery] int branchId, [FromQuery] int? businessId = null)
     {
+        var resolvedBusinessId = this.ResolveBusinessId(businessId);
+        var resolvedBranchId = this.ResolveBranchId(branchId);
         var activeStatuses = new[] { OrderStatus.Pending, OrderStatus.Confirmed, OrderStatus.InProgress };
 
         var orders = await _db.Orders
-            .Where(o => o.BranchId == branchId && activeStatuses.Contains(o.Status))
+            .Where(o => o.BusinessId == resolvedBusinessId && o.BranchId == resolvedBranchId && activeStatuses.Contains(o.Status))
             .Include(o => o.OrderItems)
                 .ThenInclude(oi => oi.MenuItem)
                     .ThenInclude(mi => mi.MenuCategory)

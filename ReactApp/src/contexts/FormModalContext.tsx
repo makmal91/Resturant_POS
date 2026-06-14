@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState } from 'react';
 
-export type FormType = 'branch' | 'user' | 'menu' | 'inventory' | null;
+export type FormType = 'branch' | 'business' | 'user' | 'menu' | 'inventory' | null;
 
 const DEFAULT_BRANCH_FORM_DATA = {
   name: '',
@@ -19,6 +19,18 @@ const DEFAULT_USER_FORM_DATA = {
   branch: '',
   salary: '',
   shift: 'Morning',
+};
+
+const DEFAULT_BUSINESS_FORM_DATA = {
+  name: '',
+  legalName: '',
+  phone: '',
+  email: '',
+  address: '',
+  taxNumber: '',
+  currency: 'USD',
+  timeZone: 'UTC',
+  status: 'Active',
 };
 
 const DEFAULT_INVENTORY_FORM_DATA = {
@@ -54,6 +66,10 @@ const getDefaultFormData = (type: FormType) => {
 
   if (type === 'user') {
     return DEFAULT_USER_FORM_DATA;
+  }
+
+  if (type === 'business') {
+    return DEFAULT_BUSINESS_FORM_DATA;
   }
 
   if (type === 'inventory') {

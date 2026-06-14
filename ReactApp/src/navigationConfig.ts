@@ -12,6 +12,7 @@ export interface NavigationGroup {
 }
 
 import POS from './components/POS';
+import BusinessesList from './components/BusinessesList';
 import BranchesList from './components/BranchesList';
 import UsersList from './components/UsersList';
 import MenuList from './components/MenuList';
@@ -32,6 +33,13 @@ export const navigationItems: NavigationItem[] = [
     label: 'Dashboard',
     component: POS,
     icon: '📊',
+  },
+  {
+    path: '/businesses',
+    label: 'Businesses',
+    component: BusinessesList,
+    icon: '🏬',
+    group: 'Master Data',
   },
   {
     path: '/branches',

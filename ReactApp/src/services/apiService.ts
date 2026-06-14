@@ -15,6 +15,7 @@ export const BranchService = {
       email: String(data?.email ?? ''),
       taxRate: Number(data?.taxRate ?? 0),
       currency: String(data?.currency ?? 'USD'),
+      businessId: Number(data?.businessId ?? data?.companyId ?? 1),
       companyId: Number(data?.companyId ?? 0),
       isActive: Boolean(data?.isActive ?? true),
     };
@@ -30,10 +31,38 @@ export const BranchService = {
     email: String(data?.email ?? ''),
     taxRate: Number(data?.taxRate ?? 0),
     currency: String(data?.currency ?? 'USD'),
+    businessId: Number(data?.businessId ?? data?.companyId ?? 1),
     companyId: Number(data?.companyId ?? 0),
     isActive: Boolean(data?.isActive ?? true),
   }),
   delete: (id: number) => apiClient.delete(`/branches/${id}`),
+};
+
+export const BusinessService = {
+  getLogoUrl: (id: number) => {
+    const baseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim() || '/api';
+    return `${baseUrl.replace(/\/$/, '')}/businesses/${id}/logo`;
+  },
+  getAll: (params?: {
+    page?: number;
+    pageSize?: number;
+    search?: string;
+    sortBy?: string;
+    sortDirection?: 'asc' | 'desc';
+  }) =>
+    apiClient.get('/businesses', {
+      params: {
+        page: params?.page ?? 1,
+        pageSize: params?.pageSize ?? 10,
+        search: params?.search?.trim() || undefined,
+        sortBy: params?.sortBy || undefined,
+        sortDirection: params?.sortDirection || undefined,
+      },
+    }),
+  getById: (id: number) => apiClient.get(`/businesses/${id}`),
+  create: (data: FormData) => apiClient.post('/businesses', data),
+  update: (id: number, data: FormData) => apiClient.put(`/businesses/${id}`, data),
+  delete: (id: number) => apiClient.delete(`/businesses/${id}`),
 };
 
 export const UserService = {

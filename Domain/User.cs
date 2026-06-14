@@ -15,6 +15,7 @@ public class User : BaseEntity
     public ShiftType ShiftType { get; set; }
     public UserStatus Status { get; set; } = UserStatus.Active;
 
+    public virtual Business Business { get; set; } = null!;
     public virtual Role Role { get; set; } = null!;
     public virtual Branch Branch { get; set; } = null!;
     public virtual ICollection<Order> AssignedOrders { get; set; } = new List<Order>();

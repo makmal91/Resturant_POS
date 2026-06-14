@@ -14,28 +14,30 @@ public class InventoryRepository : IInventoryRepository
         _context = context;
     }
 
-    public async Task<InventoryItem?> GetInventoryItemAsync(int id)
-    {
-        return await _context.InventoryItems.FindAsync(id);
-    }
-
-    public async Task<InventoryItem?> GetInventoryItemByNameAndBranchAsync(string name, int branchId)
+    public async Task<InventoryItem?> GetInventoryItemAsync(int id, int businessId, int branchId)
     {
         return await _context.InventoryItems
-            .FirstOrDefaultAsync(i => i.Name == name && i.BranchId == branchId);
+            .FirstOrDefaultAsync(i => i.Id == id && i.BusinessId == businessId && i.BranchId == branchId);
     }
 
-    public async Task<ICollection<InventoryItem>> GetInventoryItemsAsync(IEnumerable<int> ids)
+    public async Task<InventoryItem?> GetInventoryItemByNameAndBranchAsync(string name, int businessId, int branchId)
     {
         return await _context.InventoryItems
-            .Where(i => ids.Contains(i.Id))
+            .FirstOrDefaultAsync(i => i.Name == name && i.BusinessId == businessId && i.BranchId == branchId);
+    }
+
+    public async Task<ICollection<InventoryItem>> GetInventoryItemsAsync(IEnumerable<int> ids, int businessId, int branchId)
+    {
+        return await _context.InventoryItems
+            .Where(i => ids.Contains(i.Id) && i.BusinessId == businessId && i.BranchId == branchId)
             .ToListAsync();
     }
 
-    public async Task<ICollection<InventoryItem>> GetInventoryItemsByBranchAsync(int branchId)
+    public async Task<ICollection<InventoryItem>> GetInventoryItemsByBranchAsync(int businessId, int branchId)
     {
         return await _context.InventoryItems
-            .Where(i => i.BranchId == branchId &&
+            .Where(i => i.BusinessId == businessId &&
+                        i.BranchId == branchId &&
                         i.IsInventoryItem &&
                         (i.ProductType == ProductType.RawMaterial || i.ProductType == ProductType.SemiFinished))
             .ToListAsync();

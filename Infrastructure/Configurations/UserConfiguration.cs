@@ -46,6 +46,9 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.HasIndex(u => u.BranchId)
             .HasDatabaseName("idx_user_branchid");
 
+        builder.HasIndex(u => u.BusinessId)
+            .HasDatabaseName("idx_user_businessid");
+
         builder.HasIndex(u => u.RoleId)
             .HasDatabaseName("idx_user_roleid");
 
@@ -53,6 +56,11 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.HasOne(u => u.Role)
             .WithMany(r => r.Users)
             .HasForeignKey(u => u.RoleId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(u => u.Business)
+            .WithMany()
+            .HasForeignKey(u => u.BusinessId)
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasMany(u => u.AssignedOrders)
