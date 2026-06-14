@@ -32,8 +32,22 @@ public class AuthService : IAuthService
         if (!_passwordHasher.VerifyPassword(request.Password, user.PasswordHash))
             throw new InvalidOperationException("Invalid username or password.");
 
-        var branchIds = user.UserBranches.Select(ub => ub.BranchId).Distinct().ToList();
-        var primaryBranchId = branchIds.FirstOrDefault();
+        var branches = user.UserBranches
+            .Where(ub => ub.Branch != null && ub.Branch.IsActive)
+            .Select(ub => new AuthBranchDto
+            {
+                Id = ub.BranchId,
+                Name = ub.Branch!.Name
+            })
+            .DistinctBy(b => b.Id)
+            .OrderBy(b => b.Name)
+            .ToList();
+
+        if (branches.Count == 0)
+            throw new InvalidOperationException("No branch assigned.");
+
+        var branchIds = branches.Select(b => b.Id).ToList();
+        var primaryBranchId = branchIds[0];
 
         var token = _tokenService.GenerateToken(
             user.Id,
@@ -47,15 +61,16 @@ public class AuthService : IAuthService
         return new LoginResponseDto
         {
             Token = token,
-            UserId = user.Id,
-            FullName = user.FullName,
-            Username = user.Username,
-            Email = user.Email,
-            RoleId = user.RoleId,
-            RoleName = user.Role.Name,
-            BusinessId = user.BusinessId,
-            PrimaryBranchId = primaryBranchId,
-            BranchIds = branchIds
+            User = new AuthUserDto
+            {
+                Id = user.Id,
+                Username = user.Username,
+                FullName = user.FullName,
+                BusinessId = user.BusinessId,
+                RoleId = user.RoleId,
+                RoleName = user.Role.Name
+            },
+            Branches = branches
         };
     }
 }

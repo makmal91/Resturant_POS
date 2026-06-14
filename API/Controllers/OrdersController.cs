@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using POSSystem.API.Extensions;
 using POSSystem.Application.Orders.DTOs;
@@ -6,6 +7,7 @@ using POSSystem.Domain;
 
 namespace POSSystem.API.Controllers;
 
+[Authorize]
 [ApiController]
 [Route("api/[controller]")]
 public class OrdersController : ControllerBase

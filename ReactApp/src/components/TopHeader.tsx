@@ -1,10 +1,45 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
+import { useBranchStore } from '../stores/useBranchStore';
 
 const TopHeader: React.FC = () => {
+  const navigate = useNavigate();
+  const { user, logout, selectedBranchId } = useAuth();
+  const branches = useBranchStore((state) => state.branches);
+  const setSelectedBranchId = useBranchStore((state) => state.setSelectedBranchId);
+  const { setBranch } = useAuth();
+
+  const selectedBranch = branches.find((branch) => branch.id === selectedBranchId) ?? null;
+  const initials = (user?.fullName || user?.username || 'U')
+    .split(' ')
+    .map((part) => part.charAt(0))
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login', { replace: true });
+  };
+
+  const handleBranchChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const branchId = Number(event.target.value);
+    if (!Number.isFinite(branchId) || branchId <= 0) {
+      return;
+    }
+
+    try {
+      setBranch(branchId);
+      setSelectedBranchId(branchId);
+    } catch {
+      navigate('/select-branch');
+    }
+  };
+
   return (
     <header className="bg-white shadow-sm border-b border-gray-200 px-6 py-4">
-      <div className="flex items-center justify-between">
-        {/* Search Bar */}
+      <div className="flex items-center justify-between gap-4">
         <div className="flex-1 max-w-md">
           <div className="relative">
             <input
@@ -20,22 +55,52 @@ const TopHeader: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Side */}
         <div className="flex items-center space-x-4">
-          {/* Notifications */}
-          <button className="p-2 text-gray-400 hover:text-gray-600 relative">
-            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-5 5v-5zM15 7v5h5l-5 5v-5z" />
-            </svg>
-            <span className="absolute top-0 right-0 h-2 w-2 bg-red-500 rounded-full"></span>
-          </button>
-
-          {/* User Profile */}
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
-              <span className="text-white text-sm font-medium">A</span>
+          {branches.length > 1 && (
+            <div className="min-w-[220px]">
+              <label htmlFor="header-branch" className="sr-only">
+                Active Branch
+              </label>
+              <select
+                id="header-branch"
+                value={selectedBranchId ?? ''}
+                onChange={handleBranchChange}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+              >
+                <option value="">Select Branch</option>
+                {branches.map((branch) => (
+                  <option key={branch.id} value={branch.id}>
+                    {branch.name}
+                  </option>
+                ))}
+              </select>
             </div>
-            <span className="text-gray-700 font-medium">Admin</span>
+          )}
+
+          {branches.length === 1 && selectedBranch && (
+            <span className="hidden text-sm text-gray-600 md:inline">
+              Branch: <span className="font-medium text-gray-900">{selectedBranch.name}</span>
+            </span>
+          )}
+
+          <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-2">
+              <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+                <span className="text-white text-sm font-medium">{initials}</span>
+              </div>
+              <div className="hidden sm:block">
+                <p className="text-sm font-medium text-gray-900">{user?.fullName || user?.username || 'User'}</p>
+                <p className="text-xs text-gray-500">{user?.roleName || 'Branch User'}</p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+            >
+              Logout
+            </button>
           </div>
         </div>
       </div>

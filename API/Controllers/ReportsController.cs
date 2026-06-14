@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using POSSystem.API.Extensions;
@@ -6,6 +7,7 @@ using POSSystem.Infrastructure.Data;
 
 namespace POSSystem.API.Controllers;
 
+[Authorize]
 [ApiController]
 [Route("api/[controller]")]
 public class ReportsController : ControllerBase

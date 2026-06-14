@@ -97,6 +97,7 @@ public class UserRepository : IUserRepository
             .IgnoreQueryFilters()
             .Include(u => u.Role)
             .Include(u => u.UserBranches)
+                .ThenInclude(ub => ub.Branch)
             .FirstOrDefaultAsync(u => u.Username.ToLower() == normalized && !u.IsDeleted);
     }
 

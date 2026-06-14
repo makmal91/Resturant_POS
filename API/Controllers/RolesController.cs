@@ -1,9 +1,11 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using POSSystem.Application.Users.DTOs;
 using POSSystem.Application.Users.Interfaces;
 
 namespace POSSystem.API.Controllers;
 
+[Authorize]
 [ApiController]
 [Route("api/[controller]")]
 public class RolesController : ControllerBase

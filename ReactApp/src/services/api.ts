@@ -1,4 +1,5 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
+import { authStorage } from '../utils/storage';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim() || '/api';
 const API_TIMEOUT_MS = Number(import.meta.env.VITE_API_TIMEOUT_MS ?? 15000);
@@ -11,8 +12,12 @@ const api = axios.create({
   },
 });
 
+const dispatchAuthLogout = () => {
+  window.dispatchEvent(new Event('auth:logout'));
+};
+
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-  const token = localStorage.getItem('authToken');
+  const token = authStorage.getToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -25,19 +30,20 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
     }
   }
 
-  const businessId = Number(localStorage.getItem('businessId') ?? 1);
-  const branchId = Number(localStorage.getItem('branchId') ?? 1);
-  let tenantRole: string | undefined;
-  try {
-    const tenantSession = localStorage.getItem('tenantSession');
-    tenantRole = tenantSession ? (JSON.parse(tenantSession) as { role?: string }).role : undefined;
-  } catch {
-    tenantRole = undefined;
+  const user = authStorage.getUser();
+  const selectedBranchId = authStorage.getSelectedBranchId();
+  const businessId = user?.businessId ?? Number(localStorage.getItem('businessId') ?? 0);
+
+  if (businessId > 0) {
+    config.headers['X-Business-Id'] = String(businessId);
   }
-  config.headers['X-Business-Id'] = Number.isFinite(businessId) && businessId > 0 ? String(businessId) : '1';
-  config.headers['X-Branch-Id'] = Number.isFinite(branchId) && branchId >= 0 ? String(branchId) : '1';
-  if (tenantRole) {
-    config.headers['X-User-Role'] = tenantRole;
+
+  if (selectedBranchId !== null && selectedBranchId > 0) {
+    config.headers['X-Branch-Id'] = String(selectedBranchId);
+  }
+
+  if (user?.roleName) {
+    config.headers['X-User-Role'] = user.roleName;
   }
 
   const method = config.method?.toUpperCase() ?? 'GET';
@@ -63,6 +69,25 @@ api.interceptors.response.use(
       data: error.response?.data,
       message: error.message,
     });
+
+    const status = error.response?.status;
+    const responseData = error.response?.data as { message?: string } | undefined;
+    const message = responseData?.message?.toLowerCase() ?? '';
+
+    if (status === 401) {
+      dispatchAuthLogout();
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
+    } else if (
+      status === 403 &&
+      (message.includes('branch') || message.includes('access to the selected branch'))
+    ) {
+      authStorage.setSelectedBranchId(null);
+      if (window.location.pathname !== '/select-branch') {
+        window.location.href = '/select-branch';
+      }
+    }
 
     return Promise.reject(error);
   }

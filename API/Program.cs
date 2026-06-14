@@ -93,6 +93,7 @@ app.UseCors("FrontendPolicy");
 app.UseGlobalExceptionMiddleware();
 
 app.UseAuthentication();
+app.UseBranchAccessMiddleware();
 app.UseAuthorization();
 
 app.MapControllers();

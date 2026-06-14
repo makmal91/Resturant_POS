@@ -8,4 +8,9 @@ public static class MiddlewareExtensions
     {
         return app.UseMiddleware<GlobalExceptionMiddleware>();
     }
+
+    public static IApplicationBuilder UseBranchAccessMiddleware(this IApplicationBuilder app)
+    {
+        return app.UseMiddleware<BranchAccessMiddleware>();
+    }
 }

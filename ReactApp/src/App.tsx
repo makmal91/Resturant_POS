@@ -1,36 +1,54 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import FormModal from './components/FormModal';
 import ConfirmDialog from './components/ConfirmDialog';
+import ProtectedRoute from './components/ProtectedRoute';
 import { FormModalProvider } from './contexts/FormModalContext';
 import { ConfirmDialogProvider } from './contexts/ConfirmDialogContext';
+import { AuthProvider } from './contexts/AuthContext';
 import { navigationItems } from './navigationConfig';
-import { useTenantStore } from './stores/useTenantStore';
+import LoginPage from './pages/LoginPage';
+import BranchSelectionPage from './pages/BranchSelectionPage';
 
 function App() {
-  const hydrateTenant = useTenantStore((state) => state.hydrate);
-
-  React.useEffect(() => {
-    hydrateTenant();
-  }, [hydrateTenant]);
-
   return (
-    <Router>
-      <FormModalProvider>
-        <ConfirmDialogProvider>
-          <Layout>
+    <AuthProvider>
+      <Router>
+        <FormModalProvider>
+          <ConfirmDialogProvider>
             <Routes>
-              {navigationItems.map((item) => (
-                <Route key={item.path} path={item.path} element={<item.component />} />
-              ))}
+              <Route path="/login" element={<LoginPage />} />
+              <Route
+                path="/select-branch"
+                element={
+                  <ProtectedRoute requireBranch={false}>
+                    <BranchSelectionPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/*"
+                element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <Routes>
+                        {navigationItems.map((item) => (
+                          <Route key={item.path} path={item.path} element={<item.component />} />
+                        ))}
+                        <Route path="*" element={<Navigate to="/" replace />} />
+                      </Routes>
+                      <FormModal />
+                      <ConfirmDialog />
+                    </Layout>
+                  </ProtectedRoute>
+                }
+              />
             </Routes>
-            <FormModal />
-            <ConfirmDialog />
-          </Layout>
-        </ConfirmDialogProvider>
-      </FormModalProvider>
-    </Router>
+          </ConfirmDialogProvider>
+        </FormModalProvider>
+      </Router>
+    </AuthProvider>
   );
 }
 

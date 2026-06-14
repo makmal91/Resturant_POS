@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using POSSystem.API.Extensions;
 using POSSystem.Application.Recipe.DTOs;
@@ -5,6 +6,7 @@ using POSSystem.Application.Recipe.Interfaces;
 
 namespace POSSystem.API.Controllers;
 
+[Authorize]
 [ApiController]
 [Route("api/[controller]")]
 public class RecipesController : ControllerBase

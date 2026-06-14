@@ -1,4 +1,6 @@
 import React from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../../contexts/AuthContext'
 import { useBranchStore } from '../../stores/useBranchStore'
 import { useTenantStore } from '../../stores/useTenantStore'
 
@@ -17,6 +19,8 @@ const BranchSelector: React.FC<BranchSelectorProps> = ({
   allowAllBranches = true,
   className = '',
 }) => {
+  const navigate = useNavigate()
+  const { setBranch } = useAuth()
   const branches = useBranchStore((state) => state.branches)
   const selectedBranchId = useBranchStore((state) => state.selectedBranchId)
   const setSelectedBranchId = useBranchStore((state) => state.setSelectedBranchId)
@@ -33,7 +37,23 @@ const BranchSelector: React.FC<BranchSelectorProps> = ({
         value={selectedBranchId ?? ''}
         onChange={(event) => {
           const value = event.target.value
-          setSelectedBranchId(value ? Number(value) : null)
+          if (!value) {
+            setSelectedBranchId(null)
+            return
+          }
+
+          const branchId = Number(value)
+          if (branchId <= 0) {
+            setSelectedBranchId(branchId)
+            return
+          }
+
+          try {
+            setBranch(branchId)
+            setSelectedBranchId(branchId)
+          } catch {
+            navigate('/select-branch')
+          }
         }}
         disabled={disabled}
         className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-100"
