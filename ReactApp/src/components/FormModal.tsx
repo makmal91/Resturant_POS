@@ -1,9 +1,10 @@
 import React, { useMemo, useEffect, useState } from 'react';
 import { useFormModal } from '../contexts/FormModalContext';
 import { BranchForm, BusinessForm, UserForm, MenuForm, InventoryForm, CategoryForm } from './forms';
-import { BranchService, BusinessService, UserService, MenuService, InventoryService } from '../services/apiService';
+import { BranchService, BusinessService, MenuService, InventoryService } from '../services/apiService';
 import { getApiErrorMessage } from '../services/api';
 import { categoryService } from '../modules/category/categoryService';
+import { userService, RoleListItem } from '../modules/user/userService';
 import { useBranchStore } from '../stores/useBranchStore';
 
 interface MenuCategoryOption {
@@ -32,6 +33,11 @@ const FormModal: React.FC = () => {
   const [menuCategories, setMenuCategories] = useState<MenuCategoryOption[]>([]);
   const [isMenuCategoriesLoading, setIsMenuCategoriesLoading] = useState(false);
   const [menuCategoriesError, setMenuCategoriesError] = useState<string | null>(null);
+  const [userRoles, setUserRoles] = useState<RoleListItem[]>([]);
+  const [isUserMetaLoading, setIsUserMetaLoading] = useState(false);
+  const branches = useBranchStore((state) => state.branches);
+  const selectedBranchId = useBranchStore((state) => state.selectedBranchId);
+  const fetchBranches = useBranchStore((state) => state.fetchBranches);
   const [isRendered, setIsRendered] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
 
@@ -107,6 +113,40 @@ const FormModal: React.FC = () => {
       isCancelled = true;
     };
   }, [isOpen, formType]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadUserMeta = async () => {
+      if (!isOpen || formType !== 'user') {
+        return;
+      }
+
+      setIsUserMetaLoading(true);
+      try {
+        await fetchBranches();
+        const roles = await userService.getRoles();
+        if (!isCancelled) {
+          setUserRoles(roles.filter((role) => role.isActive));
+        }
+      } catch (err) {
+        if (!isCancelled) {
+          setUserRoles([]);
+          setError(getApiErrorMessage(err, 'Failed to load user form data.'));
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsUserMetaLoading(false);
+        }
+      }
+    };
+
+    loadUserMeta();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [isOpen, formType, fetchBranches]);
 
   const normalizedMenuInitialData = useMemo(() => {
     if (formType !== 'menu' || !editingData) {
@@ -198,11 +238,42 @@ const FormModal: React.FC = () => {
     setIsSubmitting(true);
     setError(null);
     setSuccessMessage(null);
+
+    const branchId = selectedBranchId && selectedBranchId > 0 ? selectedBranchId : data.branchIds?.[0] ?? 1;
+    const payload = {
+      fullName: String(data.fullName ?? '').trim(),
+      username: String(data.username ?? '').trim(),
+      email: String(data.email ?? '').trim(),
+      phone: String(data.phone ?? '').trim(),
+      password: String(data.password ?? '').trim() || undefined,
+      roleId: Number(data.roleId),
+      isActive: String(data.status) !== 'Inactive',
+      branchIds: Array.isArray(data.branchIds) ? data.branchIds.map(Number).filter((id: number) => id > 0) : [],
+    };
+
+    if (!payload.fullName || !payload.username || !payload.email || !payload.roleId) {
+      setError('Full name, username, email, and role are required.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (!isEditMode && !payload.password) {
+      setError('Password is required for new users.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (payload.branchIds.length === 0) {
+      setError('At least one branch must be selected.');
+      setIsSubmitting(false);
+      return;
+    }
+
     try {
       if (isEditMode) {
-        await UserService.update(editingData.id, data);
+        await userService.update(editingData.id, payload, branchId);
       } else {
-        await UserService.create(data);
+        await userService.create(payload, branchId);
       }
       closeWithSuccess(isEditMode ? 'User updated successfully.' : 'User created successfully.');
     } catch (err: any) {
@@ -423,7 +494,10 @@ const FormModal: React.FC = () => {
           <UserForm
             initialData={editingData}
             onSubmit={handleUserSubmit}
-            isLoading={isSubmitting}
+            branches={branches}
+            roles={userRoles}
+            isLoading={isSubmitting || isUserMetaLoading}
+            isEditMode={isEditMode}
             submitLabel={isEditMode ? 'Update User' : 'Create User'}
           />
         );
@@ -476,7 +550,7 @@ const FormModal: React.FC = () => {
   if (!isRendered) return null;
 
   const panelWidthClass =
-    formType === 'business' || formType === 'branch' || formType === 'category' ? 'max-w-4xl' : 'max-w-2xl';
+    formType === 'business' || formType === 'branch' || formType === 'category' || formType === 'user' ? 'max-w-4xl' : 'max-w-2xl';
 
   return (
     <>

@@ -79,11 +79,36 @@ export const BusinessService = {
 };
 
 export const UserService = {
-  getAll: () => apiClient.get('/users'),
-  getById: (id: number) => apiClient.get(`/users/${id}`),
-  create: (data: any) => apiClient.post('/users', data),
-  update: (id: number, data: any) => apiClient.put(`/users/${id}`, data),
-  delete: (id: number) => apiClient.delete(`/users/${id}`),
+  getAll: (params: {
+    branchId: number;
+    page?: number;
+    pageSize?: number;
+    search?: string;
+    sortBy?: string;
+    sortDirection?: 'asc' | 'desc';
+  }) =>
+    apiClient.get('/users', {
+      params,
+      headers: { 'X-Branch-Id': String(params.branchId) },
+    }),
+  getById: (id: number, branchId: number) =>
+    apiClient.get(`/users/${id}`, {
+      params: { branchId },
+      headers: { 'X-Branch-Id': String(branchId) },
+    }),
+  create: (data: unknown, branchId: number) =>
+    apiClient.post('/users', data, { headers: { 'X-Branch-Id': String(branchId) } }),
+  update: (id: number, data: unknown, branchId: number) =>
+    apiClient.put(`/users/${id}`, data, {
+      params: { branchId },
+      headers: { 'X-Branch-Id': String(branchId) },
+    }),
+  delete: (id: number, branchId: number) =>
+    apiClient.delete(`/users/${id}`, {
+      params: { branchId },
+      headers: { 'X-Branch-Id': String(branchId) },
+    }),
+  getRoles: () => apiClient.get('/roles'),
 };
 
 export const MenuService = {

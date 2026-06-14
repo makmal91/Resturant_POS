@@ -19,8 +19,6 @@ public class Branch : BaseEntity
     public virtual Business Business { get; set; } = null!;
     public virtual Country Country { get; set; } = null!;
     public virtual City City { get; set; } = null!;
-    public virtual ICollection<User> Users { get; set; } = new List<User>();
-    public virtual ICollection<Role> Roles { get; set; } = new List<Role>();
     public virtual ICollection<MenuCategory> MenuCategories { get; set; } = new List<MenuCategory>();
     public virtual ICollection<SubCategory> SubCategories { get; set; } = new List<SubCategory>();
     public virtual ICollection<MenuItem> MenuItems { get; set; } = new List<MenuItem>();

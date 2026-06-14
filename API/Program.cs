@@ -2,9 +2,12 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Http.Features;
 using POSSystem.API.Extensions;
 using POSSystem.API.Hubs;
+using POSSystem.API.Services;
+using POSSystem.Application.Auth.Interfaces;
 using POSSystem.Application;
 using POSSystem.Application.Interfaces;
 using POSSystem.Infrastructure;
+using POSSystem.Infrastructure.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -23,6 +26,7 @@ builder.Services.Configure<FormOptions>(options =>
 });
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ITenantContext, HttpTenantContext>();
+builder.Services.AddScoped<ITokenService, JwtTokenService>();
 builder.Services.AddMemoryCache();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -67,6 +71,13 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<POSDbContext>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("DatabaseInitializer");
+    await UserManagementDatabaseInitializer.EnsureSchemaAsync(db, logger);
+}
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

@@ -56,16 +56,6 @@ public class BranchConfiguration : IEntityTypeConfiguration<Branch>
         builder.HasIndex(b => b.CityId)
             .HasDatabaseName("idx_branch_cityid");
 
-        builder.HasMany(b => b.Users)
-            .WithOne(u => u.Branch)
-            .HasForeignKey(u => u.BranchId)
-            .OnDelete(DeleteBehavior.Restrict);
-
-        builder.HasMany(b => b.Roles)
-            .WithOne(r => r.Branch)
-            .HasForeignKey(r => r.BranchId)
-            .OnDelete(DeleteBehavior.Restrict);
-
         builder.HasMany(b => b.MenuCategories)
             .WithOne(mc => mc.Branch)
             .HasForeignKey(mc => mc.BranchId)

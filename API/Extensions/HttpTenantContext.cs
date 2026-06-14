@@ -30,14 +30,26 @@ public class HttpTenantContext : ITenantContext
         {
             var principal = _httpContextAccessor.HttpContext?.User;
             if (principal == null)
-                return false;
+            {
+                var headerRole = _httpContextAccessor.HttpContext?.Request?.Headers["X-User-Role"].FirstOrDefault();
+                return IsGlobalAdminRole(headerRole);
+            }
 
-            return principal.IsInRole("SuperAdmin") ||
-                   principal.Claims.Any(c =>
-                       c.Type == ClaimTypes.Role &&
-                       string.Equals(c.Value, "SuperAdmin", StringComparison.OrdinalIgnoreCase));
+            if (principal.IsInRole("SuperAdmin") ||
+                principal.IsInRole("Super Admin") ||
+                principal.IsInRole("System Admin"))
+                return true;
+
+            return principal.Claims.Any(c =>
+                c.Type == ClaimTypes.Role &&
+                IsGlobalAdminRole(c.Value));
         }
     }
+
+    private static bool IsGlobalAdminRole(string? roleName) =>
+        string.Equals(roleName, "SuperAdmin", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(roleName, "Super Admin", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(roleName, "System Admin", StringComparison.OrdinalIgnoreCase);
 
     private int? TryReadIntClaim(string claimType)
     {

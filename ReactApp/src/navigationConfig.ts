@@ -14,7 +14,7 @@ export interface NavigationGroup {
 import POS from './components/POS';
 import BusinessesList from './components/BusinessesList';
 import BranchesList from './components/BranchesList';
-import UsersList from './components/UsersList';
+import UserPage from './modules/user/UserPage';
 import MenuList from './components/MenuList';
 import InventoryList from './components/InventoryList';
 import { OrderScreen } from './components/forms';
@@ -51,7 +51,7 @@ export const navigationItems: NavigationItem[] = [
   {
     path: '/users',
     label: 'Users',
-    component: UsersList,
+    component: UserPage,
     icon: '👥',
     group: 'Master Data',
   },

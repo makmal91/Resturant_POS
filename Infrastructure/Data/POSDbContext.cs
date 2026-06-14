@@ -22,6 +22,8 @@ public class POSDbContext : DbContext
     public DbSet<Branch> Branches { get; set; } = null!;
     public DbSet<Role> Roles { get; set; } = null!;
     public DbSet<User> Users { get; set; } = null!;
+    public DbSet<UserBranch> UserBranches { get; set; } = null!;
+    public DbSet<RolePermission> RolePermissions { get; set; } = null!;
     public DbSet<MenuCategory> MenuCategories { get; set; } = null!;
     public DbSet<SubCategory> SubCategories { get; set; } = null!;
     public DbSet<MenuItem> MenuItems { get; set; } = null!;
@@ -48,6 +50,8 @@ public class POSDbContext : DbContext
         modelBuilder.ApplyConfiguration(new BranchConfiguration());
         modelBuilder.ApplyConfiguration(new RoleConfiguration());
         modelBuilder.ApplyConfiguration(new UserConfiguration());
+        modelBuilder.ApplyConfiguration(new UserBranchConfiguration());
+        modelBuilder.ApplyConfiguration(new RolePermissionConfiguration());
         modelBuilder.ApplyConfiguration(new MenuCategoryConfiguration());
         modelBuilder.ApplyConfiguration(new SubCategoryConfiguration());
         modelBuilder.ApplyConfiguration(new MenuItemConfiguration());
@@ -65,7 +69,9 @@ public class POSDbContext : DbContext
         // Configure BaseEntity default values
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
         {
-            if (!typeof(BaseEntity).IsAssignableFrom(entityType.ClrType) || entityType.ClrType == typeof(Business))
+            if (!typeof(BaseEntity).IsAssignableFrom(entityType.ClrType) ||
+                entityType.ClrType == typeof(Business) ||
+                entityType.ClrType == typeof(User))
                 continue;
 
             modelBuilder.Entity(entityType.ClrType)
@@ -94,6 +100,8 @@ public class POSDbContext : DbContext
             modelBuilder.Entity(entityType.ClrType)
                 .HasQueryFilter(BuildTenantFilter(entityType.ClrType));
         }
+
+        modelBuilder.Entity<User>().HasQueryFilter(BuildBusinessScopedFilter<User>());
 
         // Seed data
         SeedData(modelBuilder);
@@ -163,39 +171,44 @@ public class POSDbContext : DbContext
 
         modelBuilder.Entity<Branch>().HasData(defaultBranch);
 
-        // Seed Admin Role
-        var adminRole = new Role
+        var seedDate = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        const string adminPasswordHash = "$2a$11$QvHz8.HeIU5ThFqjVPVVe.sTuKqDQI6R0nrPz/Z8KqK8qXyxi3H7O"; // Admin@123
+
+        var roles = new[]
         {
-            Id = 1,
-            Name = "Admin",
-            Permissions = "all_permissions",
-            BusinessId = 1,
-            BranchId = 1,
-            CreatedDate = DateTime.UtcNow
+            new Role { Id = 1, Name = RoleNames.SystemAdmin, Description = "Full system access", Permissions = "all", IsActive = true, CreatedDate = seedDate },
+            new Role { Id = 2, Name = RoleNames.SuperAdmin, Description = "All branches access", Permissions = "all", IsActive = true, CreatedDate = seedDate },
+            new Role { Id = 3, Name = RoleNames.Admin, Description = "Branch-level management", Permissions = "branch_admin", IsActive = true, CreatedDate = seedDate },
+            new Role { Id = 4, Name = RoleNames.Manager, Description = "Operations control", Permissions = "operations", IsActive = true, CreatedDate = seedDate },
+            new Role { Id = 5, Name = RoleNames.Cashier, Description = "POS billing access", Permissions = "pos", IsActive = true, CreatedDate = seedDate }
         };
 
-        modelBuilder.Entity<Role>().HasData(adminRole);
+        modelBuilder.Entity<Role>().HasData(roles);
 
-        // Seed Admin User
-        // Password: Admin@123 (BCrypt hash: $2a$11$QvHz8.HeIU5ThFqjVPVVe.sTuKqDQI6R0nrPz/Z8KqK8qXyxi3H7O)
         var adminUser = new User
         {
             Id = 1,
             FullName = "System Administrator",
             Username = "admin",
-            PasswordHash = "$2a$11$QvHz8.HeIU5ThFqjVPVVe.sTuKqDQI6R0nrPz/Z8KqK8qXyxi3H7O", // Admin@123
+            PasswordHash = adminPasswordHash,
             Phone = "+1234567890",
             Email = "admin@restaurant.com",
             RoleId = 1,
             BusinessId = 1,
-            BranchId = 1,
+            IsActive = true,
             Salary = 0,
             ShiftType = ShiftType.Flexible,
             Status = UserStatus.Active,
-            CreatedDate = DateTime.UtcNow
+            CreatedDate = seedDate
         };
 
         modelBuilder.Entity<User>().HasData(adminUser);
+
+        modelBuilder.Entity<UserBranch>().HasData(new UserBranch
+        {
+            UserId = 1,
+            BranchId = 1
+        });
     }
 
     public override int SaveChanges()
@@ -222,6 +235,19 @@ public class POSDbContext : DbContext
             entry.State = EntityState.Modified;
             entry.Entity.IsDeleted = true;
             entry.Entity.UpdatedDate = DateTime.UtcNow;
+
+            if (entry.Entity is User user)
+                user.DeletedAt = DateTime.UtcNow;
+        }
+
+        foreach (var entry in ChangeTracker.Entries<Role>())
+        {
+            if (entry.State != EntityState.Deleted)
+                continue;
+
+            entry.State = EntityState.Modified;
+            entry.Entity.IsDeleted = true;
+            entry.Entity.UpdatedDate = DateTime.UtcNow;
         }
     }
 
@@ -232,7 +258,7 @@ public class POSDbContext : DbContext
 
         foreach (var entry in ChangeTracker.Entries<BaseEntity>())
         {
-            if (entry.State != EntityState.Added || entry.Entity is Business)
+            if (entry.State != EntityState.Added || entry.Entity is Business or User)
                 continue;
 
             if (entry.Entity.BusinessId <= 0)
@@ -240,6 +266,15 @@ public class POSDbContext : DbContext
 
             if (entry.Entity is not Branch && entry.Entity.BranchId <= 0)
                 entry.Entity.BranchId = branchId;
+        }
+
+        foreach (var entry in ChangeTracker.Entries<User>())
+        {
+            if (entry.State != EntityState.Added)
+                continue;
+
+            if (entry.Entity.BusinessId <= 0)
+                entry.Entity.BusinessId = businessId;
         }
     }
 
@@ -283,5 +318,35 @@ public class POSDbContext : DbContext
         }
 
         return Expression.Lambda(tenantPredicate, parameter);
+    }
+
+    private LambdaExpression BuildBusinessScopedFilter<TEntity>() where TEntity : BaseEntity
+    {
+        var parameter = Expression.Parameter(typeof(TEntity), "e");
+        var businessProperty = Expression.Property(parameter, nameof(BaseEntity.BusinessId));
+        var isDeletedProperty = Expression.Property(parameter, nameof(BaseEntity.IsDeleted));
+        var notDeleted = Expression.Equal(isDeletedProperty, Expression.Constant(false));
+
+        var isSuperAdmin = _tenantContext.IsSuperAdmin;
+        var businessId = _tenantContext.BusinessId;
+
+        Expression predicate;
+
+        if (isSuperAdmin)
+        {
+            predicate = notDeleted;
+        }
+        else if (businessId.HasValue)
+        {
+            predicate = Expression.AndAlso(
+                Expression.Equal(businessProperty, Expression.Constant(businessId.Value)),
+                notDeleted);
+        }
+        else
+        {
+            predicate = notDeleted;
+        }
+
+        return Expression.Lambda(predicate, parameter);
     }
 }

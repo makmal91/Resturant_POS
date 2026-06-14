@@ -15,11 +15,14 @@ const DEFAULT_BRANCH_FORM_DATA = {
 };
 
 const DEFAULT_USER_FORM_DATA = {
-  name: '',
-  role: '',
-  branch: '',
-  salary: '',
-  shift: 'Morning',
+  fullName: '',
+  username: '',
+  email: '',
+  phone: '',
+  password: '',
+  roleId: '',
+  status: 'Active',
+  branchIds: [] as number[],
 };
 
 const DEFAULT_BUSINESS_FORM_DATA = {

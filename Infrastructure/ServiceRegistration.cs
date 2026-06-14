@@ -8,8 +8,10 @@ using POSSystem.Application.Inventory.Interfaces;
 using POSSystem.Application.Recipe.Interfaces;
 using POSSystem.Application.Business.Interfaces;
 using POSSystem.Application.Branch.Interfaces;
+using POSSystem.Application.Users.Interfaces;
 using POSSystem.Infrastructure.Data;
 using POSSystem.Infrastructure.Repositories;
+using POSSystem.Infrastructure.Security;
 
 namespace POSSystem.Infrastructure;
 
@@ -27,6 +29,9 @@ public static class ServiceRegistration
         services.AddScoped<IRecipeRepository, RecipeRepository>();
         services.AddScoped<IBusinessRepository, BusinessRepository>();
         services.AddScoped<IBranchRepository, BranchRepository>();
+        services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IRoleRepository, RoleRepository>();
+        services.AddScoped<IPasswordHasher, BcryptPasswordHasher>();
 
         // Add other infrastructure services here
 

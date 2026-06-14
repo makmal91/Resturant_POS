@@ -14,18 +14,28 @@ public class RoleConfiguration : IEntityTypeConfiguration<Role>
             .IsRequired()
             .HasMaxLength(100);
 
+        builder.Property(r => r.Description)
+            .HasMaxLength(500);
+
         builder.Property(r => r.Permissions)
-            .IsRequired();
+            .IsRequired()
+            .HasDefaultValue(string.Empty);
 
-        // Indexes
-        builder.HasIndex(r => new { r.BranchId, r.Name })
+        builder.Property(r => r.IsActive)
+            .HasDefaultValue(true);
+
+        builder.Property(r => r.CreatedDate)
+            .HasDefaultValueSql("GETUTCDATE()");
+
+        builder.HasIndex(r => r.Name)
             .IsUnique()
-            .HasDatabaseName("idx_role_branchid_name");
+            .HasDatabaseName("idx_role_name");
 
-        // Relationships
         builder.HasMany(r => r.Users)
             .WithOne(u => u.Role)
             .HasForeignKey(u => u.RoleId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasQueryFilter(r => !r.IsDeleted);
     }
 }

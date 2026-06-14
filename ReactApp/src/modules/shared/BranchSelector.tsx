@@ -21,7 +21,8 @@ const BranchSelector: React.FC<BranchSelectorProps> = ({
   const selectedBranchId = useBranchStore((state) => state.selectedBranchId)
   const setSelectedBranchId = useBranchStore((state) => state.setSelectedBranchId)
   const role = useTenantStore((state) => state.session.role)
-  const canUseAllBranches = allowAllBranches && role === 'SuperAdmin'
+  const globalViewRoles = ['SuperAdmin', 'Super Admin', 'System Admin', 'Admin']
+  const canUseAllBranches = allowAllBranches && globalViewRoles.includes(role)
 
   return (
     <div className={className}>

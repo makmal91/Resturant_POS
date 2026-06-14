@@ -12,6 +12,10 @@ using POSSystem.Application.Business.Interfaces;
 using POSSystem.Application.Business.Services;
 using POSSystem.Application.Branch.Interfaces;
 using POSSystem.Application.Branch.Services;
+using POSSystem.Application.Users.Interfaces;
+using POSSystem.Application.Users.Services;
+using POSSystem.Application.Auth.Interfaces;
+using POSSystem.Application.Auth.Services;
 
 namespace POSSystem.Application;
 
@@ -39,6 +43,11 @@ public static class ServiceRegistration
 
         // Register branch services
         services.AddScoped<IBranchService, BranchService>();
+
+        // Register user management services
+        services.AddScoped<IUserService, UserService>();
+        services.AddScoped<IRoleService, RoleService>();
+        services.AddScoped<IAuthService, AuthService>();
 
         // Add other application services here
 
