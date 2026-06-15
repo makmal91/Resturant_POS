@@ -22,7 +22,7 @@ builder.Services.AddControllers()
     });
 builder.Services.Configure<FormOptions>(options =>
 {
-    options.MultipartBodyLengthLimit = 6 * 1024 * 1024;
+    options.MultipartBodyLengthLimit = 25 * 1024 * 1024;
 });
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ITenantContext, HttpTenantContext>();
@@ -79,6 +79,8 @@ using (var scope = app.Services.CreateScope())
     await UserManagementDatabaseInitializer.EnsureSchemaAsync(db, logger);
     await PermissionModuleDatabaseInitializer.EnsureSchemaAsync(db, logger);
     await NavigationMenuDatabaseInitializer.EnsureSchemaAsync(db, logger);
+    await UnitMasterDatabaseInitializer.EnsureSchemaAsync(db, logger);
+    await ProductManagementDatabaseInitializer.EnsureSchemaAsync(db, logger);
     await RolePermissionSeeder.SeedDefaultPermissionsAsync(db, logger);
     await NavigationMenuSeeder.SeedDefaultMenusAsync(db, logger);
 }

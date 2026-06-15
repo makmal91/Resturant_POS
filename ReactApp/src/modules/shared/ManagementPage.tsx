@@ -40,7 +40,9 @@ const normalizeEntity = (rawItem: unknown): ManagementEntity => {
   return {
     id: getIdValue(record),
     name: String(record.name ?? record.Name ?? record.title ?? record.Title ?? ''),
+    code: String(record.code ?? record.Code ?? ''),
     description: String(record.description ?? record.Description ?? record.details ?? record.Details ?? ''),
+    conversionFactor: Number(record.conversionFactor ?? record.ConversionFactor ?? 1),
     isActive:
       typeof record.isActive === 'boolean'
         ? record.isActive
@@ -131,6 +133,8 @@ const ManagementPage: React.FC<ManagementPageProps> = ({
       name: selectedEntity?.name ?? defaultManagementFormValues.name,
       description: selectedEntity?.description ?? defaultManagementFormValues.description,
       isActive: selectedEntity?.isActive ?? defaultManagementFormValues.isActive,
+      code: selectedEntity?.code,
+      conversionFactor: selectedEntity?.conversionFactor,
       branchId: selectedEntity?.branchId,
       categoryType: selectedEntity?.categoryType,
       menuCategoryId: selectedEntity?.menuCategoryId,
@@ -246,6 +250,20 @@ const ManagementPage: React.FC<ManagementPageProps> = ({
       header: 'Name',
       sortable: true,
     },
+    ...(entityLabel === 'Unit'
+      ? [
+          {
+            key: 'code' as keyof ManagementEntity,
+            header: 'Code',
+            render: (value: unknown) => String(value ?? '-'),
+          },
+          {
+            key: 'conversionFactor' as keyof ManagementEntity,
+            header: 'Conversion',
+            render: (value: unknown) => Number(value ?? 1).toString(),
+          },
+        ]
+      : []),
     {
       key: 'description',
       header: 'Description',

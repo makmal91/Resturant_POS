@@ -6,6 +6,7 @@ public static class PermissionModules
     public const string SubCategories = "SubCategories";
     public const string Brands = "Brands";
     public const string Products = "Products";
+    public const string Units = "Units";
     public const string Menu = "Menu";
     public const string Orders = "Orders";
     public const string Inventory = "Inventory";
@@ -22,6 +23,7 @@ public static class PermissionModules
         SubCategories,
         Brands,
         Products,
+        Units,
         Menu,
         Orders,
         Inventory,

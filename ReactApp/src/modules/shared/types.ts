@@ -3,6 +3,8 @@ export interface ManagementEntity {
   name: string;
   description: string;
   isActive: boolean;
+  code?: string;
+  conversionFactor?: number;
   branchId?: number;
   categoryType?: 'Sale' | 'Inventory';
   menuCategoryId?: number;
@@ -22,6 +24,8 @@ export interface ManagementFormValues {
   name: string;
   description: string;
   isActive: boolean;
+  code?: string;
+  conversionFactor?: number;
   branchId?: number;
   categoryType?: 'Sale' | 'Inventory';
   menuCategoryId?: number;

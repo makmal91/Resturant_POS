@@ -36,7 +36,7 @@ export const routeRegistry: RouteDefinition[] = [
   { path: '/products', label: 'Products', component: ProductPage, module: 'Products' },
   { path: '/customers', label: 'Customers', component: CustomerPage },
   { path: '/suppliers', label: 'Suppliers', component: SupplierPage },
-  { path: '/units', label: 'Units', component: UnitPage },
+  { path: '/units', label: 'Units', component: UnitPage, module: 'Units' },
   { path: '/taxes', label: 'Taxes', component: TaxPage },
   { path: '/discounts', label: 'Discounts', component: DiscountPage },
   { path: '/inventory', label: 'Inventory', component: InventoryList, module: 'Inventory' },

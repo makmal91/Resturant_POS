@@ -29,6 +29,12 @@ public class POSDbContext : DbContext
     public DbSet<MenuCategory> MenuCategories { get; set; } = null!;
     public DbSet<SubCategory> SubCategories { get; set; } = null!;
     public DbSet<Brand> Brands { get; set; } = null!;
+    public DbSet<MeasurementUnit> Units { get; set; } = null!;
+    public DbSet<Product> Products { get; set; } = null!;
+    public DbSet<ProductUnit> ProductUnits { get; set; } = null!;
+    public DbSet<ProductVariant> ProductVariants { get; set; } = null!;
+    public DbSet<ProductBarcode> ProductBarcodes { get; set; } = null!;
+    public DbSet<ProductImage> ProductImages { get; set; } = null!;
     public DbSet<MenuItem> MenuItems { get; set; } = null!;
     public DbSet<MenuItemVariant> MenuItemVariants { get; set; } = null!;
     public DbSet<MenuItemAddon> MenuItemAddons { get; set; } = null!;
@@ -60,6 +66,12 @@ public class POSDbContext : DbContext
         modelBuilder.ApplyConfiguration(new MenuCategoryConfiguration());
         modelBuilder.ApplyConfiguration(new SubCategoryConfiguration());
         modelBuilder.ApplyConfiguration(new BrandConfiguration());
+        modelBuilder.ApplyConfiguration(new MeasurementUnitConfiguration());
+        modelBuilder.ApplyConfiguration(new ProductConfiguration());
+        modelBuilder.ApplyConfiguration(new ProductUnitConfiguration());
+        modelBuilder.ApplyConfiguration(new ProductVariantConfiguration());
+        modelBuilder.ApplyConfiguration(new ProductBarcodeConfiguration());
+        modelBuilder.ApplyConfiguration(new ProductImageConfiguration());
         modelBuilder.ApplyConfiguration(new MenuItemConfiguration());
         modelBuilder.ApplyConfiguration(new MenuItemVariantConfiguration());
         modelBuilder.ApplyConfiguration(new MenuItemAddonConfiguration());

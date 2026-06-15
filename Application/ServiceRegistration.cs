@@ -10,6 +10,10 @@ using POSSystem.Application.Recipe.Interfaces;
 using POSSystem.Application.Recipe.Services;
 using POSSystem.Application.Brand.Interfaces;
 using POSSystem.Application.Brand.Services;
+using POSSystem.Application.Product.Interfaces;
+using POSSystem.Application.Product.Services;
+using POSSystem.Application.Unit.Interfaces;
+using POSSystem.Application.Unit.Services;
 using POSSystem.Application.Business.Interfaces;
 using POSSystem.Application.Business.Services;
 using POSSystem.Application.Branch.Interfaces;
@@ -46,6 +50,12 @@ public static class ServiceRegistration
 
         // Register brand services
         services.AddScoped<IBrandService, BrandService>();
+
+        // Register product management services
+        services.AddScoped<IProductService, ProductService>();
+
+        // Register unit master services
+        services.AddScoped<IUnitService, UnitService>();
 
         // Register business services
         services.AddScoped<IBusinessService, BusinessService>();

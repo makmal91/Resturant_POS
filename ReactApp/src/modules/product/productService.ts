@@ -1,42 +1,197 @@
 import apiClient from '../../services/api';
-import { ManagementFormValues } from '../shared/types';
 
-const DEFAULT_BRANCH_ID = 1;
+export type DiscountType = 'Percentage' | 'Fixed';
+
+export interface ProductUnitPayload {
+  id?: number;
+  unitName: string;
+  conversionFactor: number;
+  isBaseUnit: boolean;
+  costPrice?: number | null;
+  sellingPrice?: number | null;
+  wholesalePrice?: number | null;
+}
+
+export interface ProductVariantPayload {
+  id?: number;
+  variantName: string;
+  size?: string;
+  color?: string;
+  sku?: string;
+  additionalPrice: number;
+  costPriceOverride?: number | null;
+  sellingPriceOverride?: number | null;
+  status: boolean;
+}
+
+export interface ProductBarcodePayload {
+  id?: number;
+  barcodeValue: string;
+  unitId?: number | null;
+  variantId?: number | null;
+  unitName?: string | null;
+  variantName?: string | null;
+  isPrimary: boolean;
+}
+
+export interface ProductImageInfo {
+  id: number;
+  fileName: string;
+  contentType: string;
+  isPrimary: boolean;
+  sortOrder: number;
+}
+
+export interface ProductPayload {
+  id?: number;
+  productName: string;
+  productCode?: string;
+  sku?: string;
+  categoryId: number;
+  subCategoryId?: number | null;
+  brandId?: number | null;
+  description?: string;
+  status: boolean;
+  costPrice: number;
+  sellingPrice: number;
+  wholesalePrice: number;
+  isVariantEnabled: boolean;
+  isDiscountAllowed: boolean;
+  discountType?: DiscountType | null;
+  discountValue: number;
+  branchId: number;
+  units: ProductUnitPayload[];
+  variants: ProductVariantPayload[];
+  barcodes: ProductBarcodePayload[];
+}
+
+export interface ProductListItem {
+  id: number;
+  productName: string;
+  productCode: string;
+  sku: string;
+  categoryId: number;
+  categoryName: string;
+  subCategoryId?: number | null;
+  subCategoryName: string;
+  brandId?: number | null;
+  brandName: string;
+  sellingPrice: number;
+  status: boolean;
+  hasImage: boolean;
+  branchId: number;
+  branchName: string;
+}
+
+export interface ProductDetail extends ProductListItem {
+  description: string;
+  costPrice: number;
+  wholesalePrice: number;
+  isVariantEnabled: boolean;
+  isDiscountAllowed: boolean;
+  discountType?: DiscountType | null;
+  discountValue: number;
+  units: ProductUnitPayload[];
+  variants: ProductVariantPayload[];
+  barcodes: ProductBarcodePayload[];
+  images: ProductImageInfo[];
+}
+
+export interface ProductListResponse {
+  products: ProductListItem[];
+  totalRecords: number;
+  totalPages: number;
+  currentPage: number;
+  pageSize: number;
+}
+
+const branchRequestConfig = (branchId: number) => ({
+  headers: { 'X-Branch-Id': String(branchId) },
+});
 
 export const productService = {
-  getAll: () => apiClient.get('/products', { params: { branchId: DEFAULT_BRANCH_ID } }),
-  getById: (id: number) => apiClient.get(`/products/${id}`, { params: { branchId: DEFAULT_BRANCH_ID } }),
-  create: (data: ManagementFormValues) =>
-    apiClient.post('/products', {
-      name: data.name,
-      description: data.description,
-      price: Number(data.price ?? 0),
-      tax: Number(data.tax ?? 0),
-      preparationTime: Number(data.preparationTime ?? 0),
-      menuCategoryId: Number(data.menuCategoryId ?? 0),
-      branchId: Number(data.branchId ?? DEFAULT_BRANCH_ID),
-      productType: data.productType ?? 'FinishedGood',
-      isSaleable: data.isSaleable,
-      isInventoryItem: data.isInventoryItem,
-      isRecipeItem: data.isRecipeItem,
-      isPurchasable: data.isPurchasable,
-      variants: data.variants ?? [],
-      addons: data.addons ?? [],
+  getAll: (
+    branchId: number,
+    page = 1,
+    pageSize = 25,
+    filters: {
+      search?: string;
+      categoryId?: number | null;
+      subCategoryId?: number | null;
+      brandId?: number | null;
+      status?: boolean | null;
+    } = {}
+  ) =>
+    apiClient.get<ProductListResponse>('/products', {
+      params: {
+        branchId,
+        page,
+        pageSize,
+        ...(filters.search ? { search: filters.search } : {}),
+        ...(filters.categoryId ? { categoryId: filters.categoryId } : {}),
+        ...(filters.subCategoryId ? { subCategoryId: filters.subCategoryId } : {}),
+        ...(filters.brandId ? { brandId: filters.brandId } : {}),
+        ...(filters.status !== null && filters.status !== undefined ? { status: filters.status } : {}),
+      },
+      ...branchRequestConfig(branchId),
     }),
-  update: (id: number, data: ManagementFormValues) =>
-    apiClient.put(`/products/${id}`, {
-      name: data.name,
-      description: data.description,
-      price: Number(data.price ?? 0),
-      tax: Number(data.tax ?? 0),
-      preparationTime: Number(data.preparationTime ?? 0),
-      menuCategoryId: Number(data.menuCategoryId ?? 0),
-      branchId: Number(data.branchId ?? DEFAULT_BRANCH_ID),
-      productType: data.productType ?? 'FinishedGood',
-      isSaleable: data.isSaleable,
-      isInventoryItem: data.isInventoryItem,
-      isRecipeItem: data.isRecipeItem,
-      isPurchasable: data.isPurchasable,
+
+  getById: (id: number, branchId: number) =>
+    apiClient.get<ProductDetail>(`/products/${id}`, {
+      params: { branchId },
+      ...branchRequestConfig(branchId),
     }),
-  delete: (id: number) => apiClient.delete(`/products/${id}`, { params: { branchId: DEFAULT_BRANCH_ID } }),
+
+  create: (data: ProductPayload, branchId: number) =>
+    apiClient.post<ProductDetail>('/products', normalizePayload(data, branchId), branchRequestConfig(branchId)),
+
+  update: (id: number, data: ProductPayload, branchId: number) =>
+    apiClient.put<ProductDetail>(`/products/${id}`, normalizePayload(data, branchId), branchRequestConfig(branchId)),
+
+  updateUnits: (id: number, branchId: number, items: ProductUnitPayload[]) =>
+    apiClient.put<ProductDetail>(`/products/${id}/units`, { branchId, items }, branchRequestConfig(branchId)),
+
+  updateVariants: (id: number, branchId: number, items: ProductVariantPayload[]) =>
+    apiClient.put<ProductDetail>(`/products/${id}/variants`, { branchId, items }, branchRequestConfig(branchId)),
+
+  updateBarcodes: (id: number, branchId: number, items: ProductBarcodePayload[]) =>
+    apiClient.put<ProductDetail>(`/products/${id}/barcodes`, { branchId, items }, branchRequestConfig(branchId)),
+
+  uploadImages: (id: number, branchId: number, files: File[], isPrimary = false) => {
+    const formData = new FormData();
+    formData.append('branchId', String(branchId));
+    formData.append('isPrimary', String(isPrimary));
+    files.forEach((file) => formData.append('images', file));
+    return apiClient.post<ProductDetail>(`/products/${id}/images`, formData, branchRequestConfig(branchId));
+  },
+
+  getImageEndpoint: (productId: number, imageId: number) => `/products/${productId}/images/${imageId}`,
+
+  deleteImage: (productId: number, imageId: number, branchId: number) =>
+    apiClient.delete(`/products/${productId}/images/${imageId}`, {
+      params: { branchId },
+      ...branchRequestConfig(branchId),
+    }),
 };
+
+const normalizePayload = (data: ProductPayload, branchId: number) => ({
+  productName: data.productName,
+  productCode: data.productCode ?? '',
+  sku: data.sku ?? '',
+  categoryId: Number(data.categoryId ?? 0),
+  subCategoryId: data.subCategoryId ? Number(data.subCategoryId) : null,
+  brandId: data.brandId ? Number(data.brandId) : null,
+  description: data.description ?? '',
+  status: data.status,
+  costPrice: Number(data.costPrice ?? 0),
+  sellingPrice: Number(data.sellingPrice ?? 0),
+  wholesalePrice: Number(data.wholesalePrice ?? 0),
+  isVariantEnabled: data.isVariantEnabled,
+  isDiscountAllowed: data.isDiscountAllowed,
+  discountType: data.isDiscountAllowed ? data.discountType : null,
+  discountValue: data.isDiscountAllowed ? Number(data.discountValue ?? 0) : 0,
+  branchId,
+  units: data.units ?? [],
+  variants: data.isVariantEnabled ? data.variants ?? [] : [],
+  barcodes: data.barcodes ?? [],
+});
