@@ -4,6 +4,7 @@ public static class PermissionModules
 {
     public const string Categories = "Categories";
     public const string SubCategories = "SubCategories";
+    public const string Brands = "Brands";
     public const string Products = "Products";
     public const string Menu = "Menu";
     public const string Orders = "Orders";
@@ -19,6 +20,7 @@ public static class PermissionModules
     [
         Categories,
         SubCategories,
+        Brands,
         Products,
         Menu,
         Orders,

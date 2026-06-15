@@ -6,6 +6,7 @@ using POSSystem.Application.Orders.Interfaces;
 using POSSystem.Application.Menu.Interfaces;
 using POSSystem.Application.Inventory.Interfaces;
 using POSSystem.Application.Recipe.Interfaces;
+using POSSystem.Application.Brand.Interfaces;
 using POSSystem.Application.Business.Interfaces;
 using POSSystem.Application.Branch.Interfaces;
 using POSSystem.Application.Users.Interfaces;
@@ -29,6 +30,7 @@ public static class ServiceRegistration
         services.AddScoped<IMenuRepository, MenuRepository>();
         services.AddScoped<IInventoryRepository, InventoryRepository>();
         services.AddScoped<IRecipeRepository, RecipeRepository>();
+        services.AddScoped<IBrandRepository, BrandRepository>();
         services.AddScoped<IBusinessRepository, BusinessRepository>();
         services.AddScoped<IBranchRepository, BranchRepository>();
         services.AddScoped<IUserRepository, UserRepository>();

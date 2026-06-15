@@ -1,10 +1,11 @@
 import React, { useMemo, useEffect, useState } from 'react';
 import { useFormModal } from '../contexts/FormModalContext';
-import { BranchForm, BusinessForm, UserForm, MenuForm, InventoryForm, CategoryForm, SubCategoryForm } from './forms';
+import { BranchForm, BusinessForm, UserForm, MenuForm, InventoryForm, CategoryForm, SubCategoryForm, BrandForm } from './forms';
 import { BranchService, BusinessService, MenuService, InventoryService } from '../services/apiService';
 import { getApiErrorMessage } from '../services/api';
 import { categoryService } from '../modules/category/categoryService';
 import { subCategoryService } from '../modules/subcategory/subcategoryService';
+import { brandService } from '../modules/brand/brandService';
 import { userService, RoleListItem } from '../modules/user/userService';
 import { useBranchStore } from '../stores/useBranchStore';
 import { useIsGlobalAdmin, useIsMasterUser } from '../hooks/usePermission';
@@ -594,6 +595,71 @@ const FormModal: React.FC = () => {
     }
   };
 
+  const handleBrandSubmit = async (data: any) => {
+    setIsSubmitting(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    const branchId = Number(data?.branchId ?? 0);
+    const name = String(data?.name ?? '').trim();
+
+    if (!name) {
+      setError('Brand name is required.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (branchId <= 0) {
+      setError('Branch selection is required.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('name', name);
+    formData.append('description', String(data?.description ?? '').trim());
+    formData.append('status', String(data?.status ?? 'Active').toLowerCase() !== 'inactive' ? 'Active' : 'Inactive');
+    formData.append('branchId', String(branchId));
+
+    const hasImageUpload = data?.imageFile instanceof File;
+    const hasImageRemoval = Boolean(data?.removeImage);
+
+    if (hasImageUpload) {
+      formData.append('imageFile', data.imageFile);
+    }
+
+    if (hasImageRemoval) {
+      formData.append('removeImage', 'true');
+    }
+
+    const jsonPayload = {
+      name,
+      description: String(data?.description ?? '').trim(),
+      status: String(data?.status ?? 'Active').toLowerCase() !== 'inactive',
+      branchId,
+    };
+
+    try {
+      useBranchStore.getState().setSelectedBranchId(branchId);
+      if (hasImageUpload || hasImageRemoval) {
+        if (isEditMode) {
+          await brandService.update(Number(editingData.id), formData, branchId);
+        } else {
+          await brandService.create(formData, branchId);
+        }
+      } else if (isEditMode) {
+        await brandService.updateJson(Number(editingData.id), jsonPayload, branchId);
+      } else {
+        await brandService.createJson(jsonPayload, branchId);
+      }
+      closeWithSuccess(isEditMode ? 'Brand updated successfully.' : 'Brand created successfully.');
+    } catch (err: any) {
+      setError(getApiErrorMessage(err, 'Failed to save brand'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const getFormComponent = () => {
     switch (formType) {
       case 'branch':
@@ -673,6 +739,16 @@ const FormModal: React.FC = () => {
             lockBranch={isEditMode || (!isGlobalAdmin && Boolean(selectedBranchId && selectedBranchId > 0))}
           />
         );
+      case 'brand':
+        return (
+          <BrandForm
+            initialData={editingData}
+            onSubmit={handleBrandSubmit}
+            isLoading={isSubmitting}
+            submitLabel={isEditMode ? 'Update Brand' : 'Create Brand'}
+            lockBranch={isEditMode || (!isGlobalAdmin && Boolean(selectedBranchId && selectedBranchId > 0))}
+          />
+        );
       default:
         return null;
     }
@@ -685,6 +761,7 @@ const FormModal: React.FC = () => {
     formType === 'branch' ||
     formType === 'category' ||
     formType === 'subcategory' ||
+    formType === 'brand' ||
     formType === 'user'
       ? 'max-w-4xl'
       : 'max-w-2xl';
@@ -692,9 +769,11 @@ const FormModal: React.FC = () => {
   const formTypeLabel =
     formType === 'subcategory'
       ? 'Sub Category'
-      : formType
-        ? formType.charAt(0).toUpperCase() + formType.slice(1)
-        : '';
+      : formType === 'brand'
+        ? 'Brand'
+        : formType
+          ? formType.charAt(0).toUpperCase() + formType.slice(1)
+          : '';
 
   return (
     <>

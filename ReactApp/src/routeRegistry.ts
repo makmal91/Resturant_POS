@@ -15,6 +15,7 @@ import InventoryList from './components/InventoryList';
 import { OrderScreen } from './components/forms';
 import CategoryPage from './modules/category/CategoryPage';
 import SubCategoryPage from './modules/subcategory/SubCategoryPage';
+import BrandPage from './modules/brand/BrandPage';
 import ProductPage from './modules/product/ProductPage';
 import CustomerPage from './modules/customer/CustomerPage';
 import SupplierPage from './modules/supplier/SupplierPage';
@@ -31,6 +32,7 @@ export const routeRegistry: RouteDefinition[] = [
   { path: '/menu', label: 'Menu', component: MenuList, module: 'Menu' },
   { path: '/categories', label: 'Categories', component: CategoryPage, module: 'Categories' },
   { path: '/subcategories', label: 'SubCategories', component: SubCategoryPage, module: 'SubCategories' },
+  { path: '/brands', label: 'Brands', component: BrandPage, module: 'Brands' },
   { path: '/products', label: 'Products', component: ProductPage, module: 'Products' },
   { path: '/customers', label: 'Customers', component: CustomerPage },
   { path: '/suppliers', label: 'Suppliers', component: SupplierPage },

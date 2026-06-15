@@ -8,6 +8,8 @@ using POSSystem.Application.Inventory.Interfaces;
 using POSSystem.Application.Inventory.Services;
 using POSSystem.Application.Recipe.Interfaces;
 using POSSystem.Application.Recipe.Services;
+using POSSystem.Application.Brand.Interfaces;
+using POSSystem.Application.Brand.Services;
 using POSSystem.Application.Business.Interfaces;
 using POSSystem.Application.Business.Services;
 using POSSystem.Application.Branch.Interfaces;
@@ -41,6 +43,9 @@ public static class ServiceRegistration
 
         // Register recipe services
         services.AddScoped<IRecipeService, RecipeService>();
+
+        // Register brand services
+        services.AddScoped<IBrandService, BrandService>();
 
         // Register business services
         services.AddScoped<IBusinessService, BusinessService>();

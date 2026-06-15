@@ -21,6 +21,7 @@ public class Branch : BaseEntity
     public virtual City City { get; set; } = null!;
     public virtual ICollection<MenuCategory> MenuCategories { get; set; } = new List<MenuCategory>();
     public virtual ICollection<SubCategory> SubCategories { get; set; } = new List<SubCategory>();
+    public virtual ICollection<Brand> Brands { get; set; } = new List<Brand>();
     public virtual ICollection<MenuItem> MenuItems { get; set; } = new List<MenuItem>();
     public virtual ICollection<Table> Tables { get; set; } = new List<Table>();
     public virtual ICollection<Customer> Customers { get; set; } = new List<Customer>();

@@ -8,6 +8,7 @@ public static class ApiPermissionMapper
     {
         ["Categories"] = PermissionModules.Categories,
         ["SubCategories"] = PermissionModules.SubCategories,
+        ["Brands"] = PermissionModules.Brands,
         ["Products"] = PermissionModules.Products,
         ["Menu"] = PermissionModules.Menu,
         ["Orders"] = PermissionModules.Orders,
