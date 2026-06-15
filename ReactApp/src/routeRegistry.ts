@@ -25,6 +25,7 @@ import DiscountPage from './modules/discount/DiscountPage';
 import WarehousePage from './modules/warehouse/WarehousePage';
 import PurchasePage from './modules/purchase/PurchasePage';
 import StockLedgerPage from './modules/stock/StockLedgerPage';
+// POSBillingPage is registered directly in App.tsx as a fullscreen route (outside Layout)
 
 export const routeRegistry: RouteDefinition[] = [
   { path: '/', label: 'Dashboard', component: POS, module: 'POS Billing' },

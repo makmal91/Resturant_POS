@@ -82,6 +82,7 @@ using (var scope = app.Services.CreateScope())
     await UnitMasterDatabaseInitializer.EnsureSchemaAsync(db, logger);
     await ProductManagementDatabaseInitializer.EnsureSchemaAsync(db, logger);
     await PurchaseWarehouseInitializer.EnsureSchemaAsync(db, logger);
+    await SaleInvoiceInitializer.EnsureSchemaAsync(db, logger);
     await RolePermissionSeeder.SeedDefaultPermissionsAsync(db, logger);
     await NavigationMenuSeeder.SeedDefaultMenusAsync(db, logger);
 }

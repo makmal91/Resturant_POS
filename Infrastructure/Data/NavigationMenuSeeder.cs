@@ -34,10 +34,11 @@ public static class NavigationMenuSeeder
         new("Taxes", "/taxes", "💸", null, "Master Data", 13),
         new("Discounts", "/discounts", "🏷️", null, "Master Data", 14),
         new("Warehouses", "/warehouses", "🏭", "Warehouses", "Master Data", 15),
-        new("Inventory", "/inventory", "📦", "Inventory", "Operations", 1),
-        new("Purchase", "/purchase", "🛒", "Purchase", "Operations", 2),
-        new("Stock", "/stock", "📊", "Stock", "Operations", 3),
-        new("Orders", "/orders", "📋", "Orders", "Operations", 4)
+        new("POS Billing", "/pos", "🏪", "POS Billing", "Operations", 1),
+        new("Inventory", "/inventory", "📦", "Inventory", "Operations", 2),
+        new("Purchase", "/purchase", "🛒", "Purchase", "Operations", 3),
+        new("Stock", "/stock", "📊", "Stock", "Operations", 4),
+        new("Orders", "/orders", "📋", "Orders", "Operations", 5)
     ];
 
     public static async Task SeedDefaultMenusAsync(POSDbContext context, ILogger logger)

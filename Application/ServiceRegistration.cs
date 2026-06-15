@@ -34,6 +34,8 @@ using POSSystem.Application.Purchase.Interfaces;
 using POSSystem.Application.Purchase.Services;
 using POSSystem.Application.Stock.Interfaces;
 using POSSystem.Application.Stock.Services;
+using POSSystem.Application.Sales.Interfaces;
+using POSSystem.Application.Sales.Services;
 
 namespace POSSystem.Application;
 
@@ -85,6 +87,9 @@ public static class ServiceRegistration
         services.AddScoped<ISupplierService, SupplierService>();
         services.AddScoped<IPurchaseService, PurchaseService>();
         services.AddScoped<IStockService, StockService>();
+
+        // Register POS sales service
+        services.AddScoped<ISalesService, SalesService>();
 
         // Add other application services here
 

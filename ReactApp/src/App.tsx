@@ -10,6 +10,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import { routeRegistry } from './routeRegistry';
 import LoginPage from './pages/LoginPage';
 import BranchSelectionPage from './pages/BranchSelectionPage';
+import POSBillingPage from './modules/pos/POSBillingPage';
 
 function App() {
   return (
@@ -24,6 +25,15 @@ function App() {
                 element={
                   <ProtectedRoute requireBranch={false}>
                     <BranchSelectionPage />
+                  </ProtectedRoute>
+                }
+              />
+              {/* POS Billing — fullscreen, outside the sidebar/header Layout */}
+              <Route
+                path="/pos"
+                element={
+                  <ProtectedRoute module="POS Billing">
+                    <POSBillingPage />
                   </ProtectedRoute>
                 }
               />

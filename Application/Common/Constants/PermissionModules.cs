@@ -20,6 +20,7 @@ public static class PermissionModules
     public const string Suppliers = "Suppliers";
     public const string Purchase = "Purchase";
     public const string Stock = "Stock";
+    public const string Sales = "Sales";
 
     public static readonly IReadOnlyList<string> All =
     [
@@ -40,6 +41,7 @@ public static class PermissionModules
         Warehouses,
         Suppliers,
         Purchase,
-        Stock
+        Stock,
+        Sales
     ];
 }

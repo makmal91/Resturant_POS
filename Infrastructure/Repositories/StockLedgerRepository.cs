@@ -137,5 +137,28 @@ public class StockLedgerRepository : IStockLedgerRepository
         return await query.SumAsync(e => e.QuantityInBaseUnit);
     }
 
+    public async Task<Dictionary<string, decimal>> GetStockForProductsAsync(
+        int businessId, int branchId, IEnumerable<int> productIds, int? warehouseId)
+    {
+        var ids = productIds.ToList();
+        if (ids.Count == 0) return new Dictionary<string, decimal>();
+
+        var query = _context.StockLedgerEntries
+            .IgnoreQueryFilters()
+            .Where(e => e.BusinessId == businessId && e.BranchId == branchId && ids.Contains(e.ProductId));
+
+        if (warehouseId.HasValue)
+            query = query.Where(e => e.WarehouseId == warehouseId.Value);
+
+        var rows = await query
+            .GroupBy(e => new { e.ProductId, e.VariantId })
+            .Select(g => new { g.Key.ProductId, g.Key.VariantId, Total = g.Sum(e => e.QuantityInBaseUnit) })
+            .ToListAsync();
+
+        return rows.ToDictionary(
+            r => $"{r.ProductId}:{r.VariantId ?? 0}",
+            r => r.Total);
+    }
+
     public Task SaveChangesAsync() => _context.SaveChangesAsync();
 }
