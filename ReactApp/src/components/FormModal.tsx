@@ -1,6 +1,6 @@
 import React, { useMemo, useEffect, useState } from 'react';
 import { useFormModal } from '../contexts/FormModalContext';
-import { BranchForm, BusinessForm, UserForm, MenuForm, InventoryForm, CategoryForm, SubCategoryForm, BrandForm, WarehouseForm, SupplierForm, PurchaseForm } from './forms';
+import { BranchForm, BusinessForm, UserForm, MenuForm, InventoryForm, CategoryForm, SubCategoryForm, BrandForm, WarehouseForm, SupplierForm, PurchaseForm, CustomerForm } from './forms';
 import { BranchService, BusinessService, MenuService, InventoryService } from '../services/apiService';
 import { getApiErrorMessage } from '../services/api';
 import { categoryService } from '../modules/category/categoryService';
@@ -9,6 +9,7 @@ import { brandService } from '../modules/brand/brandService';
 import { warehouseService } from '../modules/warehouse/warehouseService';
 import { supplierService } from '../modules/supplier/supplierService';
 import { purchaseService } from '../modules/purchase/purchaseService';
+import { customerService as apiCustomerService } from '../modules/customer/customerService';
 import { userService, RoleListItem } from '../modules/user/userService';
 import { useBranchStore } from '../stores/useBranchStore';
 import { useIsGlobalAdmin, useIsMasterUser } from '../hooks/usePermission';
@@ -816,6 +817,48 @@ const FormModal: React.FC = () => {
     }
   };
 
+  const handleCustomerSubmit = async (data: any) => {
+    setIsSubmitting(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    const branchId = Number(data?.branchId ?? 0);
+    const name = String(data?.name ?? '').trim();
+
+    if (!name) { setError('Customer name is required.'); setIsSubmitting(false); return; }
+    if (branchId <= 0) { setError('Branch selection is required.'); setIsSubmitting(false); return; }
+
+    const typeMap: Record<string, number> = { Retail: 1, Wholesale: 2, VIP: 3 };
+
+    const payload = {
+      name,
+      phone:           String(data?.phone ?? '').trim() || undefined,
+      email:           String(data?.email ?? '').trim() || undefined,
+      address:         String(data?.address ?? '').trim() || undefined,
+      city:            String(data?.city ?? '').trim() || undefined,
+      cnic:            String(data?.cnic ?? '').trim() || undefined,
+      customerType:    typeMap[String(data?.customerType ?? 'Retail')] ?? 1,
+      creditLimit:     parseFloat(String(data?.creditLimit ?? '0')) || 0,
+      openingBalance:  parseFloat(String(data?.openingBalance ?? '0')) || 0,
+      status:          String(data?.status ?? 'Active').toLowerCase() !== 'inactive',
+      branchId,
+    };
+
+    try {
+      useBranchStore.getState().setSelectedBranchId(branchId);
+      if (isEditMode) {
+        await apiCustomerService.update(Number(editingData.id), payload);
+      } else {
+        await apiCustomerService.create(payload);
+      }
+      closeWithSuccess(isEditMode ? 'Customer updated successfully.' : 'Customer created successfully.');
+    } catch (err: any) {
+      setError(getApiErrorMessage(err, 'Failed to save customer.'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handlePurchaseSubmit = async (data: any, mode: 'draft' | 'post' = 'draft') => {
     setIsSubmitting(true);
     setError(null);
@@ -999,6 +1042,16 @@ const FormModal: React.FC = () => {
             lockBranch={isEditMode || (!isGlobalAdmin && Boolean(selectedBranchId && selectedBranchId > 0))}
           />
         );
+      case 'customer':
+        return (
+          <CustomerForm
+            initialData={editingData}
+            onSubmit={handleCustomerSubmit}
+            isLoading={isSubmitting}
+            submitLabel={isEditMode ? 'Update Customer' : 'Create Customer'}
+            lockBranch={isEditMode || (!isGlobalAdmin && Boolean(selectedBranchId && selectedBranchId > 0))}
+          />
+        );
       default:
         return null;
     }
@@ -1015,6 +1068,7 @@ const FormModal: React.FC = () => {
     formType === 'warehouse' ||
     formType === 'supplier' ||
     formType === 'purchase' ||
+    formType === 'customer' ||
     formType === 'user'
       ? 'max-w-4xl'
       : 'max-w-2xl';
@@ -1029,7 +1083,9 @@ const FormModal: React.FC = () => {
           : formType === 'supplier'
             ? 'Supplier'
             : formType === 'purchase'
-              ? 'Purchase'
+            ? 'Purchase'
+            : formType === 'customer'
+              ? 'Customer'
               : formType
                 ? formType.charAt(0).toUpperCase() + formType.slice(1)
                 : '';

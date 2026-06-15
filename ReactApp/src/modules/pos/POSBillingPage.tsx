@@ -7,6 +7,7 @@ import React, {
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { warehouseService, type WarehouseItem } from '../warehouse/warehouseService';
+import { customerService, type CustomerDetail } from '../customer/customerService';
 import {
   posService,
   type CartItem,
@@ -312,8 +313,10 @@ const POSBillingPage: React.FC = () => {
   const [discountInput, setDiscountInput] = useState('0');
   const [pricingType, setPricingType] = useState<'Retail' | 'Wholesale'>('Retail');
   const [customer, setCustomer] = useState<PosCustomer | null>(null);
+  const [walkInCustomer, setWalkInCustomer] = useState<PosCustomer | null>(null);
   const [customerQuery, setCustomerQuery] = useState('');
   const [customerResults, setCustomerResults] = useState<PosCustomer[]>([]);
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [barcodeInput, setBarcodeInput] = useState('');
   const [barcodeError, setBarcodeError] = useState('');
   const [barcodeLoading, setBarcodeLoading] = useState(false);
@@ -343,6 +346,18 @@ const POSBillingPage: React.FC = () => {
         if (r.data.length > 0) setWarehouseId(r.data[0].id);
       })
       .catch(() => setError('Failed to load warehouses.'));
+  }, [branchId]);
+
+  // ── Auto-load walk-in customer ──
+  useEffect(() => {
+    if (!branchId) return;
+    customerService.getWalkIn(branchId)
+      .then((r) => {
+        const wi: PosCustomer = { id: r.data.id, name: r.data.name, phone: r.data.phone ?? '', email: r.data.email ?? '' };
+        setWalkInCustomer(wi);
+        setCustomer(wi);   // default selection
+      })
+      .catch(() => {/* walk-in may not exist yet — that's ok */});
   }, [branchId]);
 
   // ── Keyboard shortcuts ──
@@ -410,7 +425,8 @@ const POSBillingPage: React.FC = () => {
   const removeFromCart = (key: string) => setCart((prev) => prev.filter((c) => c.cartKey !== key));
 
   const clearCart = () => {
-    setCart([]); setDiscountInput('0'); setDiscountMode('percent'); setCustomer(null); setCustomerQuery('');
+    setCart([]); setDiscountInput('0'); setDiscountMode('percent');
+    setCustomer(walkInCustomer); setCustomerQuery('');
     setTimeout(() => barcodeRef.current?.focus(), 50);
   };
 
@@ -795,40 +811,62 @@ const POSBillingPage: React.FC = () => {
 
           {/* ── Customer ── */}
           <div className="px-4 py-2 border-b border-gray-100">
-            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Customer</p>
-            {customer ? (
-              <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1.5">
-                <div className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                  {customer.name.charAt(0).toUpperCase()}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-gray-800 truncate leading-tight">{customer.name}</p>
-                  {customer.phone && <p className="text-xs text-gray-400 leading-tight">{customer.phone}</p>}
-                </div>
-                <button onClick={() => { setCustomer(null); setCustomerQuery(''); }} className="text-gray-300 hover:text-red-500 text-lg leading-none transition">×</button>
+            <div className="flex items-center justify-between mb-1.5">
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Customer</p>
+              <button
+                onClick={() => setShowQuickAdd(true)}
+                className="text-[10px] font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded-md transition"
+              >
+                + New
+              </button>
+            </div>
+
+            {/* Selected customer card */}
+            <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1.5 mb-1.5">
+              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 ${customer?.id === walkInCustomer?.id ? 'bg-gray-400' : 'bg-blue-600'}`}>
+                {(customer?.name ?? 'W').charAt(0).toUpperCase()}
               </div>
-            ) : (
-              <div className="relative">
-                <input
-                  type="text"
-                  value={customerQuery}
-                  onChange={(e) => setCustomerQuery(e.target.value)}
-                  placeholder="Name or phone…"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition"
-                />
-                {customerResults.length > 0 && (
-                  <div className="absolute left-0 right-0 top-full mt-1 border border-gray-200 rounded-xl overflow-hidden bg-white shadow-lg z-10 max-h-32 overflow-y-auto">
-                    {customerResults.map((c) => (
-                      <button key={c.id} onClick={() => { setCustomer(c); setCustomerQuery(''); setCustomerResults([]); }}
-                        className="w-full text-left px-3 py-2 hover:bg-blue-50 transition border-b border-gray-100 last:border-0">
-                        <p className="text-sm font-medium text-gray-800">{c.name}</p>
-                        {c.phone && <p className="text-xs text-gray-400">{c.phone}</p>}
-                      </button>
-                    ))}
-                  </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-gray-800 truncate leading-tight">
+                  {customer?.name ?? 'Walk-in Customer'}
+                  {customer?.id === walkInCustomer?.id && (
+                    <span className="ml-1.5 text-[10px] font-semibold text-gray-400">(default)</span>
+                  )}
+                </p>
+                {customer?.phone && customer.phone !== '' && (
+                  <p className="text-xs text-gray-400 leading-tight">{customer.phone}</p>
                 )}
               </div>
-            )}
+              {customer && customer.id !== walkInCustomer?.id && (
+                <button
+                  onClick={() => { setCustomer(walkInCustomer); setCustomerQuery(''); }}
+                  title="Reset to walk-in"
+                  className="text-gray-300 hover:text-red-500 text-lg leading-none transition"
+                >×</button>
+              )}
+            </div>
+
+            {/* Search to change */}
+            <div className="relative">
+              <input
+                type="text"
+                value={customerQuery}
+                onChange={(e) => setCustomerQuery(e.target.value)}
+                placeholder="Search to change customer…"
+                className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-700 placeholder-gray-400 focus:outline-none focus:border-blue-400 transition"
+              />
+              {customerResults.length > 0 && (
+                <div className="absolute left-0 right-0 top-full mt-1 border border-gray-200 rounded-xl overflow-hidden bg-white shadow-lg z-10 max-h-36 overflow-y-auto">
+                  {customerResults.map((c) => (
+                    <button key={c.id} onClick={() => { setCustomer(c); setCustomerQuery(''); setCustomerResults([]); }}
+                      className="w-full text-left px-3 py-2 hover:bg-blue-50 transition border-b border-gray-100 last:border-0">
+                      <p className="text-sm font-medium text-gray-800">{c.name}</p>
+                      {c.phone && <p className="text-xs text-gray-400">{c.phone}</p>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* ── Bill Discount — % and Amount toggle ── */}
@@ -959,6 +997,18 @@ const POSBillingPage: React.FC = () => {
       {completedInvoice && (
         <ReceiptModal invoice={completedInvoice} onClose={() => setCompletedInvoice(null)} onNewSale={() => { setCompletedInvoice(null); barcodeRef.current?.focus(); }} />
       )}
+      {showQuickAdd && (
+        <QuickAddCustomerModal
+          branchId={branchId}
+          onClose={() => setShowQuickAdd(false)}
+          onCreated={(c) => {
+            const pc: PosCustomer = { id: c.id, name: c.name, phone: c.phone ?? '', email: c.email ?? '' };
+            setCustomer(pc);
+            setShowQuickAdd(false);
+            barcodeRef.current?.focus();
+          }}
+        />
+      )}
     </>
   );
 };
@@ -1081,5 +1131,77 @@ const CartRow: React.FC<CartRowProps> = React.memo(({ item, idx, onUpdateQty, on
 });
 
 CartRow.displayName = 'CartRow';
+
+// ─── Quick Add Customer Modal ─────────────────────────────────────────────────
+
+interface QuickAddCustomerModalProps {
+  branchId: number;
+  onClose: () => void;
+  onCreated: (customer: CustomerDetail) => void;
+}
+
+const QuickAddCustomerModal: React.FC<QuickAddCustomerModalProps> = ({ branchId, onClose, onCreated }) => {
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const nameRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { setTimeout(() => nameRef.current?.focus(), 100); }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) { setError('Name is required.'); return; }
+    setSaving(true);
+    setError('');
+    try {
+      const res = await customerService.quickCreate({ name: name.trim(), phone: phone.trim() || undefined, branchId });
+      onCreated(res.data);
+    } catch (err: any) {
+      setError(err.response?.data?.message ?? 'Failed to create customer.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <div>
+            <h3 className="font-bold text-gray-800">New Customer</h3>
+            <p className="text-xs text-gray-400">Quick add from POS</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">×</button>
+        </div>
+        <form onSubmit={handleSubmit} className="px-5 py-4 space-y-4">
+          {error && <p className="text-sm text-red-600 bg-red-50 border border-red-100 px-3 py-2 rounded-lg">{error}</p>}
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Full Name <span className="text-red-400">*</span></label>
+            <input ref={nameRef} type="text" value={name} onChange={e => setName(e.target.value)} required
+              placeholder="Customer name"
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Phone <span className="text-gray-400 font-normal">(optional)</span></label>
+            <input type="tel" value={phone} onChange={e => setPhone(e.target.value)}
+              placeholder="03001234567"
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+          </div>
+          <div className="flex gap-3 pt-1">
+            <button type="button" onClick={onClose}
+              className="flex-1 py-2.5 text-sm font-semibold text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition">
+              Cancel
+            </button>
+            <button type="submit" disabled={saving}
+              className="flex-1 py-2.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg transition shadow-sm">
+              {saving ? 'Saving…' : 'Add & Select'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
 
 export default POSBillingPage;

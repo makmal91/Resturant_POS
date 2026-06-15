@@ -12,6 +12,7 @@ export type FormType =
   | 'warehouse'
   | 'supplier'
   | 'purchase'
+  | 'customer'
   | null;
 
 const DEFAULT_BRANCH_FORM_DATA = {
@@ -115,6 +116,20 @@ const DEFAULT_SUPPLIER_FORM_DATA = {
   branchId: 0,
 };
 
+const DEFAULT_CUSTOMER_FORM_DATA = {
+  name: '',
+  phone: '',
+  email: '',
+  address: '',
+  city: '',
+  cnic: '',
+  customerType: 'Retail',
+  creditLimit: '0',
+  openingBalance: '0',
+  status: 'Active',
+  branchId: 0,
+};
+
 const DEFAULT_PURCHASE_FORM_DATA = {
   invoiceNo: '',
   supplierId: 0,
@@ -178,6 +193,10 @@ const getDefaultFormData = (type: FormType) => {
 
   if (type === 'purchase') {
     return DEFAULT_PURCHASE_FORM_DATA;
+  }
+
+  if (type === 'customer') {
+    return DEFAULT_CUSTOMER_FORM_DATA;
   }
 
   return {};

@@ -36,6 +36,8 @@ using POSSystem.Application.Stock.Interfaces;
 using POSSystem.Application.Stock.Services;
 using POSSystem.Application.Sales.Interfaces;
 using POSSystem.Application.Sales.Services;
+using POSSystem.Application.Customer.Interfaces;
+using POSSystem.Application.Customer.Services;
 
 namespace POSSystem.Application;
 
@@ -90,6 +92,9 @@ public static class ServiceRegistration
 
         // Register POS sales service
         services.AddScoped<ISalesService, SalesService>();
+
+        // Register customer service
+        services.AddScoped<ICustomerService, CustomerService>();
 
         // Add other application services here
 

@@ -1,9 +1,3 @@
-import React from 'react';
-import ManagementForm from '../shared/ManagementForm';
-import { EntityFormProps } from '../shared/ManagementPage';
-
-const CustomerForm: React.FC<EntityFormProps> = (props) => {
-  return <ManagementForm entityLabel="Customer" {...props} />;
-};
-
-export default CustomerForm;
+// Customer form is now managed through the global FormModal panel.
+// See ReactApp/src/components/forms/CustomerForm.tsx for the form implementation.
+export {};

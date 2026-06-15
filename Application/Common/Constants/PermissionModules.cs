@@ -21,6 +21,7 @@ public static class PermissionModules
     public const string Purchase = "Purchase";
     public const string Stock = "Stock";
     public const string Sales = "Sales";
+    public const string Customers = "Customers";
 
     public static readonly IReadOnlyList<string> All =
     [
@@ -42,6 +43,7 @@ public static class PermissionModules
         Suppliers,
         Purchase,
         Stock,
-        Sales
+        Sales,
+        Customers
     ];
 }

@@ -13,4 +13,5 @@ export { default as BrandForm } from './BrandForm';
 export { default as WarehouseForm } from './WarehouseForm';
 export { default as SupplierForm } from './SupplierForm';
 export { default as PurchaseForm } from './PurchaseForm';
+export { default as CustomerForm } from './CustomerForm';
 export { default as OrderScreen } from './OrderScreen';
