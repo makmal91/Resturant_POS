@@ -16,6 +16,10 @@ public static class PermissionModules
     public const string Roles = "Roles";
     public const string Branches = "Branches";
     public const string Businesses = "Businesses";
+    public const string Warehouses = "Warehouses";
+    public const string Suppliers = "Suppliers";
+    public const string Purchase = "Purchase";
+    public const string Stock = "Stock";
 
     public static readonly IReadOnlyList<string> All =
     [
@@ -32,6 +36,10 @@ public static class PermissionModules
         Users,
         Roles,
         Branches,
-        Businesses
+        Businesses,
+        Warehouses,
+        Suppliers,
+        Purchase,
+        Stock
     ];
 }

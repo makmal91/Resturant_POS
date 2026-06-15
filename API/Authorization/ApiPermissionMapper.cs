@@ -23,7 +23,11 @@ public static class ApiPermissionMapper
         ["Branches"] = PermissionModules.Branches,
         ["Businesses"] = PermissionModules.Businesses,
         ["Countries"] = PermissionModules.Branches,
-        ["Recipes"] = PermissionModules.Products
+        ["Recipes"] = PermissionModules.Products,
+        ["Warehouses"] = PermissionModules.Warehouses,
+        ["Suppliers"] = PermissionModules.Suppliers,
+        ["Purchase"] = PermissionModules.Purchase,
+        ["Stock"] = PermissionModules.Stock
     };
 
     public static (string Module, string Action)? Resolve(HttpContext context)

@@ -440,6 +440,7 @@ public class ProductService : IProductService
             SellingPrice = product.SellingPrice,
             Status = product.Status,
             HasImage = product.Images.Any(i => !i.IsDeleted),
+            IsVariantEnabled = product.IsVariantEnabled,
             BranchId = product.BranchId,
             BranchName = product.Branch?.Name ?? string.Empty
         };

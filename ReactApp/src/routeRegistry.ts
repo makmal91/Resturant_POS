@@ -22,6 +22,9 @@ import SupplierPage from './modules/supplier/SupplierPage';
 import UnitPage from './modules/unit/UnitPage';
 import TaxPage from './modules/tax/TaxPage';
 import DiscountPage from './modules/discount/DiscountPage';
+import WarehousePage from './modules/warehouse/WarehousePage';
+import PurchasePage from './modules/purchase/PurchasePage';
+import StockLedgerPage from './modules/stock/StockLedgerPage';
 
 export const routeRegistry: RouteDefinition[] = [
   { path: '/', label: 'Dashboard', component: POS, module: 'POS Billing' },
@@ -35,12 +38,15 @@ export const routeRegistry: RouteDefinition[] = [
   { path: '/brands', label: 'Brands', component: BrandPage, module: 'Brands' },
   { path: '/products', label: 'Products', component: ProductPage, module: 'Products' },
   { path: '/customers', label: 'Customers', component: CustomerPage },
-  { path: '/suppliers', label: 'Suppliers', component: SupplierPage },
+  { path: '/suppliers', label: 'Suppliers', component: SupplierPage, module: 'Suppliers' },
   { path: '/units', label: 'Units', component: UnitPage, module: 'Units' },
   { path: '/taxes', label: 'Taxes', component: TaxPage },
   { path: '/discounts', label: 'Discounts', component: DiscountPage },
   { path: '/inventory', label: 'Inventory', component: InventoryList, module: 'Inventory' },
   { path: '/orders', label: 'Orders', component: OrderScreen, module: 'Orders' },
+  { path: '/warehouses', label: 'Warehouses', component: WarehousePage, module: 'Warehouses' },
+  { path: '/purchase', label: 'Purchase', component: PurchasePage, module: 'Purchase' },
+  { path: '/stock', label: 'Stock', component: StockLedgerPage, module: 'Stock' },
 ];
 
 const routeMap = new Map(routeRegistry.map((route) => [route.path, route]));

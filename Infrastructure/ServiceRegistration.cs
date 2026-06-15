@@ -14,6 +14,10 @@ using POSSystem.Application.Branch.Interfaces;
 using POSSystem.Application.Users.Interfaces;
 using POSSystem.Application.Navigation.Interfaces;
 using POSSystem.Application.Modules.Interfaces;
+using POSSystem.Application.Warehouse.Interfaces;
+using POSSystem.Application.Supplier.Interfaces;
+using POSSystem.Application.Purchase.Interfaces;
+using POSSystem.Application.Stock.Interfaces;
 using POSSystem.Infrastructure.Data;
 using POSSystem.Infrastructure.Repositories;
 using POSSystem.Infrastructure.Security;
@@ -42,6 +46,12 @@ public static class ServiceRegistration
         services.AddScoped<IModuleRepository, ModuleRepository>();
         services.AddScoped<INavigationMenuRepository, NavigationMenuRepository>();
         services.AddScoped<IPasswordHasher, BcryptPasswordHasher>();
+
+        // Register warehouse, supplier, purchase, stock repositories
+        services.AddScoped<IWarehouseRepository, WarehouseRepository>();
+        services.AddScoped<ISupplierRepository, SupplierRepository>();
+        services.AddScoped<IPurchaseRepository, PurchaseRepository>();
+        services.AddScoped<IStockLedgerRepository, StockLedgerRepository>();
 
         // Add other infrastructure services here
 

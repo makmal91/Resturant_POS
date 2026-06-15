@@ -1,6 +1,18 @@
 import React, { createContext, useContext, useState } from 'react';
 
-export type FormType = 'branch' | 'business' | 'user' | 'menu' | 'inventory' | 'category' | 'subcategory' | 'brand' | null;
+export type FormType =
+  | 'branch'
+  | 'business'
+  | 'user'
+  | 'menu'
+  | 'inventory'
+  | 'category'
+  | 'subcategory'
+  | 'brand'
+  | 'warehouse'
+  | 'supplier'
+  | 'purchase'
+  | null;
 
 const DEFAULT_BRANCH_FORM_DATA = {
   name: '',
@@ -84,6 +96,35 @@ const DEFAULT_BRAND_FORM_DATA = {
   branchId: 0,
 };
 
+const DEFAULT_WAREHOUSE_FORM_DATA = {
+  name: '',
+  code: '',
+  address: '',
+  status: 'Active',
+  branchId: 0,
+};
+
+const DEFAULT_SUPPLIER_FORM_DATA = {
+  name: '',
+  contactPerson: '',
+  phone: '',
+  email: '',
+  address: '',
+  taxNumber: '',
+  status: 'Active',
+  branchId: 0,
+};
+
+const DEFAULT_PURCHASE_FORM_DATA = {
+  invoiceNo: '',
+  supplierId: 0,
+  warehouseId: 0,
+  purchaseDate: new Date().toISOString().slice(0, 10),
+  notes: '',
+  branchId: 0,
+  items: [],
+};
+
 interface FormModalContextType {
   isOpen: boolean;
   formType: FormType;
@@ -125,6 +166,18 @@ const getDefaultFormData = (type: FormType) => {
 
   if (type === 'brand') {
     return DEFAULT_BRAND_FORM_DATA;
+  }
+
+  if (type === 'warehouse') {
+    return DEFAULT_WAREHOUSE_FORM_DATA;
+  }
+
+  if (type === 'supplier') {
+    return DEFAULT_SUPPLIER_FORM_DATA;
+  }
+
+  if (type === 'purchase') {
+    return DEFAULT_PURCHASE_FORM_DATA;
   }
 
   return {};

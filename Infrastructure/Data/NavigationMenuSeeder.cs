@@ -29,12 +29,15 @@ public static class NavigationMenuSeeder
         new("Brands", "/brands", "🏷️", "Brands", "Master Data", 8),
         new("Products", "/products", "🧾", "Products", "Master Data", 9),
         new("Customers", "/customers", "🙋", null, "Master Data", 10),
-        new("Suppliers", "/suppliers", "🚚", null, "Master Data", 11),
-        new("Units", "/units", "⚖️", null, "Master Data", 12),
+        new("Suppliers", "/suppliers", "🚚", "Suppliers", "Master Data", 11),
+        new("Units", "/units", "⚖️", "Units", "Master Data", 12),
         new("Taxes", "/taxes", "💸", null, "Master Data", 13),
         new("Discounts", "/discounts", "🏷️", null, "Master Data", 14),
+        new("Warehouses", "/warehouses", "🏭", "Warehouses", "Master Data", 15),
         new("Inventory", "/inventory", "📦", "Inventory", "Operations", 1),
-        new("Orders", "/orders", "📋", "Orders", "Operations", 2)
+        new("Purchase", "/purchase", "🛒", "Purchase", "Operations", 2),
+        new("Stock", "/stock", "📊", "Stock", "Operations", 3),
+        new("Orders", "/orders", "📋", "Orders", "Operations", 4)
     ];
 
     public static async Task SeedDefaultMenusAsync(POSDbContext context, ILogger logger)
@@ -48,6 +51,33 @@ public static class NavigationMenuSeeder
         {
             await SeedItemAsync(context, logger, item);
         }
+
+        await PatchExistingMenusAsync(context, logger);
+    }
+
+    private static Task PatchExistingMenusAsync(POSDbContext context, ILogger logger)
+    {
+        var patches = new[]
+        {
+            ExecuteRawSeedAsync(
+                context,
+                logger,
+                "Suppliers ModuleName",
+                """
+                UPDATE [Menus] SET [ModuleName] = N'Suppliers'
+                WHERE [Route] = N'/suppliers' AND ([ModuleName] IS NULL OR [ModuleName] = N'');
+                """),
+            ExecuteRawSeedAsync(
+                context,
+                logger,
+                "Units ModuleName",
+                """
+                UPDATE [Menus] SET [ModuleName] = N'Units'
+                WHERE [Route] = N'/units' AND ([ModuleName] IS NULL OR [ModuleName] = N'');
+                """)
+        };
+
+        return Task.WhenAll(patches);
     }
 
     private static Task SeedGroupAsync(POSDbContext context, ILogger logger, MenuSeedEntry group)
@@ -91,6 +121,22 @@ public static class NavigationMenuSeeder
                   AND parent.[Route] IS NULL;
             END
             """);
+    }
+
+    private static async Task ExecuteRawSeedAsync(
+        POSDbContext context,
+        ILogger logger,
+        string menuName,
+        string sql)
+    {
+        try
+        {
+            await context.Database.ExecuteSqlRawAsync(sql);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to seed navigation menu entry {MenuName}.", menuName);
+        }
     }
 
     private static async Task ExecuteSeedAsync(

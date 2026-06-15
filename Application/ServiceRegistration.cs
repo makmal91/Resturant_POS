@@ -26,6 +26,14 @@ using POSSystem.Application.Navigation.Interfaces;
 using POSSystem.Application.Navigation.Services;
 using POSSystem.Application.Modules.Interfaces;
 using POSSystem.Application.Modules.Services;
+using POSSystem.Application.Warehouse.Interfaces;
+using POSSystem.Application.Warehouse.Services;
+using POSSystem.Application.Supplier.Interfaces;
+using POSSystem.Application.Supplier.Services;
+using POSSystem.Application.Purchase.Interfaces;
+using POSSystem.Application.Purchase.Services;
+using POSSystem.Application.Stock.Interfaces;
+using POSSystem.Application.Stock.Services;
 
 namespace POSSystem.Application;
 
@@ -71,6 +79,12 @@ public static class ServiceRegistration
         services.AddScoped<INavigationMenuService, NavigationMenuService>();
         services.AddScoped<IModuleService, ModuleService>();
         services.AddScoped<IRolePermissionService, RolePermissionService>();
+
+        // Register warehouse, supplier, purchase, stock services
+        services.AddScoped<IWarehouseService, WarehouseService>();
+        services.AddScoped<ISupplierService, SupplierService>();
+        services.AddScoped<IPurchaseService, PurchaseService>();
+        services.AddScoped<IStockService, StockService>();
 
         // Add other application services here
 

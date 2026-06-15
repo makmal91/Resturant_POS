@@ -30,6 +30,7 @@ public class ProductListDto
     public decimal SellingPrice { get; set; }
     public bool Status { get; set; }
     public bool HasImage { get; set; }
+    public bool IsVariantEnabled { get; set; }
     public int BranchId { get; set; }
     public string BranchName { get; set; } = string.Empty;
 }

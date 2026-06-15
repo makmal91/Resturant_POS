@@ -72,3 +72,21 @@ public enum StockMovementType
     Out,
     Transfer
 }
+
+public enum PurchaseStatus
+{
+    Draft = 0,
+    Posted = 1,
+    Cancelled = 2
+}
+
+public enum StockLedgerType
+{
+    PurchaseEntry    = 1,   // Stock in from a supplier purchase
+    SaleEntry        = 2,   // Stock out from a customer sale
+    PurchaseReturn   = 3,   // Stock returned back to supplier
+    Adjustment       = 4,   // Manual stock adjustment
+    TransferOut      = 5,   // Stock moved out of a warehouse
+    TransferIn       = 6,   // Stock received into a warehouse
+    SaleReturn       = 7,   // Stock returned by a customer
+}

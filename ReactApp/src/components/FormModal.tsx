@@ -1,11 +1,14 @@
 import React, { useMemo, useEffect, useState } from 'react';
 import { useFormModal } from '../contexts/FormModalContext';
-import { BranchForm, BusinessForm, UserForm, MenuForm, InventoryForm, CategoryForm, SubCategoryForm, BrandForm } from './forms';
+import { BranchForm, BusinessForm, UserForm, MenuForm, InventoryForm, CategoryForm, SubCategoryForm, BrandForm, WarehouseForm, SupplierForm, PurchaseForm } from './forms';
 import { BranchService, BusinessService, MenuService, InventoryService } from '../services/apiService';
 import { getApiErrorMessage } from '../services/api';
 import { categoryService } from '../modules/category/categoryService';
 import { subCategoryService } from '../modules/subcategory/subcategoryService';
 import { brandService } from '../modules/brand/brandService';
+import { warehouseService } from '../modules/warehouse/warehouseService';
+import { supplierService } from '../modules/supplier/supplierService';
+import { purchaseService } from '../modules/purchase/purchaseService';
 import { userService, RoleListItem } from '../modules/user/userService';
 import { useBranchStore } from '../stores/useBranchStore';
 import { useIsGlobalAdmin, useIsMasterUser } from '../hooks/usePermission';
@@ -13,6 +16,11 @@ import { isProtectedRole } from '../types/permissions';
 
 interface MenuCategoryOption {
   id: string;
+  name: string;
+}
+
+interface LookupOption {
+  id: number;
   name: string;
 }
 
@@ -37,6 +45,9 @@ const FormModal: React.FC = () => {
   const [menuCategories, setMenuCategories] = useState<MenuCategoryOption[]>([]);
   const [isMenuCategoriesLoading, setIsMenuCategoriesLoading] = useState(false);
   const [menuCategoriesError, setMenuCategoriesError] = useState<string | null>(null);
+  const [purchaseSuppliers, setPurchaseSuppliers] = useState<LookupOption[]>([]);
+  const [purchaseWarehouses, setPurchaseWarehouses] = useState<LookupOption[]>([]);
+  const [isPurchaseMetaLoading, setIsPurchaseMetaLoading] = useState(false);
   const [userRoles, setUserRoles] = useState<RoleListItem[]>([]);
   const [isUserMetaLoading, setIsUserMetaLoading] = useState(false);
   const branches = useBranchStore((state) => state.branches);
@@ -168,6 +179,62 @@ const FormModal: React.FC = () => {
       isCancelled = true;
     };
   }, [isOpen, formType, fetchBranches, isGlobalAdmin, isMasterUser]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadPurchaseMeta = async () => {
+      if (!isOpen || formType !== 'purchase') {
+        return;
+      }
+
+      const branchId = Number(editingData?.branchId ?? selectedBranchId ?? 0);
+      if (branchId <= 0) {
+        setPurchaseSuppliers([]);
+        setPurchaseWarehouses([]);
+        return;
+      }
+
+      setIsPurchaseMetaLoading(true);
+      try {
+        const [suppliersRes, warehousesRes] = await Promise.all([
+          supplierService.getAllActive(branchId),
+          warehouseService.getAllActive(branchId),
+        ]);
+
+        if (!isCancelled) {
+          setPurchaseSuppliers(
+            (Array.isArray(suppliersRes.data) ? suppliersRes.data : []).map((item) => ({
+              id: Number((item as { id?: number }).id ?? 0),
+              name: String((item as { name?: string }).name ?? ''),
+            })).filter((item) => item.id > 0)
+          );
+          setPurchaseWarehouses(
+            (Array.isArray(warehousesRes.data) ? warehousesRes.data : []).map((item) => ({
+              id: Number((item as { id?: number }).id ?? 0),
+              name: String((item as { name?: string }).name ?? ''),
+            })).filter((item) => item.id > 0)
+          );
+        }
+      } catch (err) {
+        if (!isCancelled) {
+          setPurchaseSuppliers([]);
+          setPurchaseWarehouses([]);
+          setError(getApiErrorMessage(err, 'Failed to load purchase form data.'));
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsPurchaseMetaLoading(false);
+        }
+      }
+    };
+
+    void loadPurchaseMeta();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [isOpen, formType, editingData?.branchId, selectedBranchId]);
 
   const normalizedMenuInitialData = useMemo(() => {
     if (formType !== 'menu' || !editingData) {
@@ -660,6 +727,158 @@ const FormModal: React.FC = () => {
     }
   };
 
+  const handleWarehouseSubmit = async (data: any) => {
+    setIsSubmitting(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    const branchId = Number(data?.branchId ?? 0);
+    const name = String(data?.name ?? '').trim();
+
+    if (!name) {
+      setError('Warehouse name is required.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (branchId <= 0) {
+      setError('Branch selection is required.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    const payload = {
+      name,
+      code: String(data?.code ?? '').trim(),
+      address: String(data?.address ?? '').trim(),
+      isActive: String(data?.status ?? 'Active').toLowerCase() !== 'inactive',
+      branchId,
+    };
+
+    try {
+      useBranchStore.getState().setSelectedBranchId(branchId);
+      if (isEditMode) {
+        await warehouseService.update(Number(editingData.id), payload);
+      } else {
+        await warehouseService.create(payload);
+      }
+      closeWithSuccess(isEditMode ? 'Warehouse updated successfully.' : 'Warehouse created successfully.');
+    } catch (err: any) {
+      setError(getApiErrorMessage(err, 'Failed to save warehouse'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSupplierSubmit = async (data: any) => {
+    setIsSubmitting(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    const branchId = Number(data?.branchId ?? 0);
+    const name = String(data?.name ?? '').trim();
+
+    if (!name) {
+      setError('Supplier name is required.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (branchId <= 0) {
+      setError('Branch selection is required.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    const payload = {
+      name,
+      contactPerson: String(data?.contactPerson ?? '').trim(),
+      phone: String(data?.phone ?? '').trim(),
+      email: String(data?.email ?? '').trim(),
+      address: String(data?.address ?? '').trim(),
+      taxNumber: String(data?.taxNumber ?? '').trim(),
+      isActive: String(data?.status ?? 'Active').toLowerCase() !== 'inactive',
+      branchId,
+    };
+
+    try {
+      useBranchStore.getState().setSelectedBranchId(branchId);
+      if (isEditMode) {
+        await supplierService.update(Number(editingData.id), payload);
+      } else {
+        await supplierService.create(payload);
+      }
+      closeWithSuccess(isEditMode ? 'Supplier updated successfully.' : 'Supplier created successfully.');
+    } catch (err: any) {
+      setError(getApiErrorMessage(err, 'Failed to save supplier'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handlePurchaseSubmit = async (data: any, mode: 'draft' | 'post' = 'draft') => {
+    setIsSubmitting(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    const branchId = Number(data?.branchId ?? 0);
+    const invoiceNo = String(data?.invoiceNo ?? '').trim();
+    const supplierId = Number(data?.supplierId ?? 0);
+    const warehouseId = Number(data?.warehouseId ?? 0);
+
+    if (!invoiceNo) {
+      setError('Invoice number is required.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (branchId <= 0 || supplierId <= 0 || warehouseId <= 0) {
+      setError('Branch, supplier, and warehouse are required.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    const items = Array.isArray(data?.items) ? data.items : [];
+    if (items.length === 0) {
+      setError('At least one purchase item is required.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    const payload = {
+      invoiceNo,
+      supplierId,
+      warehouseId,
+      purchaseDate: new Date(String(data?.purchaseDate ?? new Date().toISOString())).toISOString(),
+      notes: String(data?.notes ?? '').trim(),
+      branchId,
+      items,
+    };
+
+    try {
+      useBranchStore.getState().setSelectedBranchId(branchId);
+      let savedId: number;
+      if (isEditMode) {
+        const res = await purchaseService.update(Number(editingData.id), payload);
+        savedId = Number((res.data as any)?.id ?? editingData.id);
+      } else {
+        const res = await purchaseService.create(payload);
+        savedId = Number((res.data as any)?.id ?? 0);
+      }
+
+      if (mode === 'post' && savedId > 0) {
+        await purchaseService.post(savedId, branchId);
+        closeWithSuccess(isEditMode ? 'Purchase updated and posted to stock.' : 'Purchase created and posted to stock.');
+      } else {
+        closeWithSuccess(isEditMode ? 'Purchase updated successfully.' : 'Purchase saved as draft.');
+      }
+    } catch (err: any) {
+      setError(getApiErrorMessage(err, 'Failed to save purchase'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const getFormComponent = () => {
     switch (formType) {
       case 'branch':
@@ -749,6 +968,37 @@ const FormModal: React.FC = () => {
             lockBranch={isEditMode || (!isGlobalAdmin && Boolean(selectedBranchId && selectedBranchId > 0))}
           />
         );
+      case 'warehouse':
+        return (
+          <WarehouseForm
+            initialData={editingData}
+            onSubmit={handleWarehouseSubmit}
+            isLoading={isSubmitting}
+            submitLabel={isEditMode ? 'Update Warehouse' : 'Create Warehouse'}
+            lockBranch={isEditMode || (!isGlobalAdmin && Boolean(selectedBranchId && selectedBranchId > 0))}
+          />
+        );
+      case 'supplier':
+        return (
+          <SupplierForm
+            initialData={editingData}
+            onSubmit={handleSupplierSubmit}
+            isLoading={isSubmitting}
+            submitLabel={isEditMode ? 'Update Supplier' : 'Create Supplier'}
+            lockBranch={isEditMode || (!isGlobalAdmin && Boolean(selectedBranchId && selectedBranchId > 0))}
+          />
+        );
+      case 'purchase':
+        return (
+          <PurchaseForm
+            initialData={editingData}
+            suppliers={purchaseSuppliers}
+            warehouses={purchaseWarehouses}
+            onSubmit={handlePurchaseSubmit}
+            isLoading={isSubmitting || isPurchaseMetaLoading}
+            lockBranch={isEditMode || (!isGlobalAdmin && Boolean(selectedBranchId && selectedBranchId > 0))}
+          />
+        );
       default:
         return null;
     }
@@ -762,6 +1012,9 @@ const FormModal: React.FC = () => {
     formType === 'category' ||
     formType === 'subcategory' ||
     formType === 'brand' ||
+    formType === 'warehouse' ||
+    formType === 'supplier' ||
+    formType === 'purchase' ||
     formType === 'user'
       ? 'max-w-4xl'
       : 'max-w-2xl';
@@ -771,9 +1024,15 @@ const FormModal: React.FC = () => {
       ? 'Sub Category'
       : formType === 'brand'
         ? 'Brand'
-        : formType
-          ? formType.charAt(0).toUpperCase() + formType.slice(1)
-          : '';
+        : formType === 'warehouse'
+          ? 'Warehouse'
+          : formType === 'supplier'
+            ? 'Supplier'
+            : formType === 'purchase'
+              ? 'Purchase'
+              : formType
+                ? formType.charAt(0).toUpperCase() + formType.slice(1)
+                : '';
 
   return (
     <>

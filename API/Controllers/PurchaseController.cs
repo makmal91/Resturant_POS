@@ -1,0 +1,155 @@
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using POSSystem.API.Extensions;
+using POSSystem.Application.Purchase.DTOs;
+using POSSystem.Application.Purchase.Interfaces;
+using POSSystem.Domain;
+
+namespace POSSystem.API.Controllers;
+
+[Authorize]
+[ApiController]
+[Route("api/[controller]")]
+public class PurchaseController : ControllerBase
+{
+    private readonly IPurchaseService _purchaseService;
+
+    public PurchaseController(IPurchaseService purchaseService)
+    {
+        _purchaseService = purchaseService;
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> GetPurchases(
+        [FromQuery] int? branchId,
+        [FromQuery] int? businessId,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 25,
+        [FromQuery] string? search = null,
+        [FromQuery] PurchaseStatus? status = null)
+    {
+        if (!Request.Query.ContainsKey("branchId"))
+            return BadRequest(new { message = "branchId is required." });
+
+        var resolvedBusinessId = this.ResolveBusinessId(businessId);
+        var resolvedBranchId = this.ResolveBranchId(branchId);
+
+        if (resolvedBranchId < 0)
+            return BadRequest(new { message = "branchId is required." });
+
+        try
+        {
+            var result = await _purchaseService.GetPurchasesPagedAsync(
+                resolvedBusinessId, resolvedBranchId, page, pageSize, search, status);
+
+            return Ok(new
+            {
+                purchases = result.Data,
+                totalRecords = result.TotalRecords,
+                totalPages = result.TotalPages,
+                currentPage = result.CurrentPage,
+                pageSize
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpGet("{id:int}")]
+    public async Task<IActionResult> GetPurchaseById(int id, [FromQuery] int? branchId, [FromQuery] int? businessId)
+    {
+        var resolvedBusinessId = this.ResolveBusinessId(businessId);
+        var resolvedBranchId = this.ResolveBranchId(branchId);
+
+        var purchase = await _purchaseService.GetPurchaseByIdAsync(id, resolvedBusinessId, resolvedBranchId);
+        if (purchase == null) return NotFound();
+        return Ok(purchase);
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> CreatePurchase([FromBody] CreatePurchaseDto dto)
+    {
+        dto.BusinessId = this.ResolveBusinessId(dto.BusinessId > 0 ? dto.BusinessId : null);
+        dto.BranchId = this.ResolveBranchId(dto.BranchId > 0 ? dto.BranchId : null);
+
+        if (dto.BranchId <= 0)
+            return BadRequest(new { message = "BranchId is required." });
+
+        try
+        {
+            var created = await _purchaseService.CreatePurchaseAsync(dto);
+            return CreatedAtAction(nameof(GetPurchaseById),
+                new { id = created.Id, branchId = created.BranchId }, created);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpPut("{id:int}")]
+    public async Task<IActionResult> UpdatePurchase(int id, [FromBody] UpdatePurchaseDto dto)
+    {
+        dto.BusinessId = this.ResolveBusinessId(dto.BusinessId > 0 ? dto.BusinessId : null);
+        dto.BranchId = this.ResolveBranchId(dto.BranchId > 0 ? dto.BranchId : null);
+
+        if (dto.BranchId <= 0)
+            return BadRequest(new { message = "BranchId is required." });
+
+        try
+        {
+            var updated = await _purchaseService.UpdatePurchaseAsync(id, dto);
+            if (updated == null) return NotFound();
+            return Ok(updated);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpPost("{id:int}/post")]
+    public async Task<IActionResult> PostPurchase(int id, [FromQuery] int? branchId, [FromQuery] int? businessId)
+    {
+        var dto = new PostPurchaseDto
+        {
+            BusinessId = this.ResolveBusinessId(businessId),
+            BranchId = this.ResolveBranchId(branchId)
+        };
+
+        if (dto.BranchId <= 0)
+            return BadRequest(new { message = "branchId is required." });
+
+        try
+        {
+            var result = await _purchaseService.PostPurchaseAsync(id, dto);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpDelete("{id:int}")]
+    public async Task<IActionResult> DeletePurchase(int id, [FromQuery] int? branchId, [FromQuery] int? businessId)
+    {
+        var resolvedBusinessId = this.ResolveBusinessId(businessId);
+        var resolvedBranchId = this.ResolveBranchId(branchId);
+
+        if (resolvedBranchId <= 0)
+            return BadRequest(new { message = "branchId is required." });
+
+        try
+        {
+            await _purchaseService.DeletePurchaseAsync(id, resolvedBusinessId, resolvedBranchId);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+}
