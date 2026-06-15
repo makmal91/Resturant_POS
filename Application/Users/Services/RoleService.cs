@@ -82,11 +82,13 @@ public class RoleService : IRoleService
     public Task<IReadOnlyList<RolePermissionDto>> GetRolePermissionsAsync(int roleId) =>
         _repository.GetPermissionsAsync(roleId);
 
-    public async Task UpdateRolePermissionsAsync(int roleId, UpdateRolePermissionsDto dto)
+    public async Task UpdateRolePermissionsAsync(int roleId, UpdateRolePermissionsDto dto, string? actorRoleName = null)
     {
         var role = await _repository.GetTrackedByIdAsync(roleId);
         if (role == null)
             throw new InvalidOperationException("Role not found.");
+
+        RoleProtection.EnsureCanManageRolePermissions(actorRoleName, role.Name);
 
         var permissions = dto.Permissions
             .Where(p => !string.IsNullOrWhiteSpace(p.ModuleName))

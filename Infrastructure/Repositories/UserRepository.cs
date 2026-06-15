@@ -136,6 +136,14 @@ public class UserRepository : IUserRepository
         return count == distinctIds.Count;
     }
 
+    public async Task<int?> GetFirstActiveBranchIdAsync(int businessId) =>
+        await _context.Branches
+            .AsNoTracking()
+            .Where(b => b.BusinessId == businessId && b.IsActive && !b.IsDeleted)
+            .OrderBy(b => b.Id)
+            .Select(b => (int?)b.Id)
+            .FirstOrDefaultAsync();
+
     public async Task<IReadOnlyList<UserBranchAssignmentDto>> GetUserBranchesAsync(int userId)
     {
         return await _context.UserBranches
@@ -222,8 +230,9 @@ public class UserRepository : IUserRepository
             IsActive = user.IsActive,
             Branches = branches,
             AssignedBranchesDisplay = string.Join(", ", branches.Select(b => b.BranchName)),
-            PrimaryBranchId = branches.FirstOrDefault()?.BranchId ?? 0,
-            PrimaryBranchName = branches.FirstOrDefault()?.BranchName ?? string.Empty
+            PrimaryBranchId = branches.FirstOrDefault()?.BranchId ?? user.BranchId,
+            PrimaryBranchName = branches.FirstOrDefault()?.BranchName
+                ?? (user.BranchId > 0 ? user.BranchId.ToString() : string.Empty)
         };
     }
 

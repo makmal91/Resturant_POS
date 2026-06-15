@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import DataTable, { Action, Column } from '../../components/DataTable';
 import Badge from '../../components/Badge';
-import BranchSelector from '../shared/BranchSelector';
 import { useBranchStore } from '../../stores/useBranchStore';
 import { useFormModal } from '../../contexts/FormModalContext';
 import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
-import { usePermission, useIsMasterUser } from '../../hooks/usePermission';
+import { usePermission } from '../../hooks/usePermission';
+import { useBranchWriteAccess } from '../../hooks/useBranchWriteAccess';
 import PermissionGate from '../../components/PermissionGate';
 import { getApiErrorMessage } from '../../services/api';
 import { safeString } from '../../utils/safeValues';
@@ -29,8 +29,6 @@ interface CategoryItem {
 
 const CategoryPage: React.FC = () => {
   const branches = useBranchStore((state) => state.branches);
-  const selectedBranchId = useBranchStore((state) => state.selectedBranchId);
-  const fetchBranches = useBranchStore((state) => state.fetchBranches);
   const { openForm, isOpen } = useFormModal();
   const { showConfirm } = useConfirmDialog();
 
@@ -40,14 +38,19 @@ const CategoryPage: React.FC = () => {
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const { canCreate, canEdit, canDelete } = usePermission('Categories');
-  const isMasterUser = useIsMasterUser();
+  const {
+    selectedBranchId,
+    isMasterUser,
+    hasBranchSelection,
+    isGlobalMode,
+    canWriteInView,
+    resolveEntityBranchId,
+    getWriteBlockMessage,
+  } = useBranchWriteAccess();
 
-  const hasBranchSelection = selectedBranchId !== null;
-  const isGlobalMode = selectedBranchId === 0;
-  const canWriteBranch = isMasterUser || (hasBranchSelection && !isGlobalMode);
-  const canAdd = canWriteBranch && canCreate;
-  const canModify = canWriteBranch && canEdit;
-  const canRemove = canWriteBranch && canDelete;
+  const canAdd = canWriteInView && (isMasterUser || canCreate);
+  const canModify = canWriteInView && (isMasterUser || canEdit);
+  const canRemove = canWriteInView && (isMasterUser || canDelete);
 
   const showNotification = useCallback((type: 'success' | 'error', message: string) => {
     setNotification({ type, message });
@@ -120,10 +123,6 @@ const CategoryPage: React.FC = () => {
   }, [selectedBranchId, normalizeCategory, showNotification]);
 
   useEffect(() => {
-    void fetchBranches();
-  }, [fetchBranches]);
-
-  useEffect(() => {
     void fetchCategories();
   }, [fetchCategories]);
 
@@ -138,32 +137,32 @@ const CategoryPage: React.FC = () => {
   }, [isOpen, fetchCategories]);
 
   const handleAddCategory = () => {
-    if (!canAdd || selectedBranchId === null || selectedBranchId <= 0) {
-      showNotification(
-        'error',
-        isGlobalMode
-          ? 'Global mode is read-only. Select a branch to create categories.'
-          : 'Please select a branch first.'
-      );
+    const blockMessage = getWriteBlockMessage();
+    if (!canAdd || blockMessage) {
+      showNotification('error', blockMessage ?? 'You do not have permission to create categories.');
       return;
     }
 
-    openForm('category', { branchId: selectedBranchId });
+    openForm('category', isGlobalMode ? {} : { branchId: selectedBranchId });
   };
 
   const handleEdit = async (category: CategoryItem) => {
-    if (!canModify || selectedBranchId === null || selectedBranchId <= 0) {
+    const blockMessage = getWriteBlockMessage();
+    if (!canModify || blockMessage) {
       showNotification(
         'error',
-        isGlobalMode
-          ? 'Global mode is read-only. Select a branch to edit categories.'
-          : 'Please select a branch first.'
+        blockMessage ?? 'You do not have permission to edit categories.'
       );
       return;
     }
 
     try {
-      const branchId = category.branchId > 0 ? category.branchId : selectedBranchId;
+      const branchId = resolveEntityBranchId(category.branchId);
+      if (branchId <= 0) {
+        showNotification('error', 'Unable to determine the branch for this category.');
+        return;
+      }
+
       const response = await categoryService.getById(category.id, branchId);
       const data = response.data as Record<string, unknown>;
       openForm('category', {
@@ -187,13 +186,18 @@ const CategoryPage: React.FC = () => {
   };
 
   const handleDelete = (category: CategoryItem) => {
-    if (!canRemove || selectedBranchId === null || selectedBranchId <= 0) {
+    const blockMessage = getWriteBlockMessage();
+    if (!canRemove || blockMessage) {
       showNotification(
         'error',
-        isGlobalMode
-          ? 'Global mode is read-only. Select a branch to delete categories.'
-          : 'Please select a branch first.'
+        blockMessage ?? 'You do not have permission to delete categories.'
       );
+      return;
+    }
+
+    const branchId = resolveEntityBranchId(category.branchId);
+    if (branchId <= 0) {
+      showNotification('error', 'Unable to determine the branch for this category.');
       return;
     }
 
@@ -207,7 +211,6 @@ const CategoryPage: React.FC = () => {
       cancelLabel: 'Keep Category',
       onConfirm: async () => {
         try {
-          const branchId = category.branchId > 0 ? category.branchId : selectedBranchId;
           await categoryService.delete(category.id, branchId);
           await fetchCategories();
           showNotification('success', `Category "${category.name}" deleted successfully.`);
@@ -377,20 +380,19 @@ const CategoryPage: React.FC = () => {
         <p className="text-gray-600">Manage menu categories by branch and active status</p>
       </div>
 
-      <div className="mb-6 max-w-md">
-        <BranchSelector />
-        {selectedBranchId === null && (
-          <p className="mt-2 text-sm text-amber-700">Select a branch to load categories.</p>
-        )}
-        {isGlobalMode && (
-          <p className="mt-2 text-sm text-blue-700">
-            Global mode shows all branches and disables create, edit, and delete.
-          </p>
-        )}
-      </div>
+      {isGlobalMode && isMasterUser && (
+        <div className="mb-6 rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+          Global view is active. Choose a target branch in the form when creating records.
+        </div>
+      )}
 
-      <div className="mb-6 flex justify-between items-center">
-        <div></div>
+      {!hasBranchSelection && (
+        <div className="mb-6 rounded-md border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
+          Select a branch from the header to load categories.
+        </div>
+      )}
+
+      <div className="mb-6 flex justify-end items-center">
         <PermissionGate module="Categories" action="create">
           <button
             onClick={handleAddCategory}

@@ -41,7 +41,8 @@ public class AuthService : IAuthService
             throw new InvalidOperationException("Invalid username or password.");
 
         var isMasterUser = RoleNames.IsMasterUser(user.Role.Name);
-        var branches = isMasterUser
+        var hasGlobalBranchAccess = RoleNames.HasGlobalBranchAccess(user.Role.Name);
+        var branches = hasGlobalBranchAccess
             ? (await _branchRepository.GetAllActiveSummariesAsync())
                 .Select(b => new AuthBranchDto
                 {
@@ -88,7 +89,8 @@ public class AuthService : IAuthService
                 BusinessId = user.BusinessId,
                 RoleId = user.RoleId,
                 RoleName = user.Role.Name,
-                IsMasterUser = isMasterUser
+                IsMasterUser = isMasterUser,
+                IsGlobalAdmin = hasGlobalBranchAccess
             },
             Branches = branches,
             Permissions = permissions

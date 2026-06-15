@@ -23,6 +23,7 @@ public interface IUserRepository
     Task<bool> EmailExistsAsync(string email, int? excludeUserId = null);
     Task<bool> RoleExistsAsync(int roleId);
     Task<bool> BranchesExistAsync(int businessId, IReadOnlyList<int> branchIds);
+    Task<int?> GetFirstActiveBranchIdAsync(int businessId);
     Task<IReadOnlyList<UserBranchAssignmentDto>> GetUserBranchesAsync(int userId);
     Task AddAsync(User user);
     Task SaveChangesAsync();
@@ -43,9 +44,9 @@ public interface IUserService
         bool isGlobalAdmin);
 
     Task<UserDetailDto?> GetUserByIdAsync(int id, int businessId, int branchId, bool isGlobalAdmin);
-    Task<UserDetailDto> CreateUserAsync(CreateUserDto dto, bool isGlobalAdmin);
-    Task<UserDetailDto?> UpdateUserAsync(int id, UpdateUserDto dto, int branchId, bool isGlobalAdmin);
-    Task DeleteUserAsync(int id, int businessId, int branchId, bool isGlobalAdmin);
+    Task<UserDetailDto> CreateUserAsync(CreateUserDto dto, bool isGlobalAdmin, string? actorRoleName = null);
+    Task<UserDetailDto?> UpdateUserAsync(int id, UpdateUserDto dto, int branchId, bool isGlobalAdmin, string? actorRoleName = null);
+    Task DeleteUserAsync(int id, int businessId, int branchId, bool isGlobalAdmin, string? actorRoleName = null);
     Task<IReadOnlyList<UserBranchAssignmentDto>> GetUserBranchesAsync(int userId, int businessId);
     Task AssignUserBranchesAsync(int userId, AssignUserBranchesDto dto, int businessId, int branchId, bool isGlobalAdmin);
     Task RemoveUserBranchAsync(int userId, int branchId, int businessId, int requestBranchId, bool isGlobalAdmin);
@@ -71,7 +72,7 @@ public interface IRoleService
     Task<RoleDetailDto?> UpdateRoleAsync(int id, UpdateRoleDto dto);
     Task DeleteRoleAsync(int id);
     Task<IReadOnlyList<RolePermissionDto>> GetRolePermissionsAsync(int roleId);
-    Task UpdateRolePermissionsAsync(int roleId, UpdateRolePermissionsDto dto);
+    Task UpdateRolePermissionsAsync(int roleId, UpdateRolePermissionsDto dto, string? actorRoleName = null);
 }
 
 public interface IPasswordHasher

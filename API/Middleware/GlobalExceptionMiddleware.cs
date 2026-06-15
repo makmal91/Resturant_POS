@@ -48,6 +48,9 @@ public class GlobalExceptionMiddleware
             HttpStatusCode.BadRequest when exception is DbUpdateException dbUpdate
                 && dbUpdate.InnerException?.Message.Contains("duplicate key", StringComparison.OrdinalIgnoreCase) == true
                 => "A record with the same value already exists.",
+            HttpStatusCode.BadRequest when exception is DbUpdateException dbUpdate
+                && !string.IsNullOrWhiteSpace(dbUpdate.InnerException?.Message)
+                => dbUpdate.InnerException!.Message,
             _ => exception.Message
         };
 

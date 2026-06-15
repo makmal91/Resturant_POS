@@ -1,20 +1,28 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import DataTable, { Action, Column } from '../../components/DataTable';
 import Badge from '../../components/Badge';
-import BranchSelector from '../shared/BranchSelector';
 import { useBranchStore } from '../../stores/useBranchStore';
 import { useFormModal } from '../../contexts/FormModalContext';
 import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
 import { getApiErrorMessage } from '../../services/api';
 import { safeString } from '../../utils/safeValues';
 import { userService, UserListItem } from './userService';
-import { useIsMasterUser } from '../../hooks/usePermission';
+import { useBranchWriteAccess } from '../../hooks/useBranchWriteAccess';
+import { useIsMasterUser, useIsSuperAdmin } from '../../hooks/usePermission';
+import { isProtectedRole } from '../../types/permissions';
 
 const UserPage: React.FC = () => {
   const selectedBranchId = useBranchStore((state) => state.selectedBranchId);
-  const fetchBranches = useBranchStore((state) => state.fetchBranches);
   const { openForm, isOpen } = useFormModal();
   const { showConfirm } = useConfirmDialog();
+  const {
+    isGlobalMode,
+    canWriteInView,
+    resolveEntityBranchId,
+    getWriteBlockMessage,
+  } = useBranchWriteAccess();
+  const isSuperAdmin = useIsSuperAdmin();
+  const isMasterUser = useIsMasterUser();
 
   const [users, setUsers] = useState<UserListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -26,20 +34,14 @@ const UserPage: React.FC = () => {
   const [totalRecords, setTotalRecords] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  const isMasterUser = useIsMasterUser();
 
   const hasBranchSelection = selectedBranchId !== null;
-  const isGlobalMode = selectedBranchId === 0;
-  const canWrite = isMasterUser || (hasBranchSelection && !isGlobalMode);
+  const canWrite = canWriteInView;
 
   const showNotification = useCallback((type: 'success' | 'error', message: string) => {
     setNotification({ type, message });
     setTimeout(() => setNotification(null), 4000);
   }, []);
-
-  useEffect(() => {
-    fetchBranches();
-  }, [fetchBranches]);
 
   const fetchUsers = useCallback(async () => {
     if (selectedBranchId === null) {
@@ -88,15 +90,56 @@ const UserPage: React.FC = () => {
     };
   }, [isOpen, fetchUsers]);
 
+  const resolveUserBranchId = (user: UserListItem): number =>
+    resolveEntityBranchId(user.primaryBranchId || user.branches[0]?.branchId);
+
   const handleAddUser = () => {
-    if (!canWrite || selectedBranchId === null) return;
-    openForm('user', { branchIds: [selectedBranchId] });
+    const blockMessage = getWriteBlockMessage();
+    if (!canWrite || blockMessage) {
+      if (blockMessage) {
+        showNotification('error', blockMessage);
+      }
+      return;
+    }
+
+    openForm('user', {
+      branchIds: isGlobalMode ? [] : [selectedBranchId!],
+    });
+  };
+
+  const canManageUser = (user: UserListItem): boolean => {
+    if (isMasterUser) {
+      return true;
+    }
+
+    if (isSuperAdmin && isProtectedRole(user.roleName)) {
+      return false;
+    }
+
+    return true;
   };
 
   const handleEditUser = async (user: UserListItem) => {
-    if (!canWrite || selectedBranchId === null) return;
+    if (!canManageUser(user)) {
+      showNotification('error', `You do not have permission to edit ${user.roleName} accounts.`);
+      return;
+    }
+    const blockMessage = getWriteBlockMessage();
+    if (!canWrite || blockMessage) {
+      if (blockMessage) {
+        showNotification('error', blockMessage);
+      }
+      return;
+    }
+
+    const branchId = resolveUserBranchId(user);
+    if (branchId <= 0) {
+      showNotification('error', 'Unable to determine the branch for this user.');
+      return;
+    }
+
     try {
-      const detail = await userService.getById(user.id, selectedBranchId);
+      const detail = await userService.getById(user.id, branchId);
       openForm('user', {
         id: detail.id,
         fullName: detail.fullName,
@@ -114,7 +157,23 @@ const UserPage: React.FC = () => {
   };
 
   const handleDeleteUser = (user: UserListItem) => {
-    if (!canWrite || selectedBranchId === null) return;
+    if (!canManageUser(user)) {
+      showNotification('error', `You do not have permission to delete ${user.roleName} accounts.`);
+      return;
+    }
+    const blockMessage = getWriteBlockMessage();
+    if (!canWrite || blockMessage) {
+      if (blockMessage) {
+        showNotification('error', blockMessage);
+      }
+      return;
+    }
+
+    const branchId = resolveUserBranchId(user);
+    if (branchId <= 0) {
+      showNotification('error', 'Unable to determine the branch for this user.');
+      return;
+    }
 
     showConfirm({
       title: 'Delete User?',
@@ -125,7 +184,7 @@ const UserPage: React.FC = () => {
       cancelLabel: 'Keep User',
       onConfirm: async () => {
         try {
-          await userService.delete(user.id, selectedBranchId);
+          await userService.delete(user.id, branchId);
           await fetchUsers();
           showNotification('success', `User "${user.fullName}" deleted successfully.`);
         } catch (error) {
@@ -211,6 +270,7 @@ const UserPage: React.FC = () => {
           label: '',
           onClick: handleEditUser,
           variant: 'secondary',
+          hidden: (row) => !canManageUser(row),
           icon: (
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" title="Edit">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -221,6 +281,7 @@ const UserPage: React.FC = () => {
           label: '',
           onClick: handleDeleteUser,
           variant: 'danger',
+          hidden: (row) => !canManageUser(row),
           icon: (
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" title="Delete">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -258,10 +319,7 @@ const UserPage: React.FC = () => {
         <p className="text-gray-600">Manage staff accounts, roles, and branch access</p>
       </div>
 
-      <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-        <div className="md:w-72">
-          <BranchSelector allowAllBranches />
-        </div>
+      <div className="mb-6 flex justify-end">
         {canWrite && (
           <button
             onClick={handleAddUser}
@@ -275,15 +333,21 @@ const UserPage: React.FC = () => {
         )}
       </div>
 
-      {isGlobalMode && (
+      {isGlobalMode && !canWriteInView && (
         <div className="mb-6 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           Global view is read-only. Select a specific branch to create or edit users.
         </div>
       )}
 
+      {isGlobalMode && canWriteInView && (
+        <div className="mb-6 rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+          Global view is active. Assign branches in the user form when creating or editing users.
+        </div>
+      )}
+
       {!hasBranchSelection && (
         <div className="mb-6 rounded-md border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
-          Select a branch to load users.
+          Select a branch from the header to load users.
         </div>
       )}
 
@@ -300,7 +364,7 @@ const UserPage: React.FC = () => {
         onPageSizeChange={handlePageSizeChange}
         emptyMessage={
           !hasBranchSelection
-            ? 'Select a branch to view users.'
+            ? 'Select a branch from the header to view users.'
             : searchTerm
               ? 'No users match your search.'
               : 'No users found for the selected branch.'

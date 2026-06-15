@@ -44,7 +44,7 @@ public class PermissionAuthorizationMiddleware
         var roleIdClaim = context.User.FindFirstValue("roleId");
         var roleName = context.User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
 
-        if (RoleNames.IsMasterUser(roleName))
+        if (RoleNames.CanBypassPermissions(roleName))
         {
             await _next(context);
             return;

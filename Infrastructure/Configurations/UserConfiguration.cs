@@ -10,7 +10,11 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
     {
         builder.HasKey(u => u.Id);
 
-        builder.Ignore(u => u.BranchId);
+        builder.Property(u => u.BranchId)
+            .IsRequired();
+
+        builder.HasIndex(u => u.BranchId)
+            .HasDatabaseName("idx_user_branchid");
 
         builder.Property(u => u.FullName)
             .IsRequired()

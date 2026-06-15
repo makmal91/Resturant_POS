@@ -1,9 +1,11 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using POSSystem.API.Extensions;
 using POSSystem.Application.Users.DTOs;
 using POSSystem.Application.Users.Interfaces;
+using POSSystem.Domain;
 
 namespace POSSystem.API.Controllers;
 
@@ -89,14 +91,28 @@ public class UsersController : ControllerBase
 
         dto.BusinessId = this.ResolveBusinessId(dto.BusinessId > 0 ? dto.BusinessId : null);
 
+        if (dto.BranchIds.Count == 0)
+        {
+            var headerBranchId = this.ResolveBranchId(null);
+            if (headerBranchId > 0)
+                dto.BranchIds = new List<int> { headerBranchId };
+        }
+
+        if (dto.BranchIds.Count == 0)
+            return BadRequest(new { message = "At least one branch must be assigned to the user." });
+
         try
         {
-            var created = await _userService.CreateUserAsync(dto, IsGlobalAdminRequest());
+            var created = await _userService.CreateUserAsync(dto, IsGlobalAdminRequest(), ResolveRoleName());
             return CreatedAtAction(nameof(GetUserById), new { id = created.Id, branchId = created.PrimaryBranchId }, created);
         }
         catch (InvalidOperationException ex)
         {
             return BadRequest(new { message = ex.Message });
+        }
+        catch (DbUpdateException ex)
+        {
+            return BadRequest(new { message = ex.InnerException?.Message ?? ex.Message });
         }
     }
 
@@ -111,7 +127,7 @@ public class UsersController : ControllerBase
 
         try
         {
-            var updated = await _userService.UpdateUserAsync(id, dto, resolvedBranchId, IsGlobalAdminRequest());
+            var updated = await _userService.UpdateUserAsync(id, dto, resolvedBranchId, IsGlobalAdminRequest(), ResolveRoleName());
             if (updated == null)
                 return NotFound();
 
@@ -134,7 +150,7 @@ public class UsersController : ControllerBase
 
         try
         {
-            await _userService.DeleteUserAsync(id, resolvedBusinessId, resolvedBranchId, IsGlobalAdminRequest());
+            await _userService.DeleteUserAsync(id, resolvedBusinessId, resolvedBranchId, IsGlobalAdminRequest(), ResolveRoleName());
             return NoContent();
         }
         catch (InvalidOperationException ex)
@@ -195,23 +211,16 @@ public class UsersController : ControllerBase
     private bool IsGlobalAdminRequest()
     {
         var role = ResolveRoleName();
-        return IsGlobalViewRole(role) ||
-               User?.IsInRole("SuperAdmin") == true ||
-               User?.IsInRole("Super Admin") == true ||
-               User?.IsInRole("System Admin") == true ||
-               User?.IsInRole("Admin") == true;
+        return RoleNames.HasGlobalBranchAccess(role ?? string.Empty);
     }
-
-    private static bool IsGlobalViewRole(string? roleName) =>
-        string.Equals(roleName, "SuperAdmin", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(roleName, "Super Admin", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(roleName, "System Admin", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(roleName, "Admin", StringComparison.OrdinalIgnoreCase);
 
     private bool IsGlobalReadOnlyRequest()
     {
         var resolvedBranchId = this.ResolveBranchId(null);
-        return resolvedBranchId == 0;
+        if (resolvedBranchId != 0)
+            return false;
+
+        return !IsGlobalAdminRequest();
     }
 
     private string? ResolveRoleName()

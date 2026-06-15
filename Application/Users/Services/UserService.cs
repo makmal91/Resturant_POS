@@ -41,7 +41,7 @@ public class UserService : IUserService
         return user;
     }
 
-    public async Task<UserDetailDto> CreateUserAsync(CreateUserDto dto, bool isGlobalAdmin)
+    public async Task<UserDetailDto> CreateUserAsync(CreateUserDto dto, bool isGlobalAdmin, string? actorRoleName = null)
     {
         ValidateUserInput(dto.FullName, dto.Username, dto.Email, dto.Password, isEdit: false);
 
@@ -49,6 +49,7 @@ public class UserService : IUserService
             throw new InvalidOperationException("Selected role is invalid.");
 
         var role = await GetRoleNameAsync(dto.RoleId);
+        RoleProtection.EnsureCanAssignRole(actorRoleName, role);
         await ValidateBranchAssignmentAsync(dto.BusinessId, dto.BranchIds, role, isGlobalAdmin);
 
         if (await _repository.UsernameExistsAsync(dto.Username))
@@ -57,9 +58,7 @@ public class UserService : IUserService
         if (await _repository.EmailExistsAsync(dto.Email))
             throw new InvalidOperationException("Email is already registered.");
 
-        var primaryBranchId = dto.BranchIds.FirstOrDefault();
-        if (primaryBranchId <= 0 && !RoleNames.BypassesBranchRequirement(role))
-            throw new InvalidOperationException("At least one branch must be assigned.");
+        var primaryBranchId = await ResolvePrimaryBranchIdAsync(dto.BusinessId, dto.BranchIds, role);
 
         var user = new User
         {
@@ -71,28 +70,38 @@ public class UserService : IUserService
             RoleId = dto.RoleId,
             IsActive = dto.IsActive,
             Status = dto.IsActive ? UserStatus.Active : UserStatus.Inactive,
-            BusinessId = dto.BusinessId
+            BusinessId = dto.BusinessId,
+            BranchId = primaryBranchId
         };
 
         await _repository.AddAsync(user);
         await _repository.SaveChangesAsync();
 
-        if (dto.BranchIds.Count > 0)
+        var branchAssignments = dto.BranchIds.Count > 0
+            ? dto.BranchIds
+            : primaryBranchId > 0
+                ? new List<int> { primaryBranchId }
+                : Array.Empty<int>();
+
+        if (branchAssignments.Count > 0)
         {
-            await _repository.ReplaceUserBranchesAsync(user.Id, dto.BranchIds);
+            await _repository.ReplaceUserBranchesAsync(user.Id, branchAssignments);
             await _repository.SaveChangesAsync();
         }
 
         return (await _repository.GetByIdAsync(user.Id, dto.BusinessId))!;
     }
 
-    public async Task<UserDetailDto?> UpdateUserAsync(int id, UpdateUserDto dto, int branchId, bool isGlobalAdmin)
+    public async Task<UserDetailDto?> UpdateUserAsync(int id, UpdateUserDto dto, int branchId, bool isGlobalAdmin, string? actorRoleName = null)
     {
         ValidateUserInput(dto.FullName, dto.Username, dto.Email, dto.Password, isEdit: true);
 
         var user = await _repository.GetTrackedByIdAsync(id, dto.BusinessId);
         if (user == null)
             return null;
+
+        var existingRoleName = user.Role?.Name ?? await GetRoleNameAsync(user.RoleId);
+        RoleProtection.EnsureCanManageUser(actorRoleName, existingRoleName);
 
         if (branchId > 0 && !isGlobalAdmin && !user.UserBranches.Any(ub => ub.BranchId == branchId))
             throw new InvalidOperationException("You do not have access to modify this user in the selected branch.");
@@ -101,6 +110,7 @@ public class UserService : IUserService
             throw new InvalidOperationException("Selected role is invalid.");
 
         var role = await GetRoleNameAsync(dto.RoleId);
+        RoleProtection.EnsureCanAssignRole(actorRoleName, role);
         await ValidateBranchAssignmentAsync(dto.BusinessId, dto.BranchIds, role, isGlobalAdmin);
 
         if (await _repository.UsernameExistsAsync(dto.Username, id))
@@ -121,17 +131,23 @@ public class UserService : IUserService
             user.PasswordHash = _passwordHasher.HashPassword(dto.Password);
 
         if (dto.BranchIds.Count > 0)
+        {
             await _repository.ReplaceUserBranchesAsync(user.Id, dto.BranchIds);
+            user.BranchId = dto.BranchIds.First();
+        }
 
         await _repository.SaveChangesAsync();
         return await _repository.GetByIdAsync(id, dto.BusinessId);
     }
 
-    public async Task DeleteUserAsync(int id, int businessId, int branchId, bool isGlobalAdmin)
+    public async Task DeleteUserAsync(int id, int businessId, int branchId, bool isGlobalAdmin, string? actorRoleName = null)
     {
         var user = await _repository.GetTrackedByIdAsync(id, businessId);
         if (user == null)
             throw new InvalidOperationException("User not found.");
+
+        var targetRoleName = user.Role?.Name ?? await GetRoleNameAsync(user.RoleId);
+        RoleProtection.EnsureCanManageUser(actorRoleName, targetRoleName);
 
         if (branchId > 0 && !isGlobalAdmin && !user.UserBranches.Any(ub => ub.BranchId == branchId))
             throw new InvalidOperationException("You do not have access to delete this user in the selected branch.");
@@ -178,6 +194,22 @@ public class UserService : IUserService
 
         await _repository.RemoveUserBranchAsync(userId, branchId);
         await _repository.SaveChangesAsync();
+    }
+
+    private async Task<int> ResolvePrimaryBranchIdAsync(int businessId, IReadOnlyList<int> branchIds, string roleName)
+    {
+        var primaryBranchId = branchIds.FirstOrDefault(id => id > 0);
+        if (primaryBranchId > 0)
+            return primaryBranchId;
+
+        if (!RoleNames.BypassesBranchRequirement(roleName))
+            throw new InvalidOperationException("At least one branch must be assigned.");
+
+        var fallbackBranchId = await _repository.GetFirstActiveBranchIdAsync(businessId);
+        if (fallbackBranchId is > 0)
+            return fallbackBranchId.Value;
+
+        throw new InvalidOperationException("At least one branch must be assigned.");
     }
 
     private async Task ValidateBranchAssignmentAsync(int businessId, IReadOnlyList<int> branchIds, string roleName, bool isGlobalAdmin)

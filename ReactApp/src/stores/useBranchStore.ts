@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import api, { getApiErrorMessage } from '../services/api'
 import { authStorage } from '../utils/storage'
+import { isGlobalAdminSession } from '../types/permissions'
 import { useTenantStore } from './useTenantStore'
 
 export interface BranchOption {
@@ -29,31 +30,47 @@ export const useBranchStore = create<BranchState>((set, get) => ({
   fetchBranches: async () => {
     set({ isLoading: true, error: null })
 
+    const authUser = authStorage.getUser()
+    const globalAdmin = isGlobalAdminSession(undefined, authUser)
     const authBranches = authStorage.getBranches()
-    if (authBranches.length > 0) {
-      const branches = authBranches.map((branch) => ({
-        id: branch.id,
-        name: branch.name,
-        isActive: true,
-      }))
 
+    const applyBranches = (rawBranches: BranchOption[], preferStoredSelection = true) => {
       const storedBranchId = authStorage.getSelectedBranchId()
       let nextSelectedBranchId = get().selectedBranchId ?? storedBranchId
 
-      if (nextSelectedBranchId !== null && !branches.some((branch) => branch.id === nextSelectedBranchId)) {
-        nextSelectedBranchId = branches.length === 1 ? branches[0].id : null
+      if (
+        nextSelectedBranchId !== null &&
+        nextSelectedBranchId !== 0 &&
+        !rawBranches.some((branch) => branch.id === nextSelectedBranchId)
+      ) {
+        nextSelectedBranchId = globalAdmin ? 0 : rawBranches.length === 1 ? rawBranches[0].id : null
         authStorage.setSelectedBranchId(nextSelectedBranchId)
-      } else if (nextSelectedBranchId === null && branches.length === 1) {
-        nextSelectedBranchId = branches[0].id
+      } else if (nextSelectedBranchId === null && globalAdmin) {
+        nextSelectedBranchId = 0
+        authStorage.setSelectedBranchId(nextSelectedBranchId)
+      } else if (nextSelectedBranchId === null && rawBranches.length === 1) {
+        nextSelectedBranchId = rawBranches[0].id
+        authStorage.setSelectedBranchId(nextSelectedBranchId)
+      } else if (preferStoredSelection && nextSelectedBranchId === null && globalAdmin) {
+        nextSelectedBranchId = 0
         authStorage.setSelectedBranchId(nextSelectedBranchId)
       }
 
-      set({ branches, selectedBranchId: nextSelectedBranchId, isLoading: false, error: null })
+      set({ branches: rawBranches, selectedBranchId: nextSelectedBranchId, isLoading: false, error: null })
 
       if (nextSelectedBranchId !== null) {
         useTenantStore.getState().setBranchId(nextSelectedBranchId)
       }
+    }
 
+    if (!globalAdmin && authBranches.length > 0) {
+      applyBranches(
+        authBranches.map((branch) => ({
+          id: branch.id,
+          name: branch.name,
+          isActive: true,
+        }))
+      )
       return
     }
 
@@ -68,25 +85,28 @@ export const useBranchStore = create<BranchState>((set, get) => ({
           }))
         : []
 
-      const { selectedBranchId } = get()
-      const storedBranchId = authStorage.getSelectedBranchId() ?? useTenantStore.getState().session.branchId
-      let nextSelectedBranchId = selectedBranchId ?? storedBranchId
-
-      if (nextSelectedBranchId === null || nextSelectedBranchId <= 0) {
-        if (branches.length === 1) {
-          nextSelectedBranchId = branches[0].id
-        }
-      } else if (!branches.some((branch) => branch.id === nextSelectedBranchId)) {
-        nextSelectedBranchId = branches.length === 1 ? branches[0].id : null
+      if (globalAdmin && branches.length > 0) {
+        authStorage.setBranches(
+          branches.map((branch) => ({
+            id: branch.id,
+            name: branch.name,
+          }))
+        )
       }
 
-      set({ branches, selectedBranchId: nextSelectedBranchId, isLoading: false, error: null })
-
-      if (nextSelectedBranchId !== null && nextSelectedBranchId > 0) {
-        authStorage.setSelectedBranchId(nextSelectedBranchId)
-        useTenantStore.getState().setBranchId(nextSelectedBranchId)
-      }
+      applyBranches(branches, false)
     } catch (error) {
+      if (authBranches.length > 0) {
+        applyBranches(
+          authBranches.map((branch) => ({
+            id: branch.id,
+            name: branch.name,
+            isActive: true,
+          }))
+        )
+        return
+      }
+
       set({
         branches: [],
         isLoading: false,
@@ -99,14 +119,14 @@ export const useBranchStore = create<BranchState>((set, get) => ({
     set({ selectedBranchId: branchId })
     authStorage.setSelectedBranchId(branchId)
 
-    if (branchId !== null && branchId > 0) {
+    if (branchId !== null && branchId >= 0) {
       useTenantStore.getState().setBranchId(branchId)
     }
   },
 
   getSelectedBranch: () => {
     const { branches, selectedBranchId } = get()
-    if (selectedBranchId === null) {
+    if (selectedBranchId === null || selectedBranchId === 0) {
       return null
     }
 

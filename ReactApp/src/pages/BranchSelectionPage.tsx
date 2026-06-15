@@ -1,15 +1,31 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { isGlobalAdminSession } from '../types/permissions'
 
 const BranchSelectionPage: React.FC = () => {
-  const { branches, selectedBranchId, setBranch, isAuthenticated } = useAuth()
+  const { user, branches, selectedBranchId, setBranch, isAuthenticated } = useAuth()
   const navigate = useNavigate()
   const [pendingBranchId, setPendingBranchId] = useState<number | null>(selectedBranchId)
   const [error, setError] = useState<string | null>(null)
+  const globalAdmin = isGlobalAdminSession(user?.roleName, user)
+
+  useEffect(() => {
+    if (!globalAdmin) {
+      return
+    }
+
+    if (selectedBranchId === null) {
+      setBranch(0)
+    }
+  }, [globalAdmin, selectedBranchId, setBranch])
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />
+  }
+
+  if (globalAdmin) {
+    return <Navigate to="/" replace />
   }
 
   if (branches.length === 1) {

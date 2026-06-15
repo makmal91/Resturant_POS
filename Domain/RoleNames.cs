@@ -20,10 +20,21 @@ public static class RoleNames
     public static bool IsMasterUser(string roleName) =>
         string.Equals(roleName, SystemAdmin, StringComparison.OrdinalIgnoreCase);
 
-    public static bool IsGlobalRole(string roleName) =>
-        IsMasterUser(roleName) ||
+    public static bool IsSuperAdmin(string roleName) =>
         string.Equals(roleName, SuperAdmin, StringComparison.OrdinalIgnoreCase);
 
+    public static bool IsProtectedRole(string roleName) =>
+        IsMasterUser(roleName) || IsSuperAdmin(roleName);
+
+    public static bool CanBypassPermissions(string roleName) =>
+        IsMasterUser(roleName) || IsSuperAdmin(roleName);
+
+    public static bool HasGlobalBranchAccess(string roleName) =>
+        IsMasterUser(roleName) || IsSuperAdmin(roleName);
+
+    public static bool IsGlobalRole(string roleName) =>
+        HasGlobalBranchAccess(roleName);
+
     public static bool BypassesBranchRequirement(string roleName) =>
-        IsMasterUser(roleName);
+        HasGlobalBranchAccess(roleName);
 }

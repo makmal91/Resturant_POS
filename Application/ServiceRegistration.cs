@@ -18,6 +18,8 @@ using POSSystem.Application.Auth.Interfaces;
 using POSSystem.Application.Auth.Services;
 using POSSystem.Application.Navigation.Interfaces;
 using POSSystem.Application.Navigation.Services;
+using POSSystem.Application.Modules.Interfaces;
+using POSSystem.Application.Modules.Services;
 
 namespace POSSystem.Application;
 
@@ -52,6 +54,8 @@ public static class ServiceRegistration
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IPermissionService, PermissionService>();
         services.AddScoped<INavigationMenuService, NavigationMenuService>();
+        services.AddScoped<IModuleService, ModuleService>();
+        services.AddScoped<IRolePermissionService, RolePermissionService>();
 
         // Add other application services here
 

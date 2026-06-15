@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
-import BranchSelector from '../shared/BranchSelector';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useBranchStore } from '../../stores/useBranchStore';
+import { hasBranchContext } from '../../types/permissions';
 import { subCategoryService, SubCategoryPayload } from './subcategoryService';
 import { getApiErrorMessage } from '../../services/api';
 import { categoryService } from '../category/categoryService';
@@ -15,6 +15,7 @@ interface SubCategoryFormProps {
   isEditMode: boolean;
   initialData?: Partial<SubCategoryPayload> | null;
   isSubmitting: boolean;
+  allowBranchSelection?: boolean;
   onCancel: () => void;
   onSubmit: (data: SubCategoryPayload) => Promise<void>;
 }
@@ -34,13 +35,27 @@ const SubCategoryForm: React.FC<SubCategoryFormProps> = ({
   isEditMode,
   initialData,
   isSubmitting,
+  allowBranchSelection = false,
   onCancel,
   onSubmit,
 }) => {
+  const branches = useBranchStore((state) => state.branches);
   const selectedBranchId = useBranchStore((state) => state.selectedBranchId);
   const [formData, setFormData] = useState<SubCategoryPayload>(initialFormValues);
   const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [error, setError] = useState('');
+
+  const effectiveBranchId = useMemo(() => {
+    if (allowBranchSelection) {
+      return formData.branchId > 0 ? formData.branchId : 0;
+    }
+
+    if (hasBranchContext(selectedBranchId) && selectedBranchId! > 0) {
+      return selectedBranchId!;
+    }
+
+    return formData.branchId > 0 ? formData.branchId : 0;
+  }, [allowBranchSelection, formData.branchId, selectedBranchId]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -60,14 +75,14 @@ const SubCategoryForm: React.FC<SubCategoryFormProps> = ({
   }, [initialData, isOpen, selectedBranchId]);
 
   useEffect(() => {
-    if (!isOpen || !selectedBranchId) {
+    if (!isOpen || effectiveBranchId <= 0) {
       setCategories([]);
       return;
     }
 
     const loadCategories = async () => {
       try {
-        const response = await categoryService.getAll(selectedBranchId);
+        const response = await categoryService.getAll(effectiveBranchId);
         const rows = Array.isArray(response.data?.categories) ? response.data.categories : [];
         setCategories(
           rows.map((row: Record<string, unknown>) => ({
@@ -82,7 +97,7 @@ const SubCategoryForm: React.FC<SubCategoryFormProps> = ({
     };
 
     void loadCategories();
-  }, [isOpen, selectedBranchId]);
+  }, [isOpen, effectiveBranchId]);
 
   if (!isOpen) {
     return null;
@@ -91,7 +106,8 @@ const SubCategoryForm: React.FC<SubCategoryFormProps> = ({
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (!selectedBranchId || selectedBranchId <= 0) {
+    const branchId = allowBranchSelection ? formData.branchId : effectiveBranchId;
+    if (branchId <= 0) {
       setError('Branch selection is required.');
       return;
     }
@@ -109,7 +125,7 @@ const SubCategoryForm: React.FC<SubCategoryFormProps> = ({
     await onSubmit({
       ...formData,
       name: formData.name.trim(),
-      branchId: selectedBranchId,
+      branchId,
     });
   };
 
@@ -125,7 +141,37 @@ const SubCategoryForm: React.FC<SubCategoryFormProps> = ({
         <form onSubmit={handleSubmit} className="space-y-4 px-6 py-5">
           {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
 
-          <BranchSelector />
+          {allowBranchSelection ? (
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">Target Branch *</label>
+              <select
+                value={formData.branchId || ''}
+                onChange={(event) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    branchId: Number(event.target.value || 0),
+                    categoryId: 0,
+                  }))
+                }
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
+              >
+                <option value="">Select Branch</option>
+                {branches.map((branch) => (
+                  <option key={branch.id} value={branch.id}>
+                    {branch.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            effectiveBranchId > 0 && (
+              <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
+                Branch:{' '}
+                {branches.find((branch) => branch.id === effectiveBranchId)?.name ??
+                  `Branch #${effectiveBranchId}`}
+              </div>
+            )
+          )}
 
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">Category *</label>

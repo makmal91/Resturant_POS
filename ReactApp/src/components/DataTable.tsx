@@ -13,6 +13,7 @@ export interface Action<T> {
   onClick: (item: T) => void;
   variant?: 'primary' | 'secondary' | 'danger';
   icon?: React.ReactNode;
+  hidden?: (item: T) => boolean;
 }
 
 interface DataTableProps<T> {
@@ -280,7 +281,12 @@ function DataTable<T extends Record<string, any>>({
                   ))}
                   {actions.length > 0 && (
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      {actions.map((action, actionIndex) => (
+                      {actions.map((action, actionIndex) => {
+                        if (action.hidden?.(item)) {
+                          return null;
+                        }
+
+                        return (
                         <button
                           key={actionIndex}
                           onClick={() => action.onClick(item)}
@@ -295,7 +301,8 @@ function DataTable<T extends Record<string, any>>({
                           {action.icon && <span className="mr-1">{action.icon}</span>}
                           {action.label}
                         </button>
-                      ))}
+                        );
+                      })}
                     </td>
                   )}
                 </tr>

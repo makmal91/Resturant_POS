@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using POSSystem.Application.Users.DTOs;
 using POSSystem.Application.Users.Interfaces;
+using POSSystem.Domain;
 
 namespace POSSystem.API.Controllers;
 
@@ -95,7 +96,7 @@ public class RolesController : ControllerBase
     {
         try
         {
-            await _roleService.UpdateRolePermissionsAsync(id, dto);
+            await _roleService.UpdateRolePermissionsAsync(id, dto, ResolveRoleName());
             var permissions = await _roleService.GetRolePermissionsAsync(id);
             return Ok(permissions);
         }
@@ -103,5 +104,11 @@ public class RolesController : ControllerBase
         {
             return BadRequest(new { message = ex.Message });
         }
+    }
+
+    private string? ResolveRoleName()
+    {
+        return User?.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ??
+               Request.Headers["X-User-Role"].FirstOrDefault();
     }
 }

@@ -16,7 +16,7 @@ public class PermissionService : IPermissionService
     }
 
     public bool IsBypassRole(string roleName) =>
-        RoleNames.IsMasterUser(roleName);
+        RoleNames.CanBypassPermissions(roleName);
 
     public Task<IReadOnlyList<RolePermissionDto>> GetPermissionsAsync(int roleId) =>
         _roleRepository.GetPermissionsAsync(roleId);

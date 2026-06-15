@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import BranchSelector from '../shared/BranchSelector';
+import { useBranchWriteAccess } from '../../hooks/useBranchWriteAccess';
+import { hasBranchContext } from '../../types/permissions';
 import { useBranchStore } from '../../stores/useBranchStore';
 import { getApiErrorMessage } from '../../services/api';
 import { categoryService } from '../category/categoryService';
@@ -19,8 +20,14 @@ interface SubCategoryItem extends SubCategoryPayload {
 
 const SubCategoryPage: React.FC = () => {
   const branches = useBranchStore((state) => state.branches);
-  const selectedBranchId = useBranchStore((state) => state.selectedBranchId);
-  const fetchBranches = useBranchStore((state) => state.fetchBranches);
+  const {
+    selectedBranchId,
+    isGlobalMode,
+    canWriteInView,
+    resolveEntityBranchId,
+    getWriteBlockMessage,
+  } = useBranchWriteAccess();
+  const hasBranchSelection = hasBranchContext(selectedBranchId);
 
   const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
@@ -73,11 +80,7 @@ const SubCategoryPage: React.FC = () => {
   };
 
   useEffect(() => {
-    void fetchBranches();
-  }, [fetchBranches]);
-
-  useEffect(() => {
-    if (!selectedBranchId) {
+    if (!hasBranchSelection) {
       setCategories([]);
       setItems([]);
       setSelectedCategoryId(null);
@@ -86,25 +89,33 @@ const SubCategoryPage: React.FC = () => {
 
     const run = async () => {
       try {
-        await loadCategories(selectedBranchId);
-        await loadSubCategories(selectedBranchId);
+        await loadCategories(selectedBranchId!);
+        await loadSubCategories(selectedBranchId!);
       } catch (error) {
         setErrorMessage(getApiErrorMessage(error, 'Failed to initialize subcategory screen.'));
       }
     };
 
     void run();
-  }, [selectedBranchId]);
+  }, [selectedBranchId, hasBranchSelection]);
 
   useEffect(() => {
-    if (!selectedBranchId) {
+    if (!hasBranchSelection) {
       return;
     }
 
-    void loadSubCategories(selectedBranchId, selectedCategoryId ?? undefined);
-  }, [selectedBranchId, selectedCategoryId]);
+    void loadSubCategories(selectedBranchId!, selectedCategoryId ?? undefined);
+  }, [selectedBranchId, selectedCategoryId, hasBranchSelection]);
 
   const openCreate = () => {
+    const blockMessage = getWriteBlockMessage();
+    if (!canWriteInView || blockMessage) {
+      if (blockMessage) {
+        setErrorMessage(blockMessage);
+      }
+      return;
+    }
+
     setEditingItem(null);
     setErrorMessage('');
     setSuccessMessage('');
@@ -112,13 +123,22 @@ const SubCategoryPage: React.FC = () => {
   };
 
   const openEdit = async (item: SubCategoryItem) => {
-    if (!selectedBranchId) {
-      setErrorMessage('Please select a branch first.');
+    const blockMessage = getWriteBlockMessage();
+    if (!canWriteInView || blockMessage) {
+      if (blockMessage) {
+        setErrorMessage(blockMessage);
+      }
+      return;
+    }
+
+    const branchId = resolveEntityBranchId(item.branchId);
+    if (branchId <= 0) {
+      setErrorMessage('Unable to determine the branch for this subcategory.');
       return;
     }
 
     try {
-      const response = await subCategoryService.getById(item.id, selectedBranchId);
+      const response = await subCategoryService.getById(item.id, branchId);
       const data = response.data as Record<string, unknown>;
       setEditingItem({
         id: Number(data.id ?? data.Id ?? item.id),
@@ -144,8 +164,15 @@ const SubCategoryPage: React.FC = () => {
   };
 
   const handleSubmit = async (data: SubCategoryPayload) => {
-    if (!selectedBranchId) {
-      setErrorMessage('Please select a branch first.');
+    const blockMessage = getWriteBlockMessage();
+    if (!canWriteInView || blockMessage) {
+      setErrorMessage(blockMessage ?? 'You do not have permission to save subcategories.');
+      return;
+    }
+
+    const branchId = data.branchId > 0 ? data.branchId : resolveEntityBranchId(data.branchId);
+    if (branchId <= 0) {
+      setErrorMessage('Please select a target branch.');
       return;
     }
 
@@ -153,7 +180,7 @@ const SubCategoryPage: React.FC = () => {
     setErrorMessage('');
 
     try {
-      const payload = { ...data, branchId: selectedBranchId };
+      const payload = { ...data, branchId };
       if (editingItem) {
         await subCategoryService.update(editingItem.id, payload);
         setSuccessMessage('SubCategory updated successfully.');
@@ -163,7 +190,7 @@ const SubCategoryPage: React.FC = () => {
       }
 
       closeModal();
-      await loadSubCategories(selectedBranchId, selectedCategoryId ?? undefined);
+      await loadSubCategories(selectedBranchId!, selectedCategoryId ?? undefined);
     } catch (error) {
       setErrorMessage(getApiErrorMessage(error, 'Failed to save subcategory.'));
     } finally {
@@ -172,8 +199,17 @@ const SubCategoryPage: React.FC = () => {
   };
 
   const handleDelete = async (item: SubCategoryItem) => {
-    if (!selectedBranchId) {
-      setErrorMessage('Please select a branch first.');
+    const blockMessage = getWriteBlockMessage();
+    if (!canWriteInView || blockMessage) {
+      if (blockMessage) {
+        setErrorMessage(blockMessage);
+      }
+      return;
+    }
+
+    const branchId = resolveEntityBranchId(item.branchId);
+    if (branchId <= 0) {
+      setErrorMessage('Unable to determine the branch for this subcategory.');
       return;
     }
 
@@ -186,9 +222,9 @@ const SubCategoryPage: React.FC = () => {
     setErrorMessage('');
 
     try {
-      await subCategoryService.delete(item.id, selectedBranchId);
+      await subCategoryService.delete(item.id, branchId);
       setSuccessMessage('SubCategory deleted successfully.');
-      await loadSubCategories(selectedBranchId, selectedCategoryId ?? undefined);
+      await loadSubCategories(selectedBranchId!, selectedCategoryId ?? undefined);
     } catch (error) {
       setErrorMessage(getApiErrorMessage(error, 'Failed to delete subcategory.'));
     } finally {
@@ -205,15 +241,20 @@ const SubCategoryPage: React.FC = () => {
         </div>
         <button
           onClick={openCreate}
-          disabled={!selectedBranchId || isSaving}
+          disabled={!canWriteInView || isSaving}
           className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
           Add SubCategory
         </button>
       </div>
 
-      <div className="mb-4 grid gap-4 rounded-xl border border-gray-200 bg-white p-4 md:grid-cols-2">
-        <BranchSelector />
+      {isGlobalMode && canWriteInView && (
+        <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+          Global view is active. Choose a target branch in the form when creating records.
+        </div>
+      )}
+
+      <div className="mb-4 grid gap-4 rounded-xl border border-gray-200 bg-white p-4 md:grid-cols-1">
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">Category Filter</label>
           <select
@@ -222,7 +263,7 @@ const SubCategoryPage: React.FC = () => {
               const value = event.target.value;
               setSelectedCategoryId(value ? Number(value) : null);
             }}
-            disabled={!selectedBranchId}
+            disabled={!hasBranchSelection}
             className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-100"
           >
             <option value="">All Categories</option>
@@ -235,7 +276,7 @@ const SubCategoryPage: React.FC = () => {
         </div>
       </div>
 
-      {!selectedBranchId && <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">Branch selection is mandatory before any subcategory action.</div>}
+      {!hasBranchSelection && <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">Select a branch from the header to manage subcategories.</div>}
       {errorMessage && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{errorMessage}</div>}
       {successMessage && <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">{successMessage}</div>}
 
@@ -251,7 +292,7 @@ const SubCategoryPage: React.FC = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 bg-white">
-            {!selectedBranchId && (
+            {!hasBranchSelection && (
               <tr>
                 <td colSpan={5} className="px-4 py-6 text-center text-gray-500">
                   Branch selection is required.
@@ -259,7 +300,7 @@ const SubCategoryPage: React.FC = () => {
               </tr>
             )}
 
-            {selectedBranchId && isLoading && (
+            {hasBranchSelection && isLoading && (
               <tr>
                 <td colSpan={5} className="px-4 py-6 text-center text-gray-500">
                   Loading subcategories...
@@ -267,7 +308,7 @@ const SubCategoryPage: React.FC = () => {
               </tr>
             )}
 
-            {selectedBranchId && !isLoading && items.length === 0 && (
+            {hasBranchSelection && !isLoading && items.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-4 py-6 text-center text-gray-500">
                   No subcategories found for selected branch.
@@ -275,7 +316,7 @@ const SubCategoryPage: React.FC = () => {
               </tr>
             )}
 
-            {selectedBranchId && !isLoading && items.map((item) => (
+            {hasBranchSelection && !isLoading && items.map((item) => (
               <tr key={item.id}>
                 <td className="px-4 py-3">{item.name}</td>
                 <td className="px-4 py-3">{item.categoryName || categories.find((category) => category.id === item.categoryId)?.name || '-'}</td>
@@ -316,6 +357,7 @@ const SubCategoryPage: React.FC = () => {
         isEditMode={Boolean(editingItem)}
         initialData={editingItem}
         isSubmitting={isSaving}
+        allowBranchSelection={isGlobalMode && !editingItem}
         onCancel={closeModal}
         onSubmit={handleSubmit}
       />

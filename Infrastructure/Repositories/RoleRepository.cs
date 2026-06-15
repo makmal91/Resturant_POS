@@ -87,6 +87,7 @@ public class RoleRepository : IRoleRepository
             .Select(rp => new RolePermissionDto
             {
                 Id = rp.Id,
+                ModuleId = rp.ModuleId,
                 ModuleName = rp.ModuleName,
                 CanView = rp.CanView,
                 CanCreate = rp.CanCreate,
@@ -104,24 +105,55 @@ public class RoleRepository : IRoleRepository
     public async Task ReplacePermissionsAsync(int roleId, IReadOnlyList<RolePermissionDto> permissions)
     {
         var existing = await _context.RolePermissions
+            .IgnoreQueryFilters()
             .Where(rp => rp.RoleId == roleId)
             .ToListAsync();
 
-        _context.RolePermissions.RemoveRange(existing);
+        var incomingKeys = permissions
+            .Select(p => p.ModuleName.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var row in existing.Where(r => !incomingKeys.Contains(r.ModuleName)))
+        {
+            row.IsDeleted = true;
+            row.UpdatedDate = DateTime.UtcNow;
+        }
 
         foreach (var permission in permissions)
         {
-            await _context.RolePermissions.AddAsync(new RolePermission
+            var moduleName = permission.ModuleName.Trim();
+            var row = existing.FirstOrDefault(r =>
+                string.Equals(r.ModuleName, moduleName, StringComparison.OrdinalIgnoreCase));
+
+            if (row == null)
             {
-                RoleId = roleId,
-                ModuleName = permission.ModuleName.Trim(),
-                CanView = permission.CanView,
-                CanCreate = permission.CanCreate,
-                CanEdit = permission.CanEdit,
-                CanDelete = permission.CanDelete,
-                CanExport = permission.CanExport,
-                CanUpload = permission.CanUpload
-            });
+                await _context.RolePermissions.AddAsync(new RolePermission
+                {
+                    RoleId = roleId,
+                    ModuleId = permission.ModuleId,
+                    ModuleName = moduleName,
+                    CanView = permission.CanView,
+                    CanCreate = permission.CanCreate,
+                    CanEdit = permission.CanEdit,
+                    CanDelete = permission.CanDelete,
+                    CanExport = permission.CanExport,
+                    CanUpload = permission.CanUpload,
+                    IsDeleted = false,
+                    CreatedDate = DateTime.UtcNow
+                });
+                continue;
+            }
+
+            row.ModuleId = permission.ModuleId;
+            row.ModuleName = moduleName;
+            row.CanView = permission.CanView;
+            row.CanCreate = permission.CanCreate;
+            row.CanEdit = permission.CanEdit;
+            row.CanDelete = permission.CanDelete;
+            row.CanExport = permission.CanExport;
+            row.CanUpload = permission.CanUpload;
+            row.IsDeleted = false;
+            row.UpdatedDate = DateTime.UtcNow;
         }
 
         _cache.Remove(GetPermissionCacheKey(roleId));
@@ -138,6 +170,7 @@ public class RoleRepository : IRoleRepository
             .Select(rp => new RolePermissionDto
             {
                 Id = rp.Id,
+                ModuleId = rp.ModuleId,
                 ModuleName = rp.ModuleName,
                 CanView = rp.CanView,
                 CanCreate = rp.CanCreate,

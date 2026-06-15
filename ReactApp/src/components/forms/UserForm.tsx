@@ -22,6 +22,9 @@ interface UserFormProps {
   isLoading?: boolean;
   submitLabel?: string;
   isEditMode?: boolean;
+  lockToActiveBranch?: boolean;
+  activeBranchId?: number;
+  activeBranchName?: string;
 }
 
 const DEFAULT_USER_FORM_DATA: UserFormData = {
@@ -65,15 +68,37 @@ const UserForm: React.FC<UserFormProps> = ({
   isLoading = false,
   submitLabel = 'Create User',
   isEditMode = false,
+  lockToActiveBranch = false,
+  activeBranchId = 0,
+  activeBranchName = '',
 }) => {
   const safeInitialData = useMemo(() => initialData ?? DEFAULT_USER_FORM_DATA, [initialData]);
   const [formData, setFormData] = useState<UserFormData>(() => buildUserFormData(safeInitialData));
   const [errors, setErrors] = useState<Partial<Record<keyof UserFormData | 'branchIds', string>>>({});
+  const [branchSearch, setBranchSearch] = useState('');
 
   useEffect(() => {
-    setFormData(buildUserFormData(safeInitialData));
+    const nextData = buildUserFormData(safeInitialData);
+    if (lockToActiveBranch && activeBranchId > 0) {
+      nextData.branchIds = [activeBranchId];
+    }
+    setFormData(nextData);
     setErrors({});
-  }, [safeInitialData]);
+    setBranchSearch('');
+  }, [safeInitialData, lockToActiveBranch, activeBranchId]);
+
+  const filteredBranches = useMemo(() => {
+    const query = branchSearch.trim().toLowerCase();
+    if (!query) {
+      return branches;
+    }
+
+    return branches.filter((branch) => branch.name.toLowerCase().includes(query));
+  }, [branches, branchSearch]);
+
+  const allBranchIds = useMemo(() => branches.map((branch) => branch.id), [branches]);
+  const allSelected = allBranchIds.length > 0 && allBranchIds.every((id) => formData.branchIds.includes(id));
+  const someSelected = formData.branchIds.length > 0 && !allSelected;
 
   const validateForm = (): boolean => {
     const nextErrors: Partial<Record<keyof UserFormData | 'branchIds', string>> = {};
@@ -106,9 +131,19 @@ const UserForm: React.FC<UserFormProps> = ({
     setErrors((prev) => ({ ...prev, branchIds: '' }));
   };
 
+  const handleSelectAllBranches = () => {
+    setFormData((prev) => ({ ...prev, branchIds: allBranchIds }));
+    setErrors((prev) => ({ ...prev, branchIds: '' }));
+  };
+
+  const handleClearBranches = () => {
+    setFormData((prev) => ({ ...prev, branchIds: [] }));
+  };
+
   const handleReset = () => {
     setFormData(buildUserFormData(safeInitialData));
     setErrors({});
+    setBranchSearch('');
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -198,25 +233,84 @@ const UserForm: React.FC<UserFormProps> = ({
 
           <div className="md:col-span-2">
             <label className="block text-sm font-medium text-gray-800 mb-2">
-              Assigned Branches <span className="text-red-500">*</span>
+              Assigned Branch{lockToActiveBranch ? '' : 'es'} <span className="text-red-500">*</span>
             </label>
-            <div className="rounded-lg border border-gray-300 bg-white p-4 max-h-48 overflow-y-auto space-y-2">
-              {branches.length === 0 ? (
-                <p className="text-sm text-gray-500">No branches available.</p>
-              ) : (
-                branches.map((branch) => (
-                  <label key={branch.id} className="flex items-center gap-2 text-sm text-gray-700">
+            {lockToActiveBranch && activeBranchId > 0 ? (
+              <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
+                {activeBranchName || branches.find((branch) => branch.id === activeBranchId)?.name || `Branch #${activeBranchId}`}
+              </div>
+            ) : (
+              <div className="rounded-lg border border-gray-300 bg-white">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <label className="flex items-center gap-2 text-sm font-medium text-gray-800">
+                      <input
+                        type="checkbox"
+                        checked={allSelected}
+                        ref={(input) => {
+                          if (input) {
+                            input.indeterminate = someSelected;
+                          }
+                        }}
+                        onChange={() => (allSelected ? handleClearBranches() : handleSelectAllBranches())}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      Select all
+                    </label>
+                    <span className="text-xs text-gray-500">
+                      {formData.branchIds.length} of {branches.length} selected
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleClearBranches}
+                    disabled={formData.branchIds.length === 0}
+                    className="text-xs font-medium text-gray-600 hover:text-gray-900 disabled:opacity-40"
+                  >
+                    Clear
+                  </button>
+                </div>
+
+                {branches.length > 8 && (
+                  <div className="border-b border-gray-200 px-4 py-2">
                     <input
-                      type="checkbox"
-                      checked={formData.branchIds.includes(branch.id)}
-                      onChange={() => toggleBranch(branch.id)}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      type="text"
+                      value={branchSearch}
+                      onChange={(event) => setBranchSearch(event.target.value)}
+                      placeholder="Search branches..."
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                     />
-                    {branch.name}
-                  </label>
-                ))
-              )}
-            </div>
+                  </div>
+                )}
+
+                <div className="max-h-56 overflow-y-auto p-3">
+                  {branches.length === 0 ? (
+                    <p className="text-sm text-gray-500 px-1">No branches available.</p>
+                  ) : filteredBranches.length === 0 ? (
+                    <p className="text-sm text-gray-500 px-1">No branches match your search.</p>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                      {filteredBranches.map((branch) => (
+                        <label
+                          key={branch.id}
+                          className="flex items-center gap-2 rounded-md px-2 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={formData.branchIds.includes(branch.id)}
+                            onChange={() => toggleBranch(branch.id)}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <span className="truncate" title={branch.name}>
+                            {branch.name}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
             {errors.branchIds && <p className="mt-1 text-sm text-red-600">{errors.branchIds}</p>}
           </div>
         </div>

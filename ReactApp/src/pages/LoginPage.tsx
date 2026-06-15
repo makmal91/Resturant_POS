@@ -11,7 +11,7 @@ const LoginPage: React.FC = () => {
   const [redirectTo, setRedirectTo] = useState<'/' | '/select-branch' | null>(null)
 
   if (isAuthenticated) {
-    return <Navigate to={selectedBranchId ? '/' : '/select-branch'} replace />
+    return <Navigate to={selectedBranchId !== null ? '/' : '/select-branch'} replace />
   }
 
   if (redirectTo) {

@@ -288,10 +288,8 @@ public class CategoriesController : ControllerBase
 
     private bool IsGlobalAdminRequest()
     {
-        if (User?.IsInRole("SuperAdmin") == true)
-            return true;
-
-        var roleHeader = Request.Headers["X-User-Role"].FirstOrDefault();
-        return string.Equals(roleHeader, "SuperAdmin", StringComparison.OrdinalIgnoreCase);
+        var role = User?.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ??
+                   Request.Headers["X-User-Role"].FirstOrDefault();
+        return RoleNames.HasGlobalBranchAccess(role ?? string.Empty);
     }
 }

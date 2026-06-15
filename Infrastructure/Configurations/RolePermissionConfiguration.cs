@@ -16,7 +16,15 @@ public class RolePermissionConfiguration : IEntityTypeConfiguration<RolePermissi
 
         builder.HasIndex(rp => new { rp.RoleId, rp.ModuleName })
             .IsUnique()
-            .HasDatabaseName("idx_rolepermission_role_module");
+            .HasDatabaseName("idx_rolepermission_role_module")
+            .HasFilter("[IsDeleted] = 0");
+
+        builder.HasOne(rp => rp.Module)
+            .WithMany(m => m.RolePermissions)
+            .HasForeignKey(rp => rp.ModuleId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasQueryFilter(rp => !rp.IsDeleted);
 
         builder.HasOne(rp => rp.Role)
             .WithMany(r => r.RolePermissions)

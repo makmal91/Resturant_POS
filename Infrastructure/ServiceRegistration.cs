@@ -10,6 +10,7 @@ using POSSystem.Application.Business.Interfaces;
 using POSSystem.Application.Branch.Interfaces;
 using POSSystem.Application.Users.Interfaces;
 using POSSystem.Application.Navigation.Interfaces;
+using POSSystem.Application.Modules.Interfaces;
 using POSSystem.Infrastructure.Data;
 using POSSystem.Infrastructure.Repositories;
 using POSSystem.Infrastructure.Security;
@@ -32,6 +33,7 @@ public static class ServiceRegistration
         services.AddScoped<IBranchRepository, BranchRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IRoleRepository, RoleRepository>();
+        services.AddScoped<IModuleRepository, ModuleRepository>();
         services.AddScoped<INavigationMenuRepository, NavigationMenuRepository>();
         services.AddScoped<IPasswordHasher, BcryptPasswordHasher>();
 

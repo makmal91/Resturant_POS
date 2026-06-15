@@ -27,6 +27,15 @@ const normalizeUser = (value: Record<string, unknown>): StoredUser => ({
       value.IsMasterUser ??
       String(value.roleName ?? value.RoleName ?? '') === 'System Admin'
   ),
+  isGlobalAdmin: Boolean(
+    value.isGlobalAdmin ??
+      value.IsGlobalAdmin ??
+      (
+        String(value.roleName ?? value.RoleName ?? '') === 'System Admin' ||
+        String(value.roleName ?? value.RoleName ?? '') === 'Super Admin' ||
+        String(value.roleName ?? value.RoleName ?? '') === 'SuperAdmin'
+      )
+  ),
 })
 
 const normalizeBranch = (value: Record<string, unknown>): StoredBranch => ({

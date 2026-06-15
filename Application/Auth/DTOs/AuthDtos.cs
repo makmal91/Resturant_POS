@@ -15,6 +15,7 @@ public class AuthUserDto
     public int RoleId { get; set; }
     public string RoleName { get; set; } = string.Empty;
     public bool IsMasterUser { get; set; }
+    public bool IsGlobalAdmin { get; set; }
 }
 
 public class AuthBranchDto

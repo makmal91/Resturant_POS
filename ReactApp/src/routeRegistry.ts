@@ -9,6 +9,7 @@ import POS from './components/POS';
 import BusinessesList from './components/BusinessesList';
 import BranchesList from './components/BranchesList';
 import UserPage from './modules/user/UserPage';
+import RolePermissionPage from './modules/role/RolePermissionPage';
 import MenuList from './components/MenuList';
 import InventoryList from './components/InventoryList';
 import { OrderScreen } from './components/forms';
@@ -26,6 +27,7 @@ export const routeRegistry: RouteDefinition[] = [
   { path: '/businesses', label: 'Businesses', component: BusinessesList, module: 'Businesses' },
   { path: '/branches', label: 'Branches', component: BranchesList, module: 'Branches' },
   { path: '/users', label: 'Users', component: UserPage, module: 'Users' },
+  { path: '/roles', label: 'Roles', component: RolePermissionPage, module: 'Roles' },
   { path: '/menu', label: 'Menu', component: MenuList, module: 'Menu' },
   { path: '/categories', label: 'Categories', component: CategoryPage, module: 'Categories' },
   { path: '/subcategories', label: 'SubCategories', component: SubCategoryPage, module: 'SubCategories' },

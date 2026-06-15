@@ -5,7 +5,7 @@ import { usePermissionStore } from '../stores/usePermissionStore'
 import { useMenuStore } from '../stores/useMenuStore'
 import { useTenantStore, type TenantRole } from '../stores/useTenantStore'
 import type { ModulePermission } from '../types/permissions'
-import { isMasterUserRole } from '../types/permissions'
+import { isGlobalAdminSession, isMasterUserRole } from '../types/permissions'
 import {
   authStorage,
   isTokenExpired,
@@ -28,8 +28,48 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 
-const isGlobalRole = (roleName?: string) =>
-  isMasterUserRole(roleName) || roleName === 'Super Admin' || roleName === 'SuperAdmin'
+const isGlobalRole = (roleName?: string) => isGlobalAdminSession(roleName)
+
+const isMasterUser = (user?: StoredUser | null) =>
+  Boolean(user?.isMasterUser || isMasterUserRole(user?.roleName))
+
+const isGlobalAdminUser = (user?: StoredUser | null) =>
+  isGlobalAdminSession(user?.roleName, user)
+
+const resolveInitialBranchId = (
+  user: StoredUser,
+  branches: StoredBranch[]
+): number | null => {
+  if (isGlobalAdminUser(user)) {
+    return 0
+  }
+
+  if (branches.length >= 1) {
+    return branches[0].id
+  }
+
+  if (branches.length === 0 && isGlobalRole(user.roleName)) {
+    return 0
+  }
+
+  return null
+}
+
+const isValidBranchSelection = (
+  branchId: number | null,
+  branches: StoredBranch[],
+  globalAdmin: boolean
+): boolean => {
+  if (branchId === null) {
+    return false
+  }
+
+  if (branchId === 0) {
+    return globalAdmin
+  }
+
+  return branches.some((branch) => branch.id === branchId)
+}
 
 const syncPermissionStore = (permissions: ModulePermission[], roleName?: string) => {
   usePermissionStore.getState().setPermissions(permissions, roleName ?? null)
@@ -138,9 +178,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const setBranch = useCallback(
     (branchId: number) => {
-      const masterUser = isMasterUserRole(user?.roleName)
-      if (!masterUser && branchId > 0 && !branches.some((branch) => branch.id === branchId)) {
+      const globalAdmin = isGlobalAdminUser(user)
+      if (!globalAdmin && branchId > 0 && !branches.some((branch) => branch.id === branchId)) {
         throw new Error('Selected branch is no longer assigned to your account.')
+      }
+
+      if (branchId === 0 && !globalAdmin) {
+        throw new Error('All branches view is only available to global admins.')
       }
 
       setSelectedBranchIdState(branchId)
@@ -154,9 +198,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const refreshBranches = useCallback(() => {
     const storedBranches = authStorage.getBranches()
     const storedBranchId = authStorage.getSelectedBranchId()
+    const globalAdmin = isGlobalAdminUser(authStorage.getUser())
     setBranches(storedBranches)
 
-    if (storedBranchId !== null && !storedBranches.some((branch) => branch.id === storedBranchId)) {
+    if (
+      storedBranchId !== null &&
+      !isValidBranchSelection(storedBranchId, storedBranches, globalAdmin)
+    ) {
       setSelectedBranchIdState(null)
       authStorage.setSelectedBranchId(null)
       useBranchStore.getState().setSelectedBranchId(null)
@@ -174,12 +222,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw new Error('No branch assigned.')
       }
 
-      const autoSelectedBranchId =
-        response.branches.length === 1
-          ? response.branches[0].id
-          : response.branches.length === 0 && isGlobalRole(response.user.roleName)
-            ? 0
-            : null
+      const autoSelectedBranchId = resolveInitialBranchId(response.user, response.branches)
 
       applySession(
         response.user,
@@ -189,7 +232,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         response.permissions
       )
 
-      return autoSelectedBranchId !== null ? '/' : '/select-branch'
+      if (isGlobalAdminUser(response.user) || autoSelectedBranchId !== null) {
+        return '/'
+      }
+
+      return '/select-branch'
     },
     [applySession]
   )
@@ -204,11 +251,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     if (snapshot.token && snapshot.user) {
+      const branchId =
+        snapshot.selectedBranchId ??
+        (isGlobalAdminUser(snapshot.user)
+          ? 0
+          : snapshot.branches.length > 0
+            ? snapshot.branches[0].id
+            : null)
+
       applySession(
         snapshot.user,
         snapshot.token,
         snapshot.branches,
-        snapshot.selectedBranchId,
+        branchId,
         snapshot.permissions
       )
     }

@@ -77,6 +77,7 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<POSDbContext>();
     var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("DatabaseInitializer");
     await UserManagementDatabaseInitializer.EnsureSchemaAsync(db, logger);
+    await PermissionModuleDatabaseInitializer.EnsureSchemaAsync(db, logger);
     await NavigationMenuDatabaseInitializer.EnsureSchemaAsync(db, logger);
     await RolePermissionSeeder.SeedDefaultPermissionsAsync(db, logger);
     await NavigationMenuSeeder.SeedDefaultMenusAsync(db, logger);

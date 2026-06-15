@@ -8,6 +8,7 @@ export interface StoredUser {
   roleId?: number
   roleName?: string
   isMasterUser?: boolean
+  isGlobalAdmin?: boolean
 }
 
 export interface StoredBranch {
@@ -87,7 +88,7 @@ export const authStorage = {
   },
 
   setSelectedBranchId(branchId: number | null): void {
-    if (branchId !== null && branchId > 0) {
+    if (branchId !== null && branchId >= 0) {
       localStorage.setItem(STORAGE_KEYS.selectedBranchId, String(branchId))
     } else {
       localStorage.removeItem(STORAGE_KEYS.selectedBranchId)

@@ -33,16 +33,22 @@ public class BranchAccessMiddleware
         }
 
         var branchIdHeader = context.Request.Headers["X-Branch-Id"].FirstOrDefault();
+        var role = context.User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
+
         if (!int.TryParse(branchIdHeader, out var branchId))
         {
+            if (RoleNames.HasGlobalBranchAccess(role))
+            {
+                await _next(context);
+                return;
+            }
+
             context.Response.StatusCode = StatusCodes.Status400BadRequest;
             await context.Response.WriteAsJsonAsync(new { message = "X-Branch-Id header is required." });
             return;
         }
 
-        var role = context.User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
-
-        if (RoleNames.IsMasterUser(role))
+        if (RoleNames.HasGlobalBranchAccess(role))
         {
             await _next(context);
             return;
@@ -50,7 +56,7 @@ public class BranchAccessMiddleware
 
         if (branchId <= 0)
         {
-            if (RoleNames.IsGlobalRole(role))
+            if (RoleNames.HasGlobalBranchAccess(role))
             {
                 await _next(context);
                 return;
@@ -85,7 +91,7 @@ public class BranchAccessMiddleware
     private static bool HasBranchAccess(ClaimsPrincipal user, int branchId)
     {
         var role = user.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
-        if (RoleNames.IsMasterUser(role) || RoleNames.IsGlobalRole(role))
+        if (RoleNames.IsMasterUser(role) || RoleNames.HasGlobalBranchAccess(role))
             return true;
 
         var branchIdsClaim = user.FindFirstValue("branchIds");

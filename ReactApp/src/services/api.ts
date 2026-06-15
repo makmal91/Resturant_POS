@@ -31,7 +31,17 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   }
 
   const user = authStorage.getUser();
-  const selectedBranchId = authStorage.getSelectedBranchId();
+  let selectedBranchId = authStorage.getSelectedBranchId();
+  const isGlobalAdmin =
+    user?.isGlobalAdmin === true ||
+    user?.roleName === 'System Admin' ||
+    user?.roleName === 'Super Admin' ||
+    user?.roleName === 'SuperAdmin';
+
+  if (selectedBranchId === null && isGlobalAdmin) {
+    selectedBranchId = 0;
+  }
+
   const businessId = user?.businessId ?? Number(localStorage.getItem('businessId') ?? 0);
 
   if (businessId > 0) {

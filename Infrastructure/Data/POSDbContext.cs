@@ -24,6 +24,7 @@ public class POSDbContext : DbContext
     public DbSet<User> Users { get; set; } = null!;
     public DbSet<UserBranch> UserBranches { get; set; } = null!;
     public DbSet<RolePermission> RolePermissions { get; set; } = null!;
+    public DbSet<PermissionModule> PermissionModules { get; set; } = null!;
     public DbSet<AppMenu> Menus { get; set; } = null!;
     public DbSet<MenuCategory> MenuCategories { get; set; } = null!;
     public DbSet<SubCategory> SubCategories { get; set; } = null!;
@@ -53,6 +54,7 @@ public class POSDbContext : DbContext
         modelBuilder.ApplyConfiguration(new UserConfiguration());
         modelBuilder.ApplyConfiguration(new UserBranchConfiguration());
         modelBuilder.ApplyConfiguration(new RolePermissionConfiguration());
+        modelBuilder.ApplyConfiguration(new PermissionModuleConfiguration());
         modelBuilder.ApplyConfiguration(new AppMenuConfiguration());
         modelBuilder.ApplyConfiguration(new MenuCategoryConfiguration());
         modelBuilder.ApplyConfiguration(new SubCategoryConfiguration());
@@ -277,6 +279,13 @@ public class POSDbContext : DbContext
 
             if (entry.Entity.BusinessId <= 0)
                 entry.Entity.BusinessId = businessId;
+
+            if (entry.Entity.BranchId <= 0)
+            {
+                var tenantBranchId = _tenantContext.BranchId ?? 0;
+                if (tenantBranchId > 0)
+                    entry.Entity.BranchId = tenantBranchId;
+            }
         }
     }
 

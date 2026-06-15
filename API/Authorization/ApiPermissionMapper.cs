@@ -16,6 +16,8 @@ public static class ApiPermissionMapper
         ["Reports"] = PermissionModules.Reports,
         ["Users"] = PermissionModules.Users,
         ["Roles"] = PermissionModules.Roles,
+        ["Modules"] = PermissionModules.Roles,
+        ["role-permissions"] = PermissionModules.Roles,
         ["Branches"] = PermissionModules.Branches,
         ["Businesses"] = PermissionModules.Businesses,
         ["Countries"] = PermissionModules.Branches,

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
+import { authStorage } from '../utils/storage'
 import {
-  isMasterUserRole,
+  canBypassPermissionsSession,
   normalizeModulePermission,
   type ModulePermission,
   type PermissionAction,
@@ -37,7 +38,7 @@ export const usePermissionStore = create<PermissionState>((set, get) => ({
 
   can: (moduleName, action) => {
     const { permissions, roleName } = get()
-    if (isMasterUserRole(roleName)) {
+    if (canBypassPermissionsSession(roleName, authStorage.getUser())) {
       return true
     }
 

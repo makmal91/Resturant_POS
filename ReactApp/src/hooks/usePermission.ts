@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { usePermissionStore } from '../stores/usePermissionStore'
-import { isMasterUserRole } from '../types/permissions'
+import { authStorage } from '../utils/storage'
+import { isGlobalAdminSession, isMasterUserSession, isSuperAdminRole } from '../types/permissions'
 import type { PermissionAction } from '../types/permissions'
 
 export const usePermission = (moduleName: string) => {
@@ -27,5 +28,16 @@ export const useHasPermission = (moduleName: string, action: PermissionAction): 
 
 export const useIsMasterUser = (): boolean => {
   const roleName = usePermissionStore((state) => state.roleName)
-  return isMasterUserRole(roleName)
+  return isMasterUserSession(roleName, authStorage.getUser())
+}
+
+export const useIsGlobalAdmin = (): boolean => {
+  const roleName = usePermissionStore((state) => state.roleName)
+  return isGlobalAdminSession(roleName, authStorage.getUser())
+}
+
+export const useIsSuperAdmin = (): boolean => {
+  const roleName = usePermissionStore((state) => state.roleName)
+  const user = authStorage.getUser()
+  return isSuperAdminRole(roleName) || isSuperAdminRole(user?.roleName)
 }

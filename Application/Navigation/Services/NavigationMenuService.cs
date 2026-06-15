@@ -21,7 +21,7 @@ public class NavigationMenuService : INavigationMenuService
     public async Task<IReadOnlyList<NavigationMenuDto>> GetAllowedMenusAsync(int roleId, string roleName)
     {
         var allMenus = await _repository.GetAllActiveAsync();
-        var allowedIds = RoleNames.IsMasterUser(roleName)
+        var allowedIds = RoleNames.CanBypassPermissions(roleName)
             ? allMenus.Select(m => m.Id).ToHashSet()
             : ResolveAllowedMenuIds(allMenus, await _permissionService.GetPermissionsAsync(roleId));
 

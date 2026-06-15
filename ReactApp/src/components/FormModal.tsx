@@ -6,6 +6,8 @@ import { getApiErrorMessage } from '../services/api';
 import { categoryService } from '../modules/category/categoryService';
 import { userService, RoleListItem } from '../modules/user/userService';
 import { useBranchStore } from '../stores/useBranchStore';
+import { useIsGlobalAdmin, useIsMasterUser } from '../hooks/usePermission';
+import { isProtectedRole } from '../types/permissions';
 
 interface MenuCategoryOption {
   id: string;
@@ -38,6 +40,8 @@ const FormModal: React.FC = () => {
   const branches = useBranchStore((state) => state.branches);
   const selectedBranchId = useBranchStore((state) => state.selectedBranchId);
   const fetchBranches = useBranchStore((state) => state.fetchBranches);
+  const isMasterUser = useIsMasterUser();
+  const isGlobalAdmin = useIsGlobalAdmin();
   const [isRendered, setIsRendered] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
 
@@ -127,7 +131,22 @@ const FormModal: React.FC = () => {
         await fetchBranches();
         const roles = await userService.getRoles();
         if (!isCancelled) {
-          setUserRoles(roles.filter((role) => role.isActive));
+          const availableRoles = roles.filter((role) => {
+            if (!role.isActive) {
+              return false;
+            }
+
+            if (isMasterUser) {
+              return true;
+            }
+
+            if (isGlobalAdmin) {
+              return !isProtectedRole(role.name);
+            }
+
+            return true;
+          });
+          setUserRoles(availableRoles);
         }
       } catch (err) {
         if (!isCancelled) {
@@ -146,7 +165,7 @@ const FormModal: React.FC = () => {
     return () => {
       isCancelled = true;
     };
-  }, [isOpen, formType, fetchBranches]);
+  }, [isOpen, formType, fetchBranches, isGlobalAdmin, isMasterUser]);
 
   const normalizedMenuInitialData = useMemo(() => {
     if (formType !== 'menu' || !editingData) {
@@ -239,7 +258,6 @@ const FormModal: React.FC = () => {
     setError(null);
     setSuccessMessage(null);
 
-    const branchId = selectedBranchId && selectedBranchId > 0 ? selectedBranchId : data.branchIds?.[0] ?? 1;
     const payload = {
       fullName: String(data.fullName ?? '').trim(),
       username: String(data.username ?? '').trim(),
@@ -250,6 +268,21 @@ const FormModal: React.FC = () => {
       isActive: String(data.status) !== 'Inactive',
       branchIds: Array.isArray(data.branchIds) ? data.branchIds.map(Number).filter((id: number) => id > 0) : [],
     };
+
+    if (payload.branchIds.length === 0 && selectedBranchId && selectedBranchId > 0) {
+      payload.branchIds = [selectedBranchId];
+    }
+
+    const branchId =
+      selectedBranchId && selectedBranchId > 0
+        ? selectedBranchId
+        : payload.branchIds[0] ?? 0;
+
+    if (branchId <= 0 && payload.branchIds.length === 0) {
+      setError('At least one branch must be selected.');
+      setIsSubmitting(false);
+      return;
+    }
 
     if (!payload.fullName || !payload.username || !payload.email || !payload.roleId) {
       setError('Full name, username, email, and role are required.');
@@ -499,6 +532,11 @@ const FormModal: React.FC = () => {
             isLoading={isSubmitting || isUserMetaLoading}
             isEditMode={isEditMode}
             submitLabel={isEditMode ? 'Update User' : 'Create User'}
+            lockToActiveBranch={!isGlobalAdmin && Boolean(selectedBranchId && selectedBranchId > 0)}
+            activeBranchId={selectedBranchId && selectedBranchId > 0 ? selectedBranchId : 0}
+            activeBranchName={
+              branches.find((branch) => branch.id === selectedBranchId)?.name ?? ''
+            }
           />
         );
       case 'business':

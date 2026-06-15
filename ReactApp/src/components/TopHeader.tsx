@@ -1,14 +1,15 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useIsGlobalAdmin } from '../hooks/usePermission';
 import { useBranchStore } from '../stores/useBranchStore';
 
 const TopHeader: React.FC = () => {
   const navigate = useNavigate();
-  const { user, logout, selectedBranchId } = useAuth();
+  const { user, logout, selectedBranchId, setBranch } = useAuth();
   const branches = useBranchStore((state) => state.branches);
   const setSelectedBranchId = useBranchStore((state) => state.setSelectedBranchId);
-  const { setBranch } = useAuth();
+  const isGlobalAdmin = useIsGlobalAdmin();
 
   const selectedBranch = branches.find((branch) => branch.id === selectedBranchId) ?? null;
   const initials = (user?.fullName || user?.username || 'U')
@@ -24,8 +25,13 @@ const TopHeader: React.FC = () => {
   };
 
   const handleBranchChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    const branchId = Number(event.target.value);
-    if (!Number.isFinite(branchId) || branchId <= 0) {
+    const value = event.target.value;
+    if (!value) {
+      return;
+    }
+
+    const branchId = Number(value);
+    if (!Number.isFinite(branchId)) {
       return;
     }
 
@@ -36,6 +42,14 @@ const TopHeader: React.FC = () => {
       navigate('/select-branch');
     }
   };
+
+  const showBranchSelector = isGlobalAdmin
+    ? branches.length > 0
+    : branches.length > 1;
+  const branchLabel =
+    selectedBranchId === 0
+      ? 'All Branches'
+      : selectedBranch?.name ?? 'Select Branch';
 
   return (
     <header className="bg-white shadow-sm border-b border-gray-200 px-6 py-4">
@@ -56,7 +70,7 @@ const TopHeader: React.FC = () => {
         </div>
 
         <div className="flex items-center space-x-4">
-          {branches.length > 1 && (
+          {showBranchSelector && (
             <div className="min-w-[220px]">
               <label htmlFor="header-branch" className="sr-only">
                 Active Branch
@@ -67,7 +81,8 @@ const TopHeader: React.FC = () => {
                 onChange={handleBranchChange}
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
               >
-                <option value="">Select Branch</option>
+                {!isGlobalAdmin && <option value="">Select Branch</option>}
+                {isGlobalAdmin && <option value={0}>All Branches</option>}
                 {branches.map((branch) => (
                   <option key={branch.id} value={branch.id}>
                     {branch.name}
@@ -77,9 +92,15 @@ const TopHeader: React.FC = () => {
             </div>
           )}
 
-          {branches.length === 1 && selectedBranch && (
+          {!showBranchSelector && selectedBranch && (
             <span className="hidden text-sm text-gray-600 md:inline">
               Branch: <span className="font-medium text-gray-900">{selectedBranch.name}</span>
+            </span>
+          )}
+
+          {isGlobalAdmin && selectedBranchId === 0 && (
+            <span className="hidden text-sm text-gray-600 md:inline">
+              Branch: <span className="font-medium text-gray-900">{branchLabel}</span>
             </span>
           )}
 
