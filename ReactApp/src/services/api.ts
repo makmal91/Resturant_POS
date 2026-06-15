@@ -1,4 +1,4 @@
-import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
+import axios, { AxiosError, AxiosHeaders, InternalAxiosRequestConfig } from 'axios';
 import { authStorage } from '../utils/storage';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim() || '/api';
@@ -23,11 +23,15 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   }
 
   if (config.data instanceof FormData) {
-    if (typeof config.headers.delete === 'function') {
+    if (config.headers instanceof AxiosHeaders) {
+      config.headers.setContentType(false);
+    } else if (typeof config.headers.delete === 'function') {
       config.headers.delete('Content-Type');
-    } else {
-      delete config.headers['Content-Type'];
+      config.headers.delete('content-type');
     }
+
+    delete config.headers['Content-Type'];
+    delete config.headers['content-type'];
   }
 
   const user = authStorage.getUser();

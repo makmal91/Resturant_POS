@@ -5,10 +5,13 @@ namespace POSSystem.Domain;
 public class SubCategory : BaseEntity
 {
     public string Name { get; set; } = string.Empty;
+    public string Code { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public int DisplayOrder { get; set; }
     public bool Status { get; set; } = true;
     public string Icon { get; set; } = string.Empty;
+    public byte[]? ImageData { get; set; }
+    public string? ImageContentType { get; set; }
 
     public int CategoryId { get; set; }
 

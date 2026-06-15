@@ -55,14 +55,88 @@ public class MenuRepository : IMenuRepository
             .FirstOrDefaultAsync(sc => sc.Id == id && sc.BusinessId == businessId && sc.BranchId == branchId);
     }
 
-    public async Task<SubCategory?> GetSubCategoryByNameAsync(string name, int businessId, int branchId, int? excludeSubCategoryId = null)
+    public async Task<SubCategory?> GetSubCategoryByNameAsync(string name, int categoryId, int businessId, int branchId, int? excludeSubCategoryId = null)
     {
         var normalized = name.Trim();
 
         return await _context.SubCategories
-            .Where(sc => sc.BusinessId == businessId && sc.BranchId == branchId && sc.Name.ToLower() == normalized.ToLower())
+            .IgnoreQueryFilters()
+            .Where(sc => !sc.IsDeleted && sc.BusinessId == businessId && sc.BranchId == branchId && sc.CategoryId == categoryId && sc.Name.ToLower() == normalized.ToLower())
             .Where(sc => !excludeSubCategoryId.HasValue || sc.Id != excludeSubCategoryId.Value)
             .FirstOrDefaultAsync();
+    }
+
+    public async Task<PagedResultDto<SubCategory>> GetSubCategoriesPagedAsync(
+        int businessId,
+        int branchId,
+        int page,
+        int pageSize,
+        string? search = null,
+        int? categoryId = null,
+        bool? status = null)
+    {
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, MaxPageSize);
+
+        var query = _context.SubCategories
+            .IgnoreQueryFilters()
+            .Where(sc => !sc.IsDeleted && sc.BusinessId == businessId);
+
+        if (branchId > 0)
+        {
+            query = query.Where(sc => sc.BranchId == branchId);
+        }
+
+        if (categoryId.HasValue)
+        {
+            query = query.Where(sc => sc.CategoryId == categoryId.Value);
+        }
+
+        if (status.HasValue)
+        {
+            query = query.Where(sc => sc.Status == status.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim().ToLower();
+            query = query.Where(sc =>
+                sc.Name.ToLower().Contains(term) ||
+                sc.Code.ToLower().Contains(term) ||
+                sc.Description.ToLower().Contains(term));
+        }
+
+        var totalRecords = await query.CountAsync();
+        var totalPages = totalRecords == 0 ? 0 : (int)Math.Ceiling(totalRecords / (double)pageSize);
+
+        if (totalPages > 0 && page > totalPages)
+            page = totalPages;
+
+        var orderedQuery = branchId == 0
+            ? query.OrderBy(sc => sc.Branch!.Name).ThenBy(sc => sc.DisplayOrder).ThenBy(sc => sc.Name)
+            : query.OrderBy(sc => sc.DisplayOrder).ThenBy(sc => sc.Name);
+
+        var data = await orderedQuery
+            .Include(sc => sc.Category)
+            .Include(sc => sc.Branch)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return new PagedResultDto<SubCategory>
+        {
+            Data = data,
+            TotalRecords = totalRecords,
+            TotalPages = totalPages,
+            CurrentPage = page
+        };
+    }
+
+    public async Task<bool> SubCategoryHasProductsAsync(int subCategoryId, int businessId, int branchId)
+    {
+        return await _context.MenuItems
+            .IgnoreQueryFilters()
+            .AnyAsync(i => !i.IsDeleted && i.BusinessId == businessId && i.BranchId == branchId && i.SubCategoryId == subCategoryId);
     }
 
     public async Task<MenuItem?> GetMenuItemAsync(int id, int businessId, int branchId, bool includeOptions = false)
@@ -209,7 +283,7 @@ public class MenuRepository : IMenuRepository
         return await _context.MenuCategories
             .Where(c => c.BusinessId == businessId && c.BranchId == branchId && c.CategoryType == CategoryType.Sale)
             .Include(c => c.Branch)
-            .Include(c => c.SubCategories)
+            .Include(c => c.SubCategories.Where(sc => sc.Status))
             .Include(c => c.MenuItems.Where(i =>
                 i.IsAvailable &&
                 i.IsSaleable &&

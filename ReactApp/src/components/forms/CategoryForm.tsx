@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { FormButton, FormInput, FormSelect, FormTextarea } from './index';
+import AuthenticatedImage from '../AuthenticatedImage';
 import { categoryService } from '../../modules/category/categoryService';
 import { safeString } from '../../utils/safeValues';
 import { useBranchStore } from '../../stores/useBranchStore';
@@ -90,7 +91,7 @@ const CategoryForm: React.FC<CategoryFormProps> = ({
   const [errors, setErrors] = useState<Partial<Record<keyof CategoryFormData | 'imageFile', string>>>({});
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
-  const [existingImageUrl, setExistingImageUrl] = useState<string | null>(null);
+  const [existingImage, setExistingImage] = useState<{ id: number; branchId: number } | null>(null);
   const [removeImage, setRemoveImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isEditMode = Number(safeInitialData?.id ?? 0) > 0;
@@ -105,9 +106,9 @@ const CategoryForm: React.FC<CategoryFormProps> = ({
     const hasImage = Boolean(safeInitialData?.hasImage);
 
     if (categoryId > 0 && branchId > 0 && hasImage) {
-      setExistingImageUrl(categoryService.getImageUrl(categoryId, branchId));
+      setExistingImage({ id: categoryId, branchId });
     } else {
-      setExistingImageUrl(null);
+      setExistingImage(null);
     }
   }, [safeInitialData]);
 
@@ -122,10 +123,12 @@ const CategoryForm: React.FC<CategoryFormProps> = ({
     return undefined;
   }, [imageFile]);
 
-  const previewSource =
-    imagePreviewUrl ??
-    (removeImage ? null : existingImageUrl) ??
-    (formData.imageUrl && !formData.imageUrl.startsWith('data:') ? formData.imageUrl : null);
+  const externalImageUrl =
+    !removeImage && formData.imageUrl && !formData.imageUrl.startsWith('data:')
+      ? formData.imageUrl
+      : null;
+  const showStoredImage = !imagePreviewUrl && !removeImage && existingImage;
+  const showPreview = Boolean(imagePreviewUrl || showStoredImage || externalImageUrl);
 
   useEffect(() => {
     setFormData(buildCategoryFormData(safeInitialData));
@@ -233,7 +236,7 @@ const CategoryForm: React.FC<CategoryFormProps> = ({
     const categoryId = Number(safeInitialData?.id ?? 0);
     const branchId = Number(safeInitialData?.branchId ?? 0);
     const hasImage = Boolean(safeInitialData?.hasImage);
-    setExistingImageUrl(categoryId > 0 && branchId > 0 && hasImage ? categoryService.getImageUrl(categoryId, branchId) : null);
+    setExistingImage(categoryId > 0 && branchId > 0 && hasImage ? { id: categoryId, branchId } : null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -396,15 +399,30 @@ const CategoryForm: React.FC<CategoryFormProps> = ({
             />
           </div>
 
-          {previewSource && (
+          {showPreview && (
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-800 mb-2">Image Preview</label>
               <div className="flex items-center gap-4">
-                <img
-                  src={previewSource}
-                  alt="Category image preview"
-                  className="h-20 w-20 rounded-lg border border-gray-200 object-contain bg-white"
-                />
+                {imagePreviewUrl ? (
+                  <img
+                    src={imagePreviewUrl}
+                    alt="Category image preview"
+                    className="h-20 w-20 rounded-lg border border-gray-200 object-contain bg-white"
+                  />
+                ) : showStoredImage && existingImage ? (
+                  <AuthenticatedImage
+                    endpoint={categoryService.getImageEndpoint(existingImage.id)}
+                    params={{ branchId: existingImage.branchId }}
+                    alt="Category image preview"
+                    className="h-20 w-20 rounded-lg border border-gray-200 object-contain bg-white"
+                  />
+                ) : externalImageUrl ? (
+                  <img
+                    src={externalImageUrl}
+                    alt="Category image preview"
+                    className="h-20 w-20 rounded-lg border border-gray-200 object-contain bg-white"
+                  />
+                ) : null}
                 <button
                   type="button"
                   onClick={handleRemoveImage}

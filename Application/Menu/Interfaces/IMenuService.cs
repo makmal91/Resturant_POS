@@ -14,10 +14,13 @@ public interface IMenuService
     Task<MenuCategory> UpdateCategoryAsync(int id, UpdateMenuCategoryDto dto, byte[]? imageBytes = null, string? imageFileName = null, string? imageContentType = null, bool replaceImage = false);
     Task DeleteCategoryAsync(int id, int businessId, int branchId);
 
+    Task<PagedResultDto<SubCategoryDto>> GetSubCategoriesPagedAsync(int businessId, int branchId, int page, int pageSize, string? search = null, int? categoryId = null, bool? status = null);
     Task<ICollection<SubCategoryDto>> GetSubCategoriesAsync(int businessId, int branchId, int? categoryId = null);
-    Task<SubCategoryDto?> GetSubCategoryByIdAsync(int id, int businessId, int branchId);
-    Task<SubCategory> AddSubCategoryAsync(CreateSubCategoryDto dto);
-    Task<SubCategory> UpdateSubCategoryAsync(int id, UpdateSubCategoryDto dto);
+    Task<SubCategoryDto?> GetSubCategoryByIdAsync(int id, int businessId, int branchId, bool includeImage = false);
+    Task<SubCategoryImageDto?> GetSubCategoryImageAsync(int id, int businessId, int branchId);
+    Task<SubCategory> AddSubCategoryAsync(CreateSubCategoryDto dto, byte[]? imageBytes = null, string? imageContentType = null);
+    Task<SubCategory> UpdateSubCategoryAsync(int id, UpdateSubCategoryDto dto, byte[]? imageBytes = null, string? imageContentType = null, bool replaceImage = false);
+    Task PatchSubCategoryStatusAsync(SubCategoryStatusPatchDto dto);
     Task DeleteSubCategoryAsync(int id, int businessId, int branchId);
 
     Task<ICollection<MenuItemDto>> GetMenuItemsAsync(int businessId, int branchId, ProductType? productType = null, bool? isSaleable = null, bool? isInventoryItem = null);
@@ -38,7 +41,9 @@ public interface IMenuRepository
     Task<MenuCategory?> GetCategoryByNameAsync(string name, int businessId, int branchId, int? excludeCategoryId = null);
     Task<bool> BranchExistsAsync(int businessId, int branchId);
     Task<SubCategory?> GetSubCategoryAsync(int id, int businessId, int branchId);
-    Task<SubCategory?> GetSubCategoryByNameAsync(string name, int businessId, int branchId, int? excludeSubCategoryId = null);
+    Task<SubCategory?> GetSubCategoryByNameAsync(string name, int categoryId, int businessId, int branchId, int? excludeSubCategoryId = null);
+    Task<PagedResultDto<SubCategory>> GetSubCategoriesPagedAsync(int businessId, int branchId, int page, int pageSize, string? search = null, int? categoryId = null, bool? status = null);
+    Task<bool> SubCategoryHasProductsAsync(int subCategoryId, int businessId, int branchId);
     Task<MenuItem?> GetMenuItemAsync(int id, int businessId, int branchId, bool includeOptions = false);
     Task<PagedResultDto<MenuCategory>> GetCategoriesPagedAsync(int businessId, int branchId, int page, int pageSize, CategoryType? categoryType = null);
     Task<ICollection<MenuCategory>> GetCategoriesByBranchAsync(int businessId, int branchId, CategoryType? categoryType = null);

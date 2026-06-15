@@ -14,11 +14,20 @@ public class SubCategoryConfiguration : IEntityTypeConfiguration<SubCategory>
             .IsRequired()
             .HasMaxLength(100);
 
+        builder.Property(sc => sc.Code)
+            .HasMaxLength(50);
+
         builder.Property(sc => sc.Description)
             .HasMaxLength(500);
 
         builder.Property(sc => sc.Icon)
             .HasMaxLength(150);
+
+        builder.Property(sc => sc.ImageData)
+            .HasColumnType("varbinary(max)");
+
+        builder.Property(sc => sc.ImageContentType)
+            .HasMaxLength(100);
 
         builder.Property(sc => sc.Status)
             .HasDefaultValue(true);
@@ -29,9 +38,9 @@ public class SubCategoryConfiguration : IEntityTypeConfiguration<SubCategory>
         builder.HasIndex(sc => new { sc.BranchId, sc.CategoryId })
             .HasDatabaseName("idx_subcategory_branch_category");
 
-        builder.HasIndex(sc => new { sc.BranchId, sc.Name })
+        builder.HasIndex(sc => new { sc.CategoryId, sc.Name })
             .IsUnique()
-            .HasDatabaseName("idx_subcategory_branch_name");
+            .HasDatabaseName("idx_subcategory_category_name");
 
         builder.HasOne(sc => sc.Branch)
             .WithMany(b => b.SubCategories)

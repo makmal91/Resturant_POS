@@ -1,9 +1,10 @@
 import React, { useMemo, useEffect, useState } from 'react';
 import { useFormModal } from '../contexts/FormModalContext';
-import { BranchForm, BusinessForm, UserForm, MenuForm, InventoryForm, CategoryForm } from './forms';
+import { BranchForm, BusinessForm, UserForm, MenuForm, InventoryForm, CategoryForm, SubCategoryForm } from './forms';
 import { BranchService, BusinessService, MenuService, InventoryService } from '../services/apiService';
 import { getApiErrorMessage } from '../services/api';
 import { categoryService } from '../modules/category/categoryService';
+import { subCategoryService } from '../modules/subcategory/subcategoryService';
 import { userService, RoleListItem } from '../modules/user/userService';
 import { useBranchStore } from '../stores/useBranchStore';
 import { useIsGlobalAdmin, useIsMasterUser } from '../hooks/usePermission';
@@ -511,6 +512,88 @@ const FormModal: React.FC = () => {
     }
   };
 
+  const handleSubCategorySubmit = async (data: any) => {
+    setIsSubmitting(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    const branchId = Number(data?.branchId ?? 0);
+    const categoryId = Number(data?.categoryId ?? 0);
+    const name = String(data?.name ?? '').trim();
+
+    if (!name) {
+      setError('Sub category name is required.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (branchId <= 0) {
+      setError('Branch selection is required.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (categoryId <= 0) {
+      setError('Category selection is required.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('name', name);
+    formData.append('code', String(data?.code ?? '').trim());
+    formData.append('description', String(data?.description ?? '').trim());
+    formData.append('displayOrder', String(Number(data?.displayOrder ?? 0)));
+    formData.append('icon', String(data?.icon ?? '').trim());
+    formData.append('status', String(data?.status ?? 'Active').toLowerCase() !== 'inactive' ? 'Active' : 'Inactive');
+    formData.append('categoryId', String(categoryId));
+    formData.append('branchId', String(branchId));
+
+    const hasImageUpload = data?.imageFile instanceof File;
+    const hasImageRemoval = Boolean(data?.removeImage);
+
+    if (hasImageUpload) {
+      formData.append('imageFile', data.imageFile);
+    }
+
+    if (hasImageRemoval) {
+      formData.append('removeImage', 'true');
+    }
+
+    const jsonPayload = {
+      name,
+      code: String(data?.code ?? '').trim(),
+      description: String(data?.description ?? '').trim(),
+      displayOrder: Number(data?.displayOrder ?? 0),
+      icon: String(data?.icon ?? '').trim(),
+      status: String(data?.status ?? 'Active').toLowerCase() !== 'inactive',
+      categoryId,
+      branchId,
+    };
+
+    try {
+      useBranchStore.getState().setSelectedBranchId(branchId);
+      if (hasImageUpload || hasImageRemoval) {
+        if (isEditMode) {
+          await subCategoryService.update(Number(editingData.id), formData, branchId);
+        } else {
+          await subCategoryService.create(formData, branchId);
+        }
+      } else if (isEditMode) {
+        await subCategoryService.updateJson(Number(editingData.id), jsonPayload, branchId);
+      } else {
+        await subCategoryService.createJson(jsonPayload, branchId);
+      }
+      closeWithSuccess(
+        isEditMode ? 'Sub category updated successfully.' : 'Sub category created successfully.'
+      );
+    } catch (err: any) {
+      setError(getApiErrorMessage(err, 'Failed to save sub category'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const getFormComponent = () => {
     switch (formType) {
       case 'branch':
@@ -580,6 +663,16 @@ const FormModal: React.FC = () => {
             lockBranch={isEditMode || Number(editingData?.branchId ?? 0) > 0}
           />
         );
+      case 'subcategory':
+        return (
+          <SubCategoryForm
+            initialData={editingData}
+            onSubmit={handleSubCategorySubmit}
+            isLoading={isSubmitting}
+            submitLabel={isEditMode ? 'Update Sub Category' : 'Create Sub Category'}
+            lockBranch={isEditMode || (!isGlobalAdmin && Boolean(selectedBranchId && selectedBranchId > 0))}
+          />
+        );
       default:
         return null;
     }
@@ -588,7 +681,20 @@ const FormModal: React.FC = () => {
   if (!isRendered) return null;
 
   const panelWidthClass =
-    formType === 'business' || formType === 'branch' || formType === 'category' || formType === 'user' ? 'max-w-4xl' : 'max-w-2xl';
+    formType === 'business' ||
+    formType === 'branch' ||
+    formType === 'category' ||
+    formType === 'subcategory' ||
+    formType === 'user'
+      ? 'max-w-4xl'
+      : 'max-w-2xl';
+
+  const formTypeLabel =
+    formType === 'subcategory'
+      ? 'Sub Category'
+      : formType
+        ? formType.charAt(0).toUpperCase() + formType.slice(1)
+        : '';
 
   return (
     <>
@@ -611,7 +717,7 @@ const FormModal: React.FC = () => {
         <div className="shrink-0 z-10 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
           <div>
             <h2 className="text-xl font-semibold text-gray-900">
-              {isEditMode ? 'Edit' : 'Create'} {formType?.charAt(0).toUpperCase() + formType?.slice(1)}
+              {isEditMode ? 'Edit' : 'Create'} {formTypeLabel}
             </h2>
             <p className="text-sm text-gray-500 mt-0.5">Fill in the details below</p>
           </div>

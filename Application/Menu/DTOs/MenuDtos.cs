@@ -57,6 +57,7 @@ public class CategoryImageDto
 public class CreateSubCategoryDto
 {
     public string Name { get; set; } = string.Empty;
+    public string Code { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public int DisplayOrder { get; set; }
     public bool Status { get; set; } = true;
@@ -69,6 +70,7 @@ public class CreateSubCategoryDto
 public class UpdateSubCategoryDto
 {
     public string Name { get; set; } = string.Empty;
+    public string Code { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public int DisplayOrder { get; set; }
     public bool Status { get; set; } = true;
@@ -76,6 +78,38 @@ public class UpdateSubCategoryDto
     public int CategoryId { get; set; }
     public int BusinessId { get; set; }
     public int BranchId { get; set; }
+}
+
+public class SubCategoryFormDto
+{
+    public string Name { get; set; } = string.Empty;
+    public string? Code { get; set; }
+    public string? Description { get; set; }
+    public int DisplayOrder { get; set; }
+    public string? Icon { get; set; }
+    public string? Status { get; set; }
+    public int CategoryId { get; set; }
+    public int BranchId { get; set; }
+    public string? RemoveImage { get; set; }
+}
+
+public class SubCategoryImageDto
+{
+    public byte[] ImageData { get; set; } = Array.Empty<byte>();
+    public string ImageContentType { get; set; } = string.Empty;
+}
+
+public class SubCategoryStatusPatchDto
+{
+    public int BranchId { get; set; }
+    public int BusinessId { get; set; }
+    public List<SubCategoryStatusItemDto> Items { get; set; } = new();
+}
+
+public class SubCategoryStatusItemDto
+{
+    public int Id { get; set; }
+    public bool Status { get; set; } = true;
 }
 
 public class CreateMenuItemDto
@@ -155,15 +189,20 @@ public class SubCategoryDto
 {
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
+    public string Code { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public int DisplayOrder { get; set; }
     public bool Status { get; set; } = true;
     public string Icon { get; set; } = string.Empty;
+    public bool HasImage { get; set; }
+    public string? Image { get; set; }
     public int CategoryId { get; set; }
     public string CategoryName { get; set; } = string.Empty;
     public int BusinessId { get; set; }
     public int BranchId { get; set; }
     public string BranchName { get; set; } = string.Empty;
+    public DateTime CreatedDate { get; set; }
+    public DateTime? UpdatedDate { get; set; }
 }
 
 public class MenuItemDto

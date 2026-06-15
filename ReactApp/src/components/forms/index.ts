@@ -8,4 +8,5 @@ export { default as UserForm } from './UserForm';
 export { default as MenuForm } from './MenuForm';
 export { default as InventoryForm } from './InventoryForm';
 export { default as CategoryForm } from './CategoryForm';
+export { default as SubCategoryForm } from './SubCategoryForm';
 export { default as OrderScreen } from './OrderScreen';

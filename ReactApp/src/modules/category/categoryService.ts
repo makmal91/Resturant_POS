@@ -20,6 +20,8 @@ const branchRequestConfig = (branchId: number) => ({
 });
 
 export const categoryService = {
+  getImageEndpoint: (id: number) => `/categories/${id}/image`,
+
   getImageUrl: (id: number, branchId: number) =>
     `${apiBaseUrl.replace(/\/$/, '')}/categories/${id}/image?branchId=${branchId}`,
 

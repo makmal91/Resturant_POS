@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState } from 'react';
 
-export type FormType = 'branch' | 'business' | 'user' | 'menu' | 'inventory' | 'category' | null;
+export type FormType = 'branch' | 'business' | 'user' | 'menu' | 'inventory' | 'category' | 'subcategory' | null;
 
 const DEFAULT_BRANCH_FORM_DATA = {
   name: '',
@@ -66,6 +66,17 @@ const DEFAULT_CATEGORY_FORM_DATA = {
   branchId: 0,
 };
 
+const DEFAULT_SUBCATEGORY_FORM_DATA = {
+  name: '',
+  code: '',
+  description: '',
+  displayOrder: 0,
+  icon: '',
+  status: 'Active',
+  categoryId: 0,
+  branchId: 0,
+};
+
 interface FormModalContextType {
   isOpen: boolean;
   formType: FormType;
@@ -99,6 +110,10 @@ const getDefaultFormData = (type: FormType) => {
 
   if (type === 'category') {
     return DEFAULT_CATEGORY_FORM_DATA;
+  }
+
+  if (type === 'subcategory') {
+    return DEFAULT_SUBCATEGORY_FORM_DATA;
   }
 
   return {};

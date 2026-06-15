@@ -52,6 +52,9 @@ public class MenuItemConfiguration : IEntityTypeConfiguration<MenuItem>
         builder.HasIndex(mi => mi.MenuCategoryId)
             .HasDatabaseName("idx_menuitem_categoryid");
 
+        builder.HasIndex(mi => mi.SubCategoryId)
+            .HasDatabaseName("idx_menuitem_subcategoryid");
+
         builder.HasIndex(mi => new { mi.BranchId, mi.IsAvailable })
             .HasDatabaseName("idx_menuitem_branch_available");
 
@@ -62,6 +65,11 @@ public class MenuItemConfiguration : IEntityTypeConfiguration<MenuItem>
         builder.HasOne(mi => mi.MenuCategory)
             .WithMany(mc => mc.MenuItems)
             .HasForeignKey(mi => mi.MenuCategoryId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(mi => mi.SubCategory)
+            .WithMany()
+            .HasForeignKey(mi => mi.SubCategoryId)
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasMany(mi => mi.Variants)

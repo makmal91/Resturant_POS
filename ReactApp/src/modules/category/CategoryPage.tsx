@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import DataTable, { Action, Column } from '../../components/DataTable';
 import Badge from '../../components/Badge';
+import AuthenticatedImage from '../../components/AuthenticatedImage';
 import { useBranchStore } from '../../stores/useBranchStore';
 import { useFormModal } from '../../contexts/FormModalContext';
 import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
@@ -230,24 +231,38 @@ const CategoryPage: React.FC = () => {
         render: (_value, item) => {
           const externalImageUrl =
             item.imageUrl && !item.imageUrl.startsWith('data:') ? item.imageUrl : '';
-          const imageSrc = item.hasImage
-            ? categoryService.getImageUrl(item.id, item.branchId)
-            : externalImageUrl;
-
-          return imageSrc ? (
-            <img
-              src={imageSrc}
-              alt={`${item.name} image`}
-              className="h-10 w-10 rounded-md border border-gray-200 object-cover bg-white"
-            />
-          ) : (
+          const fallback = (
             <div
-              className="h-10 w-10 rounded-md border border-gray-200 flex items-center justify-center text-xs font-semibold text-white"
+              className="flex h-10 w-10 items-center justify-center rounded-md border border-gray-200 text-xs font-semibold text-white"
               style={{ backgroundColor: item.color }}
             >
               {item.name.slice(0, 1).toUpperCase()}
             </div>
           );
+
+          if (item.hasImage) {
+            return (
+              <AuthenticatedImage
+                endpoint={categoryService.getImageEndpoint(item.id)}
+                params={{ branchId: item.branchId }}
+                alt={`${item.name} image`}
+                className="h-10 w-10 rounded-md border border-gray-200 bg-white object-cover"
+                fallback={fallback}
+              />
+            );
+          }
+
+          if (externalImageUrl) {
+            return (
+              <img
+                src={externalImageUrl}
+                alt={`${item.name} image`}
+                className="h-10 w-10 rounded-md border border-gray-200 bg-white object-cover"
+              />
+            );
+          }
+
+          return fallback;
         },
       },
       {
