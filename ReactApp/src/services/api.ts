@@ -54,8 +54,21 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
     config.headers['X-Business-Id'] = String(businessId);
   }
 
-  if (selectedBranchId !== null) {
-    config.headers['X-Branch-Id'] = String(selectedBranchId)
+  const headers = config.headers;
+  const hasExplicitBranchHeader =
+    (headers instanceof AxiosHeaders
+      ? headers.has('X-Branch-Id') || headers.has('x-branch-id')
+      : Boolean(
+          (headers as Record<string, unknown>)?.['X-Branch-Id'] ??
+            (headers as Record<string, unknown>)?.['x-branch-id'],
+        ));
+
+  if (selectedBranchId !== null && !hasExplicitBranchHeader) {
+    if (headers instanceof AxiosHeaders) {
+      headers.set('X-Branch-Id', String(selectedBranchId));
+    } else {
+      (config.headers as Record<string, string>)['X-Branch-Id'] = String(selectedBranchId);
+    }
   }
 
   if (user?.roleName) {

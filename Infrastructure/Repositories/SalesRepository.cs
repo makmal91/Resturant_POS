@@ -83,7 +83,7 @@ public class SalesRepository : ISalesRepository
                 .ThenInclude(i => i.Unit)
             .FirstOrDefaultAsync(s => s.Id == id
                 && s.BusinessId == businessId
-                && s.BranchId == branchId
+                && (branchId == 0 || s.BranchId == branchId)
                 && !s.IsDeleted);
     }
 

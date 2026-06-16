@@ -18,6 +18,8 @@ public static class PermissionModuleDatabaseInitializer
                     [ModuleName] NVARCHAR(100) NOT NULL,
                     [ModuleKey] NVARCHAR(100) NOT NULL DEFAULT '',
                     [ParentModuleId] INT NULL,
+                    [Route] NVARCHAR(200) NULL,
+                    [Icon] NVARCHAR(50) NULL,
                     [DisplayOrder] INT NOT NULL DEFAULT 0,
                     [IsActive] BIT NOT NULL DEFAULT 1,
                     [IsDeleted] BIT NOT NULL DEFAULT 0,
@@ -26,6 +28,51 @@ public static class PermissionModuleDatabaseInitializer
                     CONSTRAINT [FK_Modules_ParentModuleId] FOREIGN KEY ([ParentModuleId]) REFERENCES [Modules]([Id])
                 );
                 CREATE UNIQUE INDEX [idx_module_key] ON [Modules]([ModuleKey]) WHERE [ModuleKey] <> '' AND [IsDeleted] = 0;
+            END
+            """,
+            """
+            IF COL_LENGTH('Modules', 'Route') IS NULL
+                ALTER TABLE [Modules] ADD [Route] NVARCHAR(200) NULL;
+            IF COL_LENGTH('Modules', 'Icon') IS NULL
+                ALTER TABLE [Modules] ADD [Icon] NVARCHAR(50) NULL;
+            """,
+            """
+            IF OBJECT_ID(N'[dbo].[ModuleForms]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [dbo].[ModuleForms] (
+                    [Id] INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                    [ModuleId] INT NOT NULL,
+                    [FormName] NVARCHAR(100) NOT NULL,
+                    [FormCode] NVARCHAR(100) NOT NULL,
+                    [Route] NVARCHAR(200) NULL,
+                    [IsActive] BIT NOT NULL DEFAULT 1,
+                    [SortOrder] INT NOT NULL DEFAULT 0,
+                    [IsDeleted] BIT NOT NULL DEFAULT 0,
+                    [CreatedDate] DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+                    [UpdatedDate] DATETIME2 NULL,
+                    CONSTRAINT [FK_ModuleForms_ModuleId] FOREIGN KEY ([ModuleId]) REFERENCES [Modules]([Id]) ON DELETE CASCADE
+                );
+                CREATE UNIQUE INDEX [idx_module_form_code] ON [ModuleForms]([FormCode]) WHERE [IsDeleted] = 0;
+            END
+            """,
+            """
+            IF OBJECT_ID(N'[dbo].[RoleFormPermissions]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [dbo].[RoleFormPermissions] (
+                    [Id] INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                    [RoleId] INT NOT NULL,
+                    [FormId] INT NOT NULL,
+                    [CanView] BIT NOT NULL DEFAULT 0,
+                    [CanCreate] BIT NOT NULL DEFAULT 0,
+                    [CanEdit] BIT NOT NULL DEFAULT 0,
+                    [CanDelete] BIT NOT NULL DEFAULT 0,
+                    [IsDeleted] BIT NOT NULL DEFAULT 0,
+                    [CreatedDate] DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+                    [UpdatedDate] DATETIME2 NULL,
+                    CONSTRAINT [FK_RoleFormPermissions_RoleId] FOREIGN KEY ([RoleId]) REFERENCES [Roles]([Id]) ON DELETE CASCADE,
+                    CONSTRAINT [FK_RoleFormPermissions_FormId] FOREIGN KEY ([FormId]) REFERENCES [ModuleForms]([Id]) ON DELETE CASCADE
+                );
+                CREATE UNIQUE INDEX [idx_role_form_permission] ON [RoleFormPermissions]([RoleId], [FormId]) WHERE [IsDeleted] = 0;
             END
             """,
             """
@@ -62,46 +109,68 @@ public static class PermissionModuleSeeder
         string ModuleName,
         string ModuleKey,
         string? ParentKey,
-        int DisplayOrder);
+        int DisplayOrder,
+        string? Route = null,
+        string? Icon = null);
 
     private static readonly ModuleSeedEntry[] DefaultModules =
     [
-        // Groups (ParentKey = null)
-        new("Catalog",        "",  null,           1),
-        new("Operations",     "",  null,           2),
-        new("Accounts",       "",  null,           3),
-        new("Administration", "",  null,           4),
+        // Top-level standalone
+        new("Dashboard", PermissionModules.Dashboard, null, 1, "/", "D"),
 
-        // Catalog
-        new("Categories",   PermissionModules.Categories,   "Catalog", 1),
-        new("SubCategories",PermissionModules.SubCategories,"Catalog", 2),
-        new("Brands",       PermissionModules.Brands,       "Catalog", 3),
-        new("Products",     PermissionModules.Products,     "Catalog", 4),
-        new("Units",        PermissionModules.Units,        "Catalog", 5),
-        new("Suppliers",    PermissionModules.Suppliers,    "Catalog", 6),
-        new("Warehouses",   PermissionModules.Warehouses,   "Catalog", 7),
-        new("Menu",         PermissionModules.Menu,         "Catalog", 8),
-        new("Customers",    PermissionModules.Customers,    "Catalog", 9),
+        // Parent categories
+        new("Business Management", "", null, 2),
+        new("User & Role Management", "", null, 3),
+        new("Product Management", "", null, 4),
+        new("Inventory Management", "", null, 5),
+        new("Purchase Management", "", null, 6),
+        new("Sales Management", "", null, 7),
+        new("Finance", "", null, 8),
+        new("Reports", "", null, 9),
+        new("Settings", "", null, 10),
 
-        // Operations
-        new("Dashboard",      PermissionModules.Dashboard,    "Operations", 0),
-        new("Inventory",    PermissionModules.Inventory,    "Operations", 1),
-        new("Purchase",     PermissionModules.Purchase,     "Operations", 2),
-        new("Stock",        PermissionModules.Stock,        "Operations", 3),
-        new("Orders",       PermissionModules.Orders,       "Operations", 4),
-        new("POS Billing",  PermissionModules.PosBilling,   "Operations", 5),
-        new("Sales",        PermissionModules.Sales,        "Operations", 6),
-        new("Reports",      PermissionModules.Reports,      "Operations", 7),
+        // Business Management
+        new("Businesses", PermissionModules.Businesses, "Business Management", 1, "/businesses", "B"),
+        new("Branches", PermissionModules.Branches, "Business Management", 2, "/branches", "Br"),
 
-        // Accounts
-        new("Expenses",     PermissionModules.Expenses,     "Accounts", 1),
-        new("Cash Flow",    PermissionModules.CashFlow,     "Accounts", 2),
+        // User & Role Management
+        new("Users", PermissionModules.Users, "User & Role Management", 1, "/users", "U"),
+        new("Roles & Permissions", PermissionModules.Roles, "User & Role Management", 2, "/roles", "R"),
 
-        // Administration
-        new("Users",        PermissionModules.Users,        "Administration", 1),
-        new("Roles",        PermissionModules.Roles,        "Administration", 2),
-        new("Branches",     PermissionModules.Branches,     "Administration", 3),
-        new("Businesses",   PermissionModules.Businesses,   "Administration", 4),
+        // Product Management
+        new("Categories", PermissionModules.Categories, "Product Management", 1, "/categories", "C"),
+        new("Sub Categories", PermissionModules.SubCategories, "Product Management", 2, "/subcategories", "SC"),
+        new("Brands", PermissionModules.Brands, "Product Management", 3, "/brands", "Bn"),
+        new("Products", PermissionModules.Products, "Product Management", 4, "/products", "P"),
+        new("Units", PermissionModules.Units, "Product Management", 5, "/units", "Un"),
+        new("Variants", PermissionModules.Variants, "Product Management", 6, "/products", "V"),
+
+        // Inventory Management
+        new("Stock", PermissionModules.Stock, "Inventory Management", 1, "/stock", "St"),
+        new("Warehouses", PermissionModules.Warehouses, "Inventory Management", 2, "/warehouses", "W"),
+        new("Stock Transfer", PermissionModules.StockTransfer, "Inventory Management", 3, "/inventory", "Inv"),
+
+        // Purchase Management
+        new("Purchases", PermissionModules.Purchase, "Purchase Management", 1, "/purchase", "Pu"),
+        new("Suppliers", PermissionModules.Suppliers, "Purchase Management", 2, "/suppliers", "Su"),
+
+        // Sales Management
+        new("POS", PermissionModules.PosBilling, "Sales Management", 1, "/pos", "POS"),
+        new("Sales", PermissionModules.Orders, "Sales Management", 2, "/orders", "S"),
+        new("Customers", PermissionModules.Customers, "Sales Management", 3, "/customers", "Cu"),
+        new("Invoices", PermissionModules.Sales, "Sales Management", 4, "/sales-invoices", "I"),
+
+        // Finance
+        new("Expenses", PermissionModules.Expenses, "Finance", 1, "/expenses", "Exp"),
+        new("Cash Flow", PermissionModules.CashFlow, "Finance", 2, "/cashflow", "CF"),
+
+        // Reports
+        new("Sales Reports", PermissionModules.SalesReports, "Reports", 1, "/reports", "Rp"),
+        new("Purchase Reports", PermissionModules.PurchaseReports, "Reports", 2, "/reports", "Rp"),
+        new("Stock Reports", PermissionModules.StockReports, "Reports", 3, "/reports", "Rp"),
+
+        // Settings
+        new("System Settings", PermissionModules.SystemSettings, "Settings", 1, "/settings", "Set"),
     ];
 
     public static async Task SeedDefaultModulesAsync(POSDbContext context, ILogger logger)
@@ -123,7 +192,40 @@ public static class PermissionModuleSeeder
             await EnsureModuleAsync(context, logger, module, parentId);
         }
 
+        await DeactivateLegacyModulesAsync(context, logger);
         await BackfillRolePermissionModuleIdsAsync(context, logger);
+        await ModuleFormSeeder.SeedDefaultFormsAsync(context, logger);
+    }
+
+    private static async Task DeactivateLegacyModulesAsync(POSDbContext context, ILogger logger)
+    {
+        var legacyNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "Catalog", "Operations", "Accounts", "Administration",
+            "Master Data", "Menu", "Inventory", "Purchase", "POS Billing",
+            "Reports", "Orders", "Taxes", "Discounts"
+        };
+
+        try
+        {
+            var legacyModules = await context.PermissionModules
+                .IgnoreQueryFilters()
+                .Where(m => legacyNames.Contains(m.ModuleName) && m.IsActive)
+                .ToListAsync();
+
+            foreach (var module in legacyModules)
+            {
+                module.IsActive = false;
+                module.UpdatedDate = DateTime.UtcNow;
+            }
+
+            if (legacyModules.Count > 0)
+                await context.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to deactivate legacy modules.");
+        }
     }
 
     private static async Task<int> EnsureModuleAsync(
@@ -136,18 +238,31 @@ public static class PermissionModuleSeeder
         {
             var existing = await context.PermissionModules
                 .IgnoreQueryFilters()
-                .Where(m => m.ModuleName == module.ModuleName && m.ParentModuleId == parentId)
-                .Select(m => m.Id)
-                .FirstOrDefaultAsync();
+                .FirstOrDefaultAsync(m =>
+                    (module.ModuleKey != string.Empty && m.ModuleKey == module.ModuleKey) ||
+                    (module.ModuleKey == string.Empty && m.ModuleName == module.ModuleName && m.ParentModuleId == parentId));
 
-            if (existing > 0)
-                return existing;
+            if (existing != null)
+            {
+                existing.ModuleName = module.ModuleName;
+                existing.ParentModuleId = parentId;
+                existing.DisplayOrder = module.DisplayOrder;
+                existing.Route = module.Route;
+                existing.Icon = module.Icon;
+                existing.IsActive = true;
+                existing.IsDeleted = false;
+                existing.UpdatedDate = DateTime.UtcNow;
+                await context.SaveChangesAsync();
+                return existing.Id;
+            }
 
             var entity = new Domain.PermissionModule
             {
                 ModuleName = module.ModuleName,
                 ModuleKey = module.ModuleKey,
                 ParentModuleId = parentId,
+                Route = module.Route,
+                Icon = module.Icon,
                 DisplayOrder = module.DisplayOrder,
                 IsActive = true,
                 IsDeleted = false,
@@ -197,6 +312,110 @@ public static class PermissionModuleSeeder
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to backfill RolePermission ModuleId values.");
+        }
+    }
+}
+
+public static class ModuleFormSeeder
+{
+    public static async Task SeedDefaultFormsAsync(POSDbContext context, ILogger logger)
+    {
+        try
+        {
+            var modules = await context.PermissionModules
+                .AsNoTracking()
+                .Where(m => !m.IsDeleted && m.IsActive && m.ModuleKey != string.Empty)
+                .Select(m => new { m.Id, m.ModuleKey, m.ModuleName, m.Route })
+                .ToListAsync();
+
+            foreach (var module in modules)
+            {
+                var formCode = $"{module.ModuleKey}_Main";
+                var exists = await context.ModuleForms
+                    .IgnoreQueryFilters()
+                    .AnyAsync(f => f.FormCode == formCode);
+
+                if (exists)
+                    continue;
+
+                await context.ModuleForms.AddAsync(new Domain.ModuleForm
+                {
+                    ModuleId = module.Id,
+                    FormName = $"{module.ModuleName} Form",
+                    FormCode = formCode,
+                    Route = module.Route,
+                    SortOrder = 1,
+                    IsActive = true,
+                    IsDeleted = false,
+                    CreatedDate = DateTime.UtcNow
+                });
+            }
+
+            await context.SaveChangesAsync();
+            await BackfillRoleFormPermissionsAsync(context, logger);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to seed module forms.");
+        }
+    }
+
+    private static async Task BackfillRoleFormPermissionsAsync(POSDbContext context, ILogger logger)
+    {
+        try
+        {
+            var roles = await context.Roles
+                .AsNoTracking()
+                .Where(r => !r.IsDeleted)
+                .Select(r => r.Id)
+                .ToListAsync();
+
+            var forms = await context.ModuleForms
+                .AsNoTracking()
+                .Include(f => f.Module)
+                .Where(f => !f.IsDeleted && f.IsActive)
+                .ToListAsync();
+
+            foreach (var roleId in roles)
+            {
+                var modulePermissions = await context.RolePermissions
+                    .AsNoTracking()
+                    .Where(rp => rp.RoleId == roleId && !rp.IsDeleted)
+                    .ToListAsync();
+
+                foreach (var form in forms)
+                {
+                    var exists = await context.RoleFormPermissions
+                        .IgnoreQueryFilters()
+                        .AnyAsync(rfp => rfp.RoleId == roleId && rfp.FormId == form.Id);
+
+                    if (exists)
+                        continue;
+
+                    var modulePerm = modulePermissions.FirstOrDefault(p =>
+                        string.Equals(p.ModuleName, form.Module.ModuleName, StringComparison.OrdinalIgnoreCase) ||
+                        (form.Module.ModuleKey != string.Empty &&
+                         string.Equals(p.ModuleName, form.Module.ModuleKey, StringComparison.OrdinalIgnoreCase)));
+
+                    await context.RoleFormPermissions.AddAsync(new Domain.RoleFormPermission
+                    {
+                        RoleId = roleId,
+                        FormId = form.Id,
+                        CanView = modulePerm?.CanView ?? false,
+                        CanCreate = modulePerm?.CanCreate ?? false,
+                        CanEdit = modulePerm?.CanEdit ?? false,
+                        CanDelete = modulePerm?.CanDelete ?? false,
+                        IsDeleted = false,
+                        CreatedDate = DateTime.UtcNow
+                    });
+                }
+            }
+
+            await context.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to backfill role form permissions.");
         }
     }
 }

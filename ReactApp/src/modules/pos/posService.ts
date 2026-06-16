@@ -151,6 +151,9 @@ export interface SaleInvoiceDto {
   cashierName: string | null;
   branchId: number;
   branchName: string;
+  branchAddress?: string;
+  branchPhone?: string;
+  branchEmail?: string;
   createdDate: string;
   items: SaleInvoiceItemResult[];
 }

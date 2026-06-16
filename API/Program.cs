@@ -87,7 +87,7 @@ using (var scope = app.Services.CreateScope())
     await CodeSequenceDatabaseInitializer.EnsureSchemaAsync(db, logger);
     await CashFlowDatabaseInitializer.EnsureSchemaAsync(db, logger);
     await RolePermissionSeeder.SeedDefaultPermissionsAsync(db, logger);
-    await NavigationMenuSeeder.SeedDefaultMenusAsync(db, logger);
+    // Sidebar now uses Modules table as single source of truth (NavigationMenuSeeder deprecated).
 }
 
 // Configure the HTTP request pipeline.

@@ -25,6 +25,12 @@ public static class PermissionModules
     public const string Expenses = "Expenses";
     public const string CashFlow = "Cash Flow";
     public const string Dashboard = "Dashboard";
+    public const string Variants = "Variants";
+    public const string StockTransfer = "Stock Transfer";
+    public const string SalesReports = "Sales Reports";
+    public const string PurchaseReports = "Purchase Reports";
+    public const string StockReports = "Stock Reports";
+    public const string SystemSettings = "System Settings";
 
     public static readonly IReadOnlyList<string> All =
     [
@@ -33,6 +39,7 @@ public static class PermissionModules
         Brands,
         Products,
         Units,
+        Variants,
         Menu,
         Orders,
         Inventory,
@@ -46,10 +53,15 @@ public static class PermissionModules
         Suppliers,
         Purchase,
         Stock,
+        StockTransfer,
         Sales,
         Customers,
         Expenses,
         CashFlow,
         Dashboard,
+        SalesReports,
+        PurchaseReports,
+        StockReports,
+        SystemSettings,
     ];
 }

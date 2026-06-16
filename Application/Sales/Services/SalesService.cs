@@ -439,8 +439,11 @@ public class SalesService : ISalesService
         CashierName  = inv.CashierName,
         VoidedAt     = inv.VoidedAt,
         VoidedByName = inv.VoidedByName,
-        BranchId     = inv.BranchId,
-        BranchName   = inv.Branch?.Name ?? string.Empty,
+        BranchId      = inv.BranchId,
+        BranchName    = inv.Branch?.Name ?? string.Empty,
+        BranchAddress = inv.Branch?.Address ?? string.Empty,
+        BranchPhone   = inv.Branch?.Phone ?? string.Empty,
+        BranchEmail   = inv.Branch?.Email ?? string.Empty,
         CreatedAt  = inv.CreatedAt,
         Items = inv.Items
             .Where(i => !i.IsDeleted)

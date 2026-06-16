@@ -15,6 +15,7 @@ import {
   type SaleInvoiceStatus,
 } from './salesService';
 import type { SaleInvoiceDto, SaleLedgerEntry } from '../pos/posService';
+import { ReceiptPrintModal } from '../../components/receipt';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -44,108 +45,6 @@ const ledgerTypeVariant = (type: string) => {
   if (type === 'SaleEntry') return 'danger' as const;
   if (type === 'SaleReversal') return 'success' as const;
   return 'secondary' as const;
-};
-
-// ─── Receipt Modal ────────────────────────────────────────────────────────────
-
-interface ReceiptModalProps {
-  invoice: SaleInvoiceDto;
-  onClose: () => void;
-}
-
-const ReceiptModal: React.FC<ReceiptModalProps> = ({ invoice, onClose }) => {
-  const isVoided = invoice.status === 'Voided';
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden border border-gray-200 max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-lg font-bold text-gray-800">Receipt</h2>
-              {isVoided && (
-                <span className="text-xs font-bold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">
-                  VOIDED
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-gray-500">{invoice.invoiceNo}</p>
-          </div>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 text-xl transition">×</button>
-        </div>
-
-        <div className="overflow-y-auto flex-1 p-5 space-y-4 text-sm">
-          <div className="text-center pb-3 border-b border-dashed border-gray-300">
-            <p className="text-xs text-gray-500">{fmtDateTime(invoice.saleDate)}</p>
-            {invoice.customerName && (
-              <p className="text-gray-600 text-xs mt-1">Customer: <span className="font-medium">{invoice.customerName}</span></p>
-            )}
-            {invoice.warehouseName && (
-              <p className="text-gray-600 text-xs">Warehouse: <span className="font-medium">{invoice.warehouseName}</span></p>
-            )}
-            {invoice.cashierName && (
-              <p className="text-gray-600 text-xs">Cashier: <span className="font-medium">{invoice.cashierName}</span></p>
-            )}
-            {isVoided && invoice.voidedAt && (
-              <p className="text-red-500 text-xs mt-1 font-medium">
-                Voided: {fmtDateTime(invoice.voidedAt)}
-                {invoice.voidedByName ? ` by ${invoice.voidedByName}` : ''}
-              </p>
-            )}
-          </div>
-
-          <table className="w-full text-xs">
-            <tbody className="divide-y divide-gray-100">
-              {invoice.items.map((item) => (
-                <tr key={item.id} className={isVoided ? 'opacity-50' : ''}>
-                  <td className="py-2 pr-2">
-                    <p className="font-medium text-gray-800">{item.productName}</p>
-                    {item.variantName && <p className="text-gray-400">{item.variantName}</p>}
-                    <p className="text-gray-400">{item.unitName}</p>
-                  </td>
-                  <td className="py-2 text-right text-gray-600 whitespace-nowrap">{item.quantity} × {fmt(item.unitPrice)}</td>
-                  <td className="py-2 pl-2 text-right font-semibold text-gray-800 whitespace-nowrap">{fmt(item.lineTotal)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <div className="border-t border-dashed border-gray-300 pt-3 space-y-1.5">
-            <div className="flex justify-between text-gray-600"><span>Subtotal</span><span>{fmt(invoice.subTotal)}</span></div>
-            {invoice.discountAmount > 0 && (
-              <div className="flex justify-between text-red-500"><span>Discount</span><span>−{fmt(invoice.discountAmount)}</span></div>
-            )}
-            {invoice.taxAmount > 0 && (
-              <div className="flex justify-between text-gray-600"><span>Tax</span><span>+{fmt(invoice.taxAmount)}</span></div>
-            )}
-            <div className="flex justify-between font-bold text-gray-900 text-base border-t border-gray-200 pt-2 mt-2">
-              <span>Total</span><span>{fmt(invoice.grandTotal)}</span>
-            </div>
-            <div className="flex justify-between text-gray-600">
-              <span>Paid ({invoice.paymentMethod})</span><span>{fmt(invoice.paidAmount)}</span>
-            </div>
-            {invoice.returnAmount > 0 && (
-              <div className="flex justify-between font-semibold text-green-600">
-                <span>Change</span><span>{fmt(invoice.returnAmount)}</span>
-              </div>
-            )}
-          </div>
-
-          <p className="text-center text-gray-400 text-xs pt-2 border-t border-dashed border-gray-300">
-            {isVoided ? 'This invoice has been voided.' : 'Thank you for your purchase!'}
-          </p>
-        </div>
-
-        <div className="px-5 pb-5 flex gap-3 border-t border-gray-100 pt-4">
-          <button onClick={() => window.print()} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 font-semibold hover:bg-gray-50 transition text-sm">
-            🖨️ Print
-          </button>
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-gray-800 hover:bg-gray-900 text-white font-bold transition text-sm">
-            Close
-          </button>
-        </div>
-      </div>
-    </div>
-  );
 };
 
 // ─── Ledger History Modal ─────────────────────────────────────────────────────
@@ -283,20 +182,25 @@ const SaleInvoicesPage: React.FC = () => {
       setItems(rows.map((r: unknown) => {
         const row = r as Record<string, unknown>;
         return {
-          id:            Number(row.id ?? 0),
-          invoiceNo:     safeString(row.invoiceNo),
-          customerName:  row.customerName != null ? safeString(row.customerName) : null,
-          customerPhone: row.customerPhone != null ? safeString(row.customerPhone) : null,
-          warehouseName: safeString(row.warehouseName),
-          saleDate:      safeString(row.saleDate),
-          grandTotal:    Number(row.grandTotal ?? 0),
-          paidAmount:    Number(row.paidAmount ?? 0),
-          paymentMethod: safeString(row.paymentMethod),
-          status:        safeString(row.status) as SaleInvoiceStatus,
-          cashierName:   row.cashierName != null ? safeString(row.cashierName) : null,
-          itemCount:     Number(row.itemCount ?? 0),
-          createdDate:   safeString(row.createdDate),
-          voidedAt:      row.voidedAt != null ? safeString(row.voidedAt) : null,
+          id:            Number(row.id ?? row.Id ?? 0),
+          invoiceNo:     safeString(row.invoiceNo ?? row.InvoiceNo),
+          customerName:  row.customerName != null ? safeString(row.customerName ?? row.CustomerName) : null,
+          customerPhone: row.customerPhone != null ? safeString(row.customerPhone ?? row.CustomerPhone) : null,
+          warehouseName: safeString(row.warehouseName ?? row.WarehouseName),
+          saleDate:      safeString(row.saleDate ?? row.SaleDate),
+          grandTotal:    Number(row.grandTotal ?? row.GrandTotal ?? 0),
+          paidAmount:    Number(row.paidAmount ?? row.PaidAmount ?? 0),
+          paymentMethod: safeString(row.paymentMethod ?? row.PaymentMethod),
+          status:        safeString(row.status ?? row.Status) as SaleInvoiceStatus,
+          cashierName:   row.cashierName != null ? safeString(row.cashierName ?? row.CashierName) : null,
+          itemCount:     Number(row.itemCount ?? row.ItemCount ?? 0),
+          createdDate:   safeString(row.createdDate ?? row.createdAt ?? row.CreatedAt),
+          voidedAt:      row.voidedAt != null ? safeString(row.voidedAt ?? row.VoidedAt) : null,
+          branchId:      Number(row.branchId ?? row.BranchId ?? 0),
+          warehouseId:   Number(row.warehouseId ?? row.WarehouseId ?? 0),
+          customerId:    row.customerId != null || row.CustomerId != null
+            ? Number(row.customerId ?? row.CustomerId ?? 0)
+            : null,
         } as SaleInvoiceListDto;
       }).filter(r => r.id > 0));
       setTotalRecords(Number(data?.totalRecords ?? 0));
@@ -313,9 +217,18 @@ const SaleInvoicesPage: React.FC = () => {
 
   useEffect(() => { setCurrentPage(1); }, [selectedBranchId, statusFilter, pageSize, dateFrom, dateTo]);
 
+  const resolveInvoiceBranchId = useCallback((item: SaleInvoiceListDto): number => {
+    if (item.branchId > 0) return item.branchId;
+    return resolveEntityBranchId(selectedBranchId);
+  }, [resolveEntityBranchId, selectedBranchId]);
+
   // ── View Receipt ──
   const handleViewReceipt = async (item: SaleInvoiceListDto) => {
-    const branchId = resolveEntityBranchId(item.branchId ?? selectedBranchId ?? 1);
+    const branchId = resolveInvoiceBranchId(item);
+    if (branchId <= 0) {
+      showNotification('error', 'Cannot load receipt: invoice branch is unknown. Select a specific branch.');
+      return;
+    }
     setLoadingDetail(item.id);
     try {
       const res = await salesService.getById(item.id, branchId);
@@ -327,7 +240,11 @@ const SaleInvoicesPage: React.FC = () => {
 
   // ── View Ledger History ──
   const handleViewLedger = async (item: SaleInvoiceListDto) => {
-    const branchId = resolveEntityBranchId(item.branchId ?? selectedBranchId ?? 1);
+    const branchId = resolveInvoiceBranchId(item);
+    if (branchId <= 0) {
+      showNotification('error', 'Cannot load ledger: invoice branch is unknown. Select a specific branch.');
+      return;
+    }
     setLoadingLedger(item.id);
     try {
       const res = await salesService.getLedgerHistory(item.id, branchId);
@@ -345,7 +262,11 @@ const SaleInvoicesPage: React.FC = () => {
       return;
     }
     if (!canModify) { showNotification('error', 'No permission to edit invoices.'); return; }
-    const branchId = resolveEntityBranchId(item.branchId ?? selectedBranchId ?? 1);
+    const branchId = resolveInvoiceBranchId(item);
+    if (branchId <= 0) {
+      showNotification('error', 'Cannot edit: invoice branch is unknown. Select a specific branch.');
+      return;
+    }
     navigate(`/sales-invoices/edit/${item.id}`, { state: { branchId } });
   };
 
@@ -356,7 +277,11 @@ const SaleInvoicesPage: React.FC = () => {
       return;
     }
     if (!canModify) { showNotification('error', 'No permission to void invoices.'); return; }
-    const branchId = resolveEntityBranchId(item.branchId ?? selectedBranchId ?? 1);
+    const branchId = resolveInvoiceBranchId(item);
+    if (branchId <= 0) {
+      showNotification('error', 'Cannot void: invoice branch is unknown. Select a specific branch.');
+      return;
+    }
     showConfirm({
       title: 'Void Invoice?',
       message: '⚠ Stock will be recalculated. All stock deducted by this sale will be returned to the warehouse. This cannot be undone.',
@@ -577,7 +502,10 @@ const SaleInvoicesPage: React.FC = () => {
 
       {/* Modals */}
       {receiptInvoice && (
-        <ReceiptModal invoice={receiptInvoice} onClose={() => setReceiptInvoice(null)} />
+        <ReceiptPrintModal
+          invoice={receiptInvoice}
+          onClose={() => setReceiptInvoice(null)}
+        />
       )}
 
       {ledgerEntries !== null && (

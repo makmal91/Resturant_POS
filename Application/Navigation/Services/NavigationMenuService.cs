@@ -1,126 +1,175 @@
 using POSSystem.Application.Auth.Interfaces;
 using POSSystem.Application.Navigation.DTOs;
 using POSSystem.Application.Navigation.Interfaces;
+using POSSystem.Application.Modules.Interfaces;
+using POSSystem.Application.Users.DTOs;
 using POSSystem.Domain;
 
 namespace POSSystem.Application.Navigation.Services;
 
 public class NavigationMenuService : INavigationMenuService
 {
-    private readonly INavigationMenuRepository _repository;
+    private readonly IModuleRepository _moduleRepository;
     private readonly IPermissionService _permissionService;
 
     public NavigationMenuService(
-        INavigationMenuRepository repository,
+        IModuleRepository moduleRepository,
         IPermissionService permissionService)
     {
-        _repository = repository;
+        _moduleRepository = moduleRepository;
         _permissionService = permissionService;
     }
 
     public async Task<IReadOnlyList<NavigationMenuDto>> GetAllowedMenusAsync(int roleId, string roleName)
     {
-        var allMenus = await _repository.GetAllActiveAsync();
-        var allowedIds = RoleNames.CanBypassPermissions(roleName)
-            ? allMenus.Select(m => m.Id).ToHashSet()
-            : ResolveAllowedMenuIds(allMenus, await _permissionService.GetPermissionsAsync(roleId));
-
-        return allMenus
-            .Where(m => allowedIds.Contains(m.Id))
-            .OrderBy(m => m.ParentId ?? m.Id)
-            .ThenBy(m => m.DisplayOrder)
-            .ThenBy(m => m.Name)
-            .Select(Map)
-            .ToList();
-    }
-
-    private static HashSet<int> ResolveAllowedMenuIds(
-        IReadOnlyList<AppMenu> allMenus,
-        IReadOnlyList<Users.DTOs.RolePermissionDto> permissions)
-    {
-        var viewableModules = permissions
-            .Where(p => p.CanView)
-            .Select(p => p.ModuleName)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        var allowedIds = new HashSet<int>();
-
-        foreach (var menu in allMenus.Where(m => !string.IsNullOrWhiteSpace(m.Route)))
-        {
-            if (string.IsNullOrWhiteSpace(menu.ModuleName) ||
-                viewableModules.Contains(menu.ModuleName))
-            {
-                allowedIds.Add(menu.Id);
-            }
-        }
-
-        foreach (var group in allMenus.Where(m => string.IsNullOrWhiteSpace(m.Route)))
-        {
-            if (allMenus.Any(child => child.ParentId == group.Id && allowedIds.Contains(child.Id)))
-            {
-                allowedIds.Add(group.Id);
-            }
-        }
-
-        return allowedIds;
+        var tree = await GetSidebarTreeAsync(roleId, roleName);
+        return FlattenTree(tree);
     }
 
     public async Task<IReadOnlyList<SidebarMenuItemDto>> GetSidebarTreeAsync(int roleId, string roleName)
     {
-        var allMenus = await _repository.GetAllActiveAsync();
-        var allowedIds = RoleNames.CanBypassPermissions(roleName)
-            ? allMenus.Select(m => m.Id).ToHashSet()
-            : ResolveAllowedMenuIds(allMenus, await _permissionService.GetPermissionsAsync(roleId));
+        var allModules = await _moduleRepository.GetSidebarModulesAsync();
+        var permissions = RoleNames.CanBypassPermissions(roleName)
+            ? null
+            : await _permissionService.GetPermissionsAsync(roleId);
 
-        var allowed = allMenus.Where(m => allowedIds.Contains(m.Id)).ToList();
+        return FilterSidebarTree(allModules, permissions, roleName);
+    }
 
-        var parents = allowed
-            .Where(m => m.ParentId == null)
-            .OrderBy(m => m.DisplayOrder)
-            .ThenBy(m => m.Name)
-            .ToList();
+    private static IReadOnlyList<SidebarMenuItemDto> FilterSidebarTree(
+        IReadOnlyList<Modules.DTOs.ModuleListItemDto> modules,
+        IReadOnlyList<RolePermissionDto>? permissions,
+        string roleName)
+    {
+        if (RoleNames.CanBypassPermissions(roleName))
+            return modules.Select(MapSidebarItem).ToList();
 
-        return parents
-            .Select(parent =>
-            {
-                var children = allowed
-                    .Where(m => m.ParentId == parent.Id)
-                    .OrderBy(m => m.DisplayOrder)
-                    .ThenBy(m => m.Name)
-                    .Select(child => new SidebarMenuItemDto
-                    {
-                        Id = child.Id,
-                        Name = child.Name,
-                        Route = child.Route,
-                        Icon = child.Icon,
-                        ModuleName = child.ModuleName,
-                        DisplayOrder = child.DisplayOrder,
-                        Children = []
-                    })
-                    .ToList();
+        var (viewableModuleIds, viewableNames) = BuildViewableSets(permissions ?? []);
 
-                return new SidebarMenuItemDto
-                {
-                    Id = parent.Id,
-                    Name = parent.Name,
-                    Route = parent.Route,
-                    Icon = parent.Icon,
-                    ModuleName = parent.ModuleName,
-                    DisplayOrder = parent.DisplayOrder,
-                    Children = children
-                };
-            })
+        return modules
+            .Select(module => MapFilteredItem(module, viewableModuleIds, viewableNames))
+            .Where(item => item != null)
+            .Cast<SidebarMenuItemDto>()
             .ToList();
     }
 
-    private static NavigationMenuDto Map(AppMenu menu) => new()
+    private static (HashSet<int> ModuleIds, HashSet<string> Names) BuildViewableSets(
+        IReadOnlyList<RolePermissionDto> permissions)
     {
-        Id = menu.Id,
-        Name = menu.Name,
-        Route = menu.Route,
-        Icon = menu.Icon,
-        ModuleName = menu.ModuleName,
-        ParentId = menu.ParentId,
-        DisplayOrder = menu.DisplayOrder
-    };
+        var moduleIds = new HashSet<int>();
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var permission in permissions.Where(p => p.CanView))
+        {
+            if (permission.ModuleId.HasValue)
+                moduleIds.Add(permission.ModuleId.Value);
+
+            if (!string.IsNullOrWhiteSpace(permission.ModuleName))
+                names.Add(permission.ModuleName.Trim());
+        }
+
+        return (moduleIds, names);
+    }
+
+    private static bool HasModuleViewAccess(
+        Modules.DTOs.ModuleListItemDto module,
+        HashSet<int> viewableModuleIds,
+        HashSet<string> viewableNames)
+    {
+        if (viewableModuleIds.Contains(module.Id))
+            return true;
+
+        if (!string.IsNullOrWhiteSpace(module.ModuleKey) &&
+            viewableNames.Contains(module.ModuleKey))
+            return true;
+
+        if (viewableNames.Contains(module.ModuleName))
+            return true;
+
+        return false;
+    }
+
+    private static SidebarMenuItemDto? MapFilteredItem(
+        Modules.DTOs.ModuleListItemDto module,
+        HashSet<int> viewableModuleIds,
+        HashSet<string> viewableNames)
+    {
+        var isGroup = string.IsNullOrWhiteSpace(module.ModuleKey);
+        var children = module.Children
+            .Select(child => MapFilteredItem(child, viewableModuleIds, viewableNames))
+            .Where(child => child != null)
+            .Cast<SidebarMenuItemDto>()
+            .ToList();
+
+        if (isGroup)
+        {
+            if (children.Count == 0)
+                return null;
+
+            return new SidebarMenuItemDto
+            {
+                Id = module.Id,
+                Name = module.ModuleName,
+                Route = null,
+                Icon = module.Icon,
+                ModuleName = null,
+                DisplayOrder = module.DisplayOrder,
+                Children = children
+            };
+        }
+
+        if (!HasModuleViewAccess(module, viewableModuleIds, viewableNames))
+            return null;
+
+        return new SidebarMenuItemDto
+        {
+            Id = module.Id,
+            Name = module.ModuleName,
+            Route = module.Route,
+            Icon = module.Icon,
+            ModuleName = module.ModuleKey,
+            DisplayOrder = module.DisplayOrder,
+            Children = children
+        };
+    }
+
+    private static SidebarMenuItemDto MapSidebarItem(Modules.DTOs.ModuleListItemDto module) =>
+        new()
+        {
+            Id = module.Id,
+            Name = module.ModuleName,
+            Route = module.Route,
+            Icon = module.Icon,
+            ModuleName = string.IsNullOrWhiteSpace(module.ModuleKey) ? null : module.ModuleKey,
+            DisplayOrder = module.DisplayOrder,
+            Children = module.Children.Select(MapSidebarItem).ToList()
+        };
+
+    private static IReadOnlyList<NavigationMenuDto> FlattenTree(IReadOnlyList<SidebarMenuItemDto> tree)
+    {
+        var result = new List<NavigationMenuDto>();
+
+        void Walk(IReadOnlyList<SidebarMenuItemDto> items, int? parentId)
+        {
+            foreach (var item in items)
+            {
+                result.Add(new NavigationMenuDto
+                {
+                    Id = item.Id,
+                    Name = item.Name,
+                    Route = item.Route,
+                    Icon = item.Icon,
+                    ModuleName = item.ModuleName,
+                    ParentId = parentId,
+                    DisplayOrder = item.DisplayOrder
+                });
+
+                if (item.Children.Count > 0)
+                    Walk(item.Children, item.Id);
+            }
+        }
+
+        Walk(tree, null);
+        return result;
+    }
 }

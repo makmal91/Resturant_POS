@@ -19,6 +19,12 @@ public class PermissionModuleConfiguration : IEntityTypeConfiguration<Permission
             .IsRequired()
             .HasMaxLength(100);
 
+        builder.Property(m => m.Route)
+            .HasMaxLength(200);
+
+        builder.Property(m => m.Icon)
+            .HasMaxLength(50);
+
         builder.HasIndex(m => m.ModuleKey)
             .IsUnique()
             .HasDatabaseName("idx_module_key");

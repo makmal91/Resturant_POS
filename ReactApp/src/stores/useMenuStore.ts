@@ -16,6 +16,7 @@ interface MenuState {
 
   fetchMenus: (roleId: number) => Promise<void>
   fetchSidebarData: (roleId: number) => Promise<void>
+  refreshSidebarData: (roleId: number) => Promise<void>
   clearMenus: () => void
 }
 
@@ -42,7 +43,6 @@ export const useMenuStore = create<MenuState>((set, get) => ({
   },
 
   fetchSidebarData: async (roleId: number) => {
-    // Skip if already loaded for this role (cache hit)
     if (get()._lastFetchedRoleId === roleId && get().sidebarTree.length > 0) {
       return
     }
@@ -60,6 +60,11 @@ export const useMenuStore = create<MenuState>((set, get) => ({
         _lastFetchedRoleId: null,
       })
     }
+  },
+
+  refreshSidebarData: async (roleId: number) => {
+    set({ _lastFetchedRoleId: null })
+    await get().fetchSidebarData(roleId)
   },
 
   clearMenus: () => {

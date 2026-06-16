@@ -6,6 +6,8 @@ public class PermissionModule
     public string ModuleName { get; set; } = string.Empty;
     public string ModuleKey { get; set; } = string.Empty;
     public int? ParentModuleId { get; set; }
+    public string? Route { get; set; }
+    public string? Icon { get; set; }
     public int DisplayOrder { get; set; }
     public bool IsActive { get; set; } = true;
     public bool IsDeleted { get; set; }
@@ -15,4 +17,5 @@ public class PermissionModule
     public virtual PermissionModule? ParentModule { get; set; }
     public virtual ICollection<PermissionModule> ChildModules { get; set; } = new List<PermissionModule>();
     public virtual ICollection<RolePermission> RolePermissions { get; set; } = new List<RolePermission>();
+    public virtual ICollection<ModuleForm> Forms { get; set; } = new List<ModuleForm>();
 }

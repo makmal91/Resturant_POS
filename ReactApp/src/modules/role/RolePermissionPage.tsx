@@ -4,18 +4,15 @@ import {
   roleService,
   RoleListItem,
   RolePermissionItem,
-  PermissionField,
+  FormPermissionField,
 } from '../../services/roleService';
+import { authService } from '../../services/authService';
+import { useAuth } from '../../contexts/AuthContext';
+import { useMenuStore } from '../../stores/useMenuStore';
+import { usePermissionStore } from '../../stores/usePermissionStore';
 import { usePermission, useIsMasterUser, useIsSuperAdmin } from '../../hooks/usePermission';
 import { isProtectedRole } from '../../types/permissions';
-const PERMISSION_COLUMNS: { key: PermissionField; label: string }[] = [
-  { key: 'canView', label: 'View' },
-  { key: 'canCreate', label: 'Add' },
-  { key: 'canEdit', label: 'Edit' },
-  { key: 'canDelete', label: 'Delete' },
-  { key: 'canExport', label: 'Export' },
-  { key: 'canUpload', label: 'Upload' },
-];
+import { authStorage } from '../../utils/storage';
 
 interface ModuleTreeNode {
   id: number;
@@ -26,89 +23,238 @@ interface ModuleTreeNode {
   children: ModuleTreeNode[];
 }
 
-const buildHierarchyRows = (
-  permissions: RolePermissionItem[],
-  modules: ModuleTreeNode[]
-): Array<{ permission: RolePermissionItem; depth: number; isGroup: boolean }> => {
-  const permissionMap = new Map(permissions.map((p) => [p.moduleId, p]));
-  const rows: Array<{ permission: RolePermissionItem; depth: number; isGroup: boolean }> = [];
+const ACTION_LABELS: { key: FormPermissionField; label: string; color: string }[] = [
+  { key: 'canCreate', label: 'Create', color: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+  { key: 'canEdit', label: 'Edit', color: 'bg-blue-100 text-blue-700 border-blue-200' },
+  { key: 'canDelete', label: 'Delete', color: 'bg-red-100 text-red-700 border-red-200' },
+];
 
-  const walk = (items: ModuleTreeNode[], depth: number) => {
-    for (const item of items) {
-      const isGroup = item.moduleKey === '';
-      if (isGroup) {
-        rows.push({
-          permission: {
-            moduleId: item.id,
-            moduleName: item.moduleName,
-            moduleKey: item.moduleKey,
-            parentModuleId: item.parentModuleId,
-            displayOrder: item.displayOrder,
-            canView: false,
-            canCreate: false,
-            canEdit: false,
-            canDelete: false,
-            canExport: false,
-            canUpload: false,
-          },
-          depth,
-          isGroup: true,
-        });
-        if (item.children.length > 0) {
-          walk(item.children, depth + 1);
-        }
-        continue;
-      }
+const buildTreeFromFlat = (permissions: RolePermissionItem[]): ModuleTreeNode[] => {
+  const nodes = permissions.map((p) => ({
+    id: p.moduleId,
+    moduleName: p.moduleName,
+    moduleKey: p.moduleKey,
+    parentModuleId: p.parentModuleId,
+    displayOrder: p.displayOrder,
+    children: [] as ModuleTreeNode[],
+  }));
 
-      const permission = permissionMap.get(item.id);
-      if (permission) {
-        rows.push({ permission, depth, isGroup: false });
-      }
+  const lookup = new Map(nodes.map((n) => [n.id, n]));
+  const roots: ModuleTreeNode[] = [];
+
+  for (const node of nodes) {
+    if (node.parentModuleId && lookup.has(node.parentModuleId)) {
+      lookup.get(node.parentModuleId)!.children.push(node);
+    } else {
+      roots.push(node);
     }
+  }
+
+  const sortNodes = (items: ModuleTreeNode[]) => {
+    items.sort((a, b) => a.displayOrder - b.displayOrder || a.moduleName.localeCompare(b.moduleName));
+    items.forEach((item) => sortNodes(item.children));
   };
 
-  walk(modules, 0);
-  return rows;
+  sortNodes(roots);
+  return roots;
+};
+
+const collectDescendantIds = (node: ModuleTreeNode): number[] => {
+  const ids = [node.id];
+  for (const child of node.children) {
+    ids.push(...collectDescendantIds(child));
+  }
+  return ids;
+};
+
+const getPrimaryForm = (item: RolePermissionItem) => item.forms[0] ?? null;
+
+interface GroupCardProps {
+  group: ModuleTreeNode;
+  permissionMap: Map<number, RolePermissionItem>;
+  expanded: boolean;
+  onToggleExpand: () => void;
+  onModuleAccess: (moduleId: number, enabled: boolean) => void;
+  onActionToggle: (moduleId: number, field: FormPermissionField) => void;
+  onGroupToggleAll: (groupId: number, enabled: boolean) => void;
+  canEdit: boolean;
+  searchTerm: string;
+}
+
+const GroupCard: React.FC<GroupCardProps> = ({
+  group,
+  permissionMap,
+  expanded,
+  onToggleExpand,
+  onModuleAccess,
+  onActionToggle,
+  onGroupToggleAll,
+  canEdit,
+  searchTerm,
+}) => {
+  const groupPerm = permissionMap.get(group.id);
+  const leafChildren = group.children.filter((c) => c.moduleKey !== '');
+
+  const visibleChildren = leafChildren.filter((child) => {
+    if (!searchTerm) return true;
+    return child.moduleName.toLowerCase().includes(searchTerm);
+  });
+
+  if (searchTerm && visibleChildren.length === 0 && !group.moduleName.toLowerCase().includes(searchTerm)) {
+    return null;
+  }
+
+  const enabledCount = leafChildren.filter((c) => permissionMap.get(c.id)?.canView).length;
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-slate-50 to-white border-b border-gray-100">
+        <button
+          type="button"
+          onClick={onToggleExpand}
+          className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500"
+        >
+          <svg
+            className={`w-4 h-4 transition-transform ${expanded ? 'rotate-180' : ''}`}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
+        <div className="flex-1 min-w-0">
+          <h3 className="text-sm font-semibold text-gray-900">{group.moduleName}</h3>
+          <p className="text-xs text-gray-500">
+            {enabledCount} of {leafChildren.length} modules enabled
+          </p>
+        </div>
+
+        {canEdit && (
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => onGroupToggleAll(group.id, true)}
+              className="text-xs px-2.5 py-1 rounded-md bg-blue-50 text-blue-700 hover:bg-blue-100 font-medium"
+            >
+              Enable All
+            </button>
+            <button
+              type="button"
+              onClick={() => onGroupToggleAll(group.id, false)}
+              className="text-xs px-2.5 py-1 rounded-md bg-gray-100 text-gray-600 hover:bg-gray-200 font-medium"
+            >
+              Disable All
+            </button>
+          </div>
+        )}
+      </div>
+
+      {expanded && (
+        <div className="divide-y divide-gray-50">
+          {visibleChildren.length === 0 ? (
+            <p className="px-4 py-6 text-sm text-gray-400 text-center">No matching modules</p>
+          ) : (
+            visibleChildren.map((child) => {
+              const perm = permissionMap.get(child.id);
+              const hasAccess = perm?.canView ?? false;
+              const form = perm ? getPrimaryForm(perm) : null;
+
+              return (
+                <div
+                  key={child.id}
+                  className={`px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3 ${
+                    hasAccess ? 'bg-white' : 'bg-gray-50/50'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={hasAccess}
+                        onChange={(e) => onModuleAccess(child.id, e.target.checked)}
+                        disabled={!canEdit}
+                        className="sr-only peer"
+                      />
+                      <div className="w-10 h-5 bg-gray-200 rounded-full peer peer-checked:bg-blue-600 peer-disabled:opacity-50 after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-5" />
+                    </label>
+                    <div className="min-w-0">
+                      <p className={`text-sm font-medium truncate ${hasAccess ? 'text-gray-900' : 'text-gray-500'}`}>
+                        {child.moduleName}
+                      </p>
+                      <p className="text-xs text-gray-400">Menu access</p>
+                    </div>
+                  </div>
+
+                  {hasAccess && form && (
+                    <div className="flex items-center gap-2 flex-wrap sm:justify-end">
+                      {ACTION_LABELS.map((action) => {
+                        const active = form[action.key];
+                        return (
+                          <button
+                            key={action.key}
+                            type="button"
+                            disabled={!canEdit}
+                            onClick={() => onActionToggle(child.id, action.key)}
+                            className={`text-xs px-3 py-1 rounded-full border font-medium transition-all disabled:opacity-50 ${
+                              active
+                                ? action.color
+                                : 'bg-white text-gray-400 border-gray-200 hover:border-gray-300'
+                            }`}
+                          >
+                            {action.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+    </div>
+  );
 };
 
 const RolePermissionPage: React.FC = () => {
+  const { user } = useAuth();
+  const refreshSidebar = useMenuStore((s) => s.refreshSidebarData);
   const { canEdit } = usePermission('Roles');
   const isSuperAdmin = useIsSuperAdmin();
   const isMasterUser = useIsMasterUser();
+
   const [roles, setRoles] = useState<RoleListItem[]>([]);
-  const [modules, setModules] = useState<ModuleTreeNode[]>([]);
   const [selectedRoleId, setSelectedRoleId] = useState<number | null>(null);
   const [permissions, setPermissions] = useState<RolePermissionItem[]>([]);
   const [loadingRoles, setLoadingRoles] = useState(true);
   const [loadingPermissions, setLoadingPermissions] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [expandedGroups, setExpandedGroups] = useState<Set<number>>(new Set());
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const showNotification = useCallback((type: 'success' | 'error', message: string) => {
     setNotification({ type, message });
-    setTimeout(() => setNotification(null), 4000);
+    setTimeout(() => setNotification(null), 5000);
   }, []);
 
   useEffect(() => {
     const loadInitial = async () => {
       setLoadingRoles(true);
       try {
-        const [roleList, moduleList] = await Promise.all([
-          roleService.getRoles(),
-          roleService.getModules(),
-        ]);
+        const roleList = await roleService.getRoles();
         setRoles(roleList.filter((role) => role.isActive));
-        setModules(moduleList as ModuleTreeNode[]);
-        if (roleList.length > 0) {
-          setSelectedRoleId(roleList[0].id);
-        }
+        if (roleList.length > 0) setSelectedRoleId(roleList[0].id);
       } catch (error) {
         showNotification('error', getApiErrorMessage(error, 'Failed to load roles.'));
       } finally {
         setLoadingRoles(false);
       }
     };
-
     loadInitial();
   }, [showNotification]);
 
@@ -123,6 +269,7 @@ const RolePermissionPage: React.FC = () => {
       try {
         const data = await roleService.getRolePermissions(selectedRoleId);
         setPermissions(data);
+        setExpandedGroups(new Set(data.filter((p) => p.moduleKey === '').map((p) => p.moduleId)));
       } catch (error) {
         showNotification('error', getApiErrorMessage(error, 'Failed to load permissions.'));
         setPermissions([]);
@@ -134,36 +281,123 @@ const RolePermissionPage: React.FC = () => {
     loadPermissions();
   }, [selectedRoleId, showNotification]);
 
-  const hierarchyRows = useMemo(
-    () => buildHierarchyRows(permissions, modules),
-    [permissions, modules]
+  const tree = useMemo(() => buildTreeFromFlat(permissions), [permissions]);
+  const permissionMap = useMemo(() => new Map(permissions.map((p) => [p.moduleId, p])), [permissions]);
+
+  const selectedRole = roles.find((role) => role.id === selectedRoleId);
+  const isProtectedRoleSelected = isProtectedRole(selectedRole?.name);
+  const canEditSelectedRole = canEdit && (isMasterUser || !isProtectedRoleSelected);
+  const normalizedSearch = searchTerm.trim().toLowerCase();
+
+  const standaloneModules = tree.filter((n) => n.moduleKey !== '' && n.children.length === 0);
+  const groupModules = tree.filter((n) => n.moduleKey === '' && n.children.length > 0);
+
+  const applyToModules = useCallback((moduleIds: number[], updater: (item: RolePermissionItem) => RolePermissionItem) => {
+    setPermissions((current) =>
+      current.map((item) => (moduleIds.includes(item.moduleId) ? updater(item) : item))
+    );
+  }, []);
+
+  const setModuleAccess = useCallback(
+    (moduleId: number, enabled: boolean) => {
+      if (!canEditSelectedRole) return;
+
+      applyToModules([moduleId], (item) => ({
+        ...item,
+        canView: enabled,
+        canCreate: enabled ? item.canCreate : false,
+        canEdit: enabled ? item.canEdit : false,
+        canDelete: enabled ? item.canDelete : false,
+        canExport: enabled ? item.canExport : false,
+        canUpload: enabled ? item.canUpload : false,
+        forms: item.forms.map((f) => ({
+          ...f,
+          canView: enabled,
+          canCreate: enabled ? f.canCreate : false,
+          canEdit: enabled ? f.canEdit : false,
+          canDelete: enabled ? f.canDelete : false,
+        })),
+      }));
+    },
+    [applyToModules, canEditSelectedRole]
   );
 
-  const handleToggle = (moduleId: number, field: PermissionField) => {
-    if (!canEditSelectedRole) return;
+  const setGroupToggleAll = useCallback(
+    (groupId: number, enabled: boolean) => {
+      if (!canEditSelectedRole) return;
+      const group = tree.find((g) => g.id === groupId);
+      if (!group) return;
+      const ids = collectDescendantIds(group).filter((id) => {
+        const p = permissionMap.get(id);
+        return p && p.moduleKey !== '';
+      });
+      applyToModules(ids, (item) => ({
+        ...item,
+        canView: enabled,
+        canCreate: enabled ? item.canCreate : false,
+        canEdit: enabled ? item.canEdit : false,
+        canDelete: enabled ? item.canDelete : false,
+        canExport: enabled ? item.canExport : false,
+        canUpload: enabled ? item.canUpload : false,
+        forms: item.forms.map((f) => ({
+          ...f,
+          canView: enabled,
+          canCreate: enabled ? f.canCreate : false,
+          canEdit: enabled ? f.canEdit : false,
+          canDelete: enabled ? f.canDelete : false,
+        })),
+      }));
+    },
+    [applyToModules, canEditSelectedRole, permissionMap, tree]
+  );
 
-    setPermissions((current) =>
-      current.map((item) => {
-        if (item.moduleId !== moduleId) return item;
+  const toggleAction = useCallback(
+    (moduleId: number, field: FormPermissionField) => {
+      if (!canEditSelectedRole) return;
 
-        const nextValue = !item[field];
-        const updated = { ...item, [field]: nextValue };
+      setPermissions((current) =>
+        current.map((item) => {
+          if (item.moduleId !== moduleId || !item.canView) return item;
 
-        if (field !== 'canView' && nextValue) {
-          updated.canView = true;
-        }
+          const forms = item.forms.map((form, index) => {
+            if (index !== 0) return form;
+            const nextValue = !form[field];
+            const updated = { ...form, [field]: nextValue };
+            if (field !== 'canView' && nextValue) updated.canView = true;
+            return updated;
+          });
 
-        if (field === 'canView' && !nextValue) {
-          updated.canCreate = false;
-          updated.canEdit = false;
-          updated.canDelete = false;
-          updated.canExport = false;
-          updated.canUpload = false;
-        }
+          const primary = forms[0];
+          return {
+            ...item,
+            canCreate: primary?.canCreate ?? false,
+            canEdit: primary?.canEdit ?? false,
+            canDelete: primary?.canDelete ?? false,
+            forms,
+          };
+        })
+      );
+    },
+    [canEditSelectedRole]
+  );
 
-        return updated;
-      })
-    );
+  const refreshSessionIfNeeded = async (roleId: number) => {
+    if (user?.roleId !== roleId) return;
+
+    try {
+      const freshPermissions = await authService.getPermissions();
+      authStorage.saveSession({
+        user: authStorage.getUser()!,
+        token: authStorage.getToken()!,
+        branches: authStorage.getBranches(),
+        selectedBranchId: authStorage.getSelectedBranchId(),
+        permissions: freshPermissions,
+      });
+      usePermissionStore.getState().setPermissions(freshPermissions, user.roleName ?? null);
+      await refreshSidebar(roleId);
+    } catch {
+      showNotification('error', 'Permissions saved but sidebar refresh failed. Please log out and log in again.');
+    }
   };
 
   const handleSave = async () => {
@@ -173,7 +407,13 @@ const RolePermissionPage: React.FC = () => {
     try {
       const saved = await roleService.saveRolePermissions(selectedRoleId, permissions);
       setPermissions(saved);
-      showNotification('success', 'Role permissions saved successfully.');
+      await refreshSessionIfNeeded(selectedRoleId);
+      showNotification(
+        'success',
+        user?.roleId === selectedRoleId
+          ? 'Permissions saved. Sidebar updated for your account.'
+          : 'Permissions saved. Affected users must log in again to see changes.'
+      );
     } catch (error) {
       showNotification('error', getApiErrorMessage(error, 'Failed to save permissions.'));
     } finally {
@@ -181,20 +421,16 @@ const RolePermissionPage: React.FC = () => {
     }
   };
 
-  const selectedRole = roles.find((role) => role.id === selectedRoleId);
-  const isProtectedRoleSelected = isProtectedRole(selectedRole?.name);
-
-  // MasterUser can edit any role.
-  // Everyone else (SuperAdmin, Admin) can only edit non-protected roles.
-  // canEdit gate ensures the user has the Roles permission at all.
-  const canEditSelectedRole = canEdit && (isMasterUser || !isProtectedRoleSelected);
+  const expandAll = () => setExpandedGroups(new Set(groupModules.map((g) => g.id)));
+  const collapseAll = () => setExpandedGroups(new Set());
 
   return (
-    <div className="p-6">
+    <div className="p-4 md:p-6 max-w-6xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Role Permissions</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Role & Access Management</h1>
         <p className="text-sm text-gray-600 mt-1">
-          Assign module access for each role. Changes apply on next login for affected users.
+          Control which menu items appear in the sidebar and what actions users can perform.
+          Turn off <strong>Menu access</strong> to hide a module from the sidebar.
         </p>
       </div>
 
@@ -210,109 +446,123 @@ const RolePermissionPage: React.FC = () => {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        <div className="lg:col-span-1">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-            <label htmlFor="role-select" className="block text-sm font-medium text-gray-700 mb-2">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Role selector */}
+        <div className="lg:col-span-3">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sticky top-4">
+            <label htmlFor="role-select" className="block text-sm font-semibold text-gray-800 mb-2">
               Select Role
             </label>
             <select
               id="role-select"
               value={selectedRoleId ?? ''}
-              onChange={(event) => setSelectedRoleId(Number(event.target.value))}
+              onChange={(e) => setSelectedRoleId(Number(e.target.value))}
               disabled={loadingRoles}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               {roles.map((role) => (
-                <option key={role.id} value={role.id}>
-                  {role.name}
-                </option>
+                <option key={role.id} value={role.id}>{role.name}</option>
               ))}
             </select>
             {selectedRole?.description && (
-              <p className="mt-3 text-xs text-gray-500">{selectedRole.description}</p>
+              <p className="mt-3 text-xs text-gray-500 leading-relaxed">{selectedRole.description}</p>
             )}
             {isSuperAdmin && isProtectedRoleSelected && !isMasterUser && (
-              <p className="mt-3 text-xs text-amber-700">
-                Permissions for {selectedRole?.name} are read-only for your account.
+              <p className="mt-3 text-xs text-amber-700 bg-amber-50 rounded-lg p-2">
+                This role is read-only for your account.
               </p>
             )}
+            <div className="mt-4 pt-4 border-t border-gray-100 space-y-2 text-xs text-gray-500">
+              <p><span className="font-medium text-gray-700">Menu access</span> — show/hide in sidebar</p>
+              <p><span className="font-medium text-gray-700">Create / Edit / Delete</span> — allowed actions</p>
+            </div>
           </div>
         </div>
 
-        <div className="lg:col-span-3">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-            <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-gray-800">Module Permissions</h2>
+        {/* Permissions panel */}
+        <div className="lg:col-span-9 space-y-4">
+          <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+            <input
+              type="search"
+              placeholder="Search module name..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button type="button" onClick={expandAll} className="text-xs px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">
+                Expand All
+              </button>
+              <button type="button" onClick={collapseAll} className="text-xs px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">
+                Collapse All
+              </button>
               <button
                 type="button"
                 onClick={handleSave}
                 disabled={saving || loadingPermissions || !selectedRoleId || !canEditSelectedRole}
-                title={!canEditSelectedRole ? 'You do not have permission to edit this role.' : undefined}
-                className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-5 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {saving ? 'Saving...' : 'Save Permissions'}
+                {saving ? 'Saving...' : 'Save Changes'}
               </button>
             </div>
-
-            {loadingPermissions ? (
-              <div className="p-8 text-center text-sm text-gray-500">Loading permissions...</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
-                        Module
-                      </th>
-                      {PERMISSION_COLUMNS.map((column) => (
-                        <th
-                          key={column.key}
-                          className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wide text-gray-600"
-                        >
-                          {column.label}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {hierarchyRows.map(({ permission, depth, isGroup }) => (
-                      <tr
-                        key={`${permission.moduleId}-${isGroup ? 'group' : 'leaf'}`}
-                        className={isGroup ? 'bg-gray-50' : 'bg-white'}
-                      >
-                        <td className="px-4 py-3 text-sm text-gray-900">
-                          <span style={{ paddingLeft: `${depth * 16}px` }} className="inline-block">
-                            {isGroup ? (
-                              <span className="font-semibold text-gray-700">{permission.moduleName}</span>
-                            ) : (
-                              permission.moduleName
-                            )}
-                          </span>
-                        </td>
-                        {PERMISSION_COLUMNS.map((column) => (
-                          <td key={column.key} className="px-3 py-3 text-center">
-                            {isGroup ? (
-                              <span className="text-gray-300">—</span>
-                            ) : (
-                              <input
-                                type="checkbox"
-                                checked={permission[column.key]}
-                                onChange={() => handleToggle(permission.moduleId, column.key)}
-                                disabled={!canEditSelectedRole}
-                                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
-                                aria-label={`${permission.moduleName} ${column.label}`}
-                              />
-                            )}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
           </div>
+
+          {loadingPermissions ? (
+            <div className="bg-white rounded-xl border border-gray-200 p-12 text-center text-sm text-gray-500">
+              Loading permissions...
+            </div>
+          ) : (
+            <>
+              {/* Standalone modules e.g. Dashboard */}
+              {standaloneModules
+                .filter((m) => !normalizedSearch || m.moduleName.toLowerCase().includes(normalizedSearch))
+                .map((mod) => {
+                  const perm = permissionMap.get(mod.id);
+                  const hasAccess = perm?.canView ?? false;
+                  return (
+                    <div key={mod.id} className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-3 flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900">{mod.moduleName}</p>
+                        <p className="text-xs text-gray-400">Standalone module</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={hasAccess}
+                          onChange={(e) => setModuleAccess(mod.id, e.target.checked)}
+                          disabled={!canEditSelectedRole}
+                          className="sr-only peer"
+                        />
+                        <div className="w-10 h-5 bg-gray-200 rounded-full peer peer-checked:bg-blue-600 peer-disabled:opacity-50 after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-5" />
+                      </label>
+                    </div>
+                  );
+                })}
+
+              {/* Group cards */}
+              {groupModules.map((group) => (
+                <GroupCard
+                  key={group.id}
+                  group={group}
+                  permissionMap={permissionMap}
+                  expanded={expandedGroups.has(group.id)}
+                  onToggleExpand={() =>
+                    setExpandedGroups((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(group.id)) next.delete(group.id);
+                      else next.add(group.id);
+                      return next;
+                    })
+                  }
+                  onModuleAccess={setModuleAccess}
+                  onActionToggle={toggleAction}
+                  onGroupToggleAll={setGroupToggleAll}
+                  canEdit={canEditSelectedRole}
+                  searchTerm={normalizedSearch}
+                />
+              ))}
+            </>
+          )}
         </div>
       </div>
     </div>

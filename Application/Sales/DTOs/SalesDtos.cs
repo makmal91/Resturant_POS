@@ -172,6 +172,9 @@ public class SaleInvoiceDto
     public string?  VoidedByName { get; set; }
     public int BranchId { get; set; }
     public string BranchName { get; set; } = string.Empty;
+    public string BranchAddress { get; set; } = string.Empty;
+    public string BranchPhone { get; set; } = string.Empty;
+    public string BranchEmail { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
     public List<SaleInvoiceItemDto> Items { get; set; } = new();
 }

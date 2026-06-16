@@ -37,7 +37,18 @@ public class BusinessesController : ControllerBase
         if (business == null)
             return NotFound(new { message = "Business not found." });
 
-        return Ok(new { id = business.Id, name = business.Name, hasLogo = business.HasLogo });
+        return Ok(new
+        {
+            id = business.Id,
+            name = business.Name,
+            legalName = business.LegalName,
+            address = business.Address,
+            phone = business.Phone,
+            email = business.Email,
+            currency = business.Currency,
+            taxNumber = business.TaxNumber,
+            hasLogo = business.HasLogo
+        });
     }
 
     [HttpGet("my/logo")]
