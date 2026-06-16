@@ -18,28 +18,28 @@ public static class NavigationMenuSeeder
         new("Dashboard", null, null, null, null, 1),
         new("Master Data", null, null, null, null, 2),
         new("Operations", null, null, null, null, 3),
-        new("Dashboard", "/", "📊", "POS Billing", "Dashboard", 1),
-        new("Businesses", "/businesses", "🏬", "Businesses", "Master Data", 1),
-        new("Branches", "/branches", "🏢", "Branches", "Master Data", 2),
-        new("Users", "/users", "👥", "Users", "Master Data", 3),
-        new("Roles", "/roles", "🔐", "Roles", "Master Data", 4),
-        new("Menu", "/menu", "🍽️", "Menu", "Master Data", 5),
-        new("Categories", "/categories", "🗂️", "Categories", "Master Data", 6),
-        new("SubCategories", "/subcategories", "🧩", "SubCategories", "Master Data", 7),
-        new("Brands", "/brands", "🏷️", "Brands", "Master Data", 8),
-        new("Products", "/products", "🧾", "Products", "Master Data", 9),
-        new("Customers", "/customers", "🙋", null, "Master Data", 10),
-        new("Suppliers", "/suppliers", "🚚", "Suppliers", "Master Data", 11),
-        new("Units", "/units", "⚖️", "Units", "Master Data", 12),
-        new("Taxes", "/taxes", "💸", null, "Master Data", 13),
-        new("Discounts", "/discounts", "🏷️", null, "Master Data", 14),
-        new("Warehouses", "/warehouses", "🏭", "Warehouses", "Master Data", 15),
-        new("POS Billing", "/pos", "🏪", "POS Billing", "Operations", 1),
-        new("Invoice History", "/sales-invoices", "📋", "Sales", "Operations", 2),
-        new("Inventory", "/inventory", "📦", "Inventory", "Operations", 3),
-        new("Purchase", "/purchase", "🛒", "Purchase", "Operations", 4),
-        new("Stock", "/stock", "📊", "Stock", "Operations", 5),
-        new("Orders", "/orders", "📋", "Orders", "Operations", 6)
+        new("Dashboard", "/", "D", "POS Billing", "Dashboard", 1),
+        new("Businesses", "/businesses", "B", "Businesses", "Master Data", 1),
+        new("Branches", "/branches", "Br", "Branches", "Master Data", 2),
+        new("Users", "/users", "U", "Users", "Master Data", 3),
+        new("Roles", "/roles", "R", "Roles", "Master Data", 4),
+        new("Menu", "/menu", "M", "Menu", "Master Data", 5),
+        new("Categories", "/categories", "C", "Categories", "Master Data", 6),
+        new("SubCategories", "/subcategories", "SC", "SubCategories", "Master Data", 7),
+        new("Brands", "/brands", "Bn", "Brands", "Master Data", 8),
+        new("Products", "/products", "P", "Products", "Master Data", 9),
+        new("Customers", "/customers", "Cu", null, "Master Data", 10),
+        new("Suppliers", "/suppliers", "Su", "Suppliers", "Master Data", 11),
+        new("Units", "/units", "Un", "Units", "Master Data", 12),
+        new("Taxes", "/taxes", "T", null, "Master Data", 13),
+        new("Discounts", "/discounts", "Di", null, "Master Data", 14),
+        new("Warehouses", "/warehouses", "W", "Warehouses", "Master Data", 15),
+        new("POS Billing", "/pos", "POS", "POS Billing", "Operations", 1),
+        new("Invoice History", "/sales-invoices", "I", "Sales", "Operations", 2),
+        new("Inventory", "/inventory", "Inv", "Inventory", "Operations", 3),
+        new("Purchase", "/purchase", "Pu", "Purchase", "Operations", 4),
+        new("Stock", "/stock", "St", "Stock", "Operations", 5),
+        new("Orders", "/orders", "O", "Orders", "Operations", 6)
     ];
 
     public static async Task SeedDefaultMenusAsync(POSDbContext context, ILogger logger)
@@ -57,9 +57,35 @@ public static class NavigationMenuSeeder
         await PatchExistingMenusAsync(context, logger);
     }
 
+    private static readonly (string Route, string Icon)[] IconPatches =
+    [
+        ("/", "D"),
+        ("/businesses", "B"),
+        ("/branches", "Br"),
+        ("/users", "U"),
+        ("/roles", "R"),
+        ("/menu", "M"),
+        ("/categories", "C"),
+        ("/subcategories", "SC"),
+        ("/brands", "Bn"),
+        ("/products", "P"),
+        ("/customers", "Cu"),
+        ("/suppliers", "Su"),
+        ("/units", "Un"),
+        ("/taxes", "T"),
+        ("/discounts", "Di"),
+        ("/warehouses", "W"),
+        ("/pos", "POS"),
+        ("/sales-invoices", "I"),
+        ("/inventory", "Inv"),
+        ("/purchase", "Pu"),
+        ("/stock", "St"),
+        ("/orders", "O"),
+    ];
+
     private static Task PatchExistingMenusAsync(POSDbContext context, ILogger logger)
     {
-        var patches = new[]
+        var patches = new List<Task>
         {
             ExecuteRawSeedAsync(
                 context,
@@ -78,6 +104,15 @@ public static class NavigationMenuSeeder
                 WHERE [Route] = N'/units' AND ([ModuleName] IS NULL OR [ModuleName] = N'');
                 """)
         };
+
+        foreach (var (route, icon) in IconPatches)
+        {
+            var sql = $"""
+                UPDATE [Menus] SET [Icon] = N'{icon}'
+                WHERE [Route] = N'{route}';
+                """;
+            patches.Add(ExecuteRawSeedAsync(context, logger, $"Icon:{route}", sql));
+        }
 
         return Task.WhenAll(patches);
     }

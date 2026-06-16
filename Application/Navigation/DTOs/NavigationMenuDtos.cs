@@ -10,3 +10,14 @@ public class NavigationMenuDto
     public int? ParentId { get; set; }
     public int DisplayOrder { get; set; }
 }
+
+public class SidebarMenuItemDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Route { get; set; }
+    public string? Icon { get; set; }
+    public string? ModuleName { get; set; }
+    public int DisplayOrder { get; set; }
+    public List<SidebarMenuItemDto> Children { get; set; } = [];
+}

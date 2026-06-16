@@ -26,6 +26,38 @@ public class BusinessesController : ControllerBase
         _businessService = businessService;
     }
 
+    [HttpGet("my")]
+    public async Task<IActionResult> GetMyBusiness()
+    {
+        var businessIdHeader = Request.Headers["X-Business-Id"].FirstOrDefault();
+        if (!int.TryParse(businessIdHeader, out var businessId) || businessId <= 0)
+            return NotFound(new { message = "Business context not found." });
+
+        var business = await _businessService.GetBusinessByIdAsync(businessId);
+        if (business == null)
+            return NotFound(new { message = "Business not found." });
+
+        return Ok(new { id = business.Id, name = business.Name, hasLogo = business.HasLogo });
+    }
+
+    [HttpGet("my/logo")]
+    public async Task<IActionResult> GetMyBusinessLogo()
+    {
+        var businessIdHeader = Request.Headers["X-Business-Id"].FirstOrDefault();
+        if (!int.TryParse(businessIdHeader, out var businessId) || businessId <= 0)
+            return NotFound(new { message = "Logo not found." });
+
+        var logo = await _businessService.GetBusinessLogoAsync(businessId);
+        if (logo == null || logo.Logo.Length == 0)
+            return NotFound(new { message = "Logo not found." });
+
+        var contentType = string.IsNullOrWhiteSpace(logo.LogoContentType)
+            ? "application/octet-stream"
+            : logo.LogoContentType;
+
+        return File(logo.Logo, contentType, logo.LogoFileName);
+    }
+
     [HttpGet]
     public async Task<IActionResult> GetBusinesses(
         [FromQuery] int page = 1,

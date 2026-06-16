@@ -28,4 +28,16 @@ public class MenusController : ControllerBase
         var menus = await _navigationMenuService.GetAllowedMenusAsync(roleId, roleName);
         return Ok(menus);
     }
+
+    [HttpGet("~/api/sidebar/modules")]
+    public async Task<IActionResult> GetSidebarModules()
+    {
+        var tokenRoleId = User.FindFirstValue("roleId");
+        if (!int.TryParse(tokenRoleId, out var roleId))
+            return Forbid();
+
+        var roleName = User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
+        var tree = await _navigationMenuService.GetSidebarTreeAsync(roleId, roleName);
+        return Ok(tree);
+    }
 }

@@ -146,7 +146,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         syncBranchStore(nextBranches, nextBranchId)
         syncPermissionStore(nextPermissions, nextUser.roleName)
         if (nextUser.roleId) {
-          void useMenuStore.getState().fetchMenus(nextUser.roleId)
+          void useMenuStore.getState().fetchSidebarData(nextUser.roleId)
         }
       }
     },

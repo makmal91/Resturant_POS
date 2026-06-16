@@ -65,6 +65,54 @@ public class NavigationMenuService : INavigationMenuService
         return allowedIds;
     }
 
+    public async Task<IReadOnlyList<SidebarMenuItemDto>> GetSidebarTreeAsync(int roleId, string roleName)
+    {
+        var allMenus = await _repository.GetAllActiveAsync();
+        var allowedIds = RoleNames.CanBypassPermissions(roleName)
+            ? allMenus.Select(m => m.Id).ToHashSet()
+            : ResolveAllowedMenuIds(allMenus, await _permissionService.GetPermissionsAsync(roleId));
+
+        var allowed = allMenus.Where(m => allowedIds.Contains(m.Id)).ToList();
+
+        var parents = allowed
+            .Where(m => m.ParentId == null)
+            .OrderBy(m => m.DisplayOrder)
+            .ThenBy(m => m.Name)
+            .ToList();
+
+        return parents
+            .Select(parent =>
+            {
+                var children = allowed
+                    .Where(m => m.ParentId == parent.Id)
+                    .OrderBy(m => m.DisplayOrder)
+                    .ThenBy(m => m.Name)
+                    .Select(child => new SidebarMenuItemDto
+                    {
+                        Id = child.Id,
+                        Name = child.Name,
+                        Route = child.Route,
+                        Icon = child.Icon,
+                        ModuleName = child.ModuleName,
+                        DisplayOrder = child.DisplayOrder,
+                        Children = []
+                    })
+                    .ToList();
+
+                return new SidebarMenuItemDto
+                {
+                    Id = parent.Id,
+                    Name = parent.Name,
+                    Route = parent.Route,
+                    Icon = parent.Icon,
+                    ModuleName = parent.ModuleName,
+                    DisplayOrder = parent.DisplayOrder,
+                    Children = children
+                };
+            })
+            .ToList();
+    }
+
     private static NavigationMenuDto Map(AppMenu menu) => new()
     {
         Id = menu.Id,
