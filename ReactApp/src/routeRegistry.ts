@@ -5,7 +5,7 @@ export interface RouteDefinition {
   module?: string;
 }
 
-import POS from './components/POS';
+import DashboardPage from './modules/dashboard/DashboardPage';
 import BusinessesList from './components/BusinessesList';
 import BranchesList from './components/BranchesList';
 import UserPage from './modules/user/UserPage';
@@ -34,7 +34,7 @@ import ReportsPage from './modules/reports/ReportsPage';
 // POSBillingPage is registered directly in App.tsx as a fullscreen route (outside Layout)
 
 export const routeRegistry: RouteDefinition[] = [
-  { path: '/', label: 'Dashboard', component: POS, module: 'POS Billing' },
+  { path: '/', label: 'Dashboard', component: DashboardPage },
   { path: '/businesses', label: 'Businesses', component: BusinessesList, module: 'Businesses' },
   { path: '/branches', label: 'Branches', component: BranchesList, module: 'Branches' },
   { path: '/users', label: 'Users', component: UserPage, module: 'Users' },

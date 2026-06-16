@@ -103,7 +103,7 @@ public static class RolePermissionSeeder
                 {
                     PermissionModules.Users or PermissionModules.Roles or PermissionModules.Businesses =>
                         (module, false, false, false, false, false, false),
-                    PermissionModules.Reports =>
+                    PermissionModules.Reports or PermissionModules.Dashboard =>
                         (module, true, false, false, false, true, false),
                     PermissionModules.PosBilling =>
                         (module, true, false, false, false, false, false),

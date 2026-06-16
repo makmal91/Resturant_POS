@@ -84,6 +84,7 @@ public static class PermissionModuleSeeder
         new("Customers",    PermissionModules.Customers,    "Catalog", 9),
 
         // Operations
+        new("Dashboard",      PermissionModules.Dashboard,    "Operations", 0),
         new("Inventory",    PermissionModules.Inventory,    "Operations", 1),
         new("Purchase",     PermissionModules.Purchase,     "Operations", 2),
         new("Stock",        PermissionModules.Stock,        "Operations", 3),

@@ -24,6 +24,7 @@ public static class PermissionModules
     public const string Customers = "Customers";
     public const string Expenses = "Expenses";
     public const string CashFlow = "Cash Flow";
+    public const string Dashboard = "Dashboard";
 
     public static readonly IReadOnlyList<string> All =
     [
@@ -49,5 +50,6 @@ public static class PermissionModules
         Customers,
         Expenses,
         CashFlow,
+        Dashboard,
     ];
 }

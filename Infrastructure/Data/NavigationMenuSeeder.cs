@@ -19,7 +19,7 @@ public static class NavigationMenuSeeder
         new("Master Data", null, null, null, null, 2),
         new("Operations", null, null, null, null, 3),
         new("Accounts", null, null, null, null, 4),
-        new("Dashboard", "/", "D", "POS Billing", "Dashboard", 1),
+        new("Dashboard", "/", "D", "Dashboard", "Dashboard", 1),
         new("Businesses", "/businesses", "B", "Businesses", "Master Data", 1),
         new("Branches", "/branches", "Br", "Branches", "Master Data", 2),
         new("Users", "/users", "U", "Users", "Master Data", 3),
@@ -113,6 +113,14 @@ public static class NavigationMenuSeeder
                 """
                 UPDATE [Menus] SET [ModuleName] = N'Units'
                 WHERE [Route] = N'/units' AND ([ModuleName] IS NULL OR [ModuleName] = N'');
+                """),
+            ExecuteRawSeedAsync(
+                context,
+                logger,
+                "Dashboard ModuleName",
+                """
+                UPDATE [Menus] SET [ModuleName] = N'Dashboard'
+                WHERE [Route] = N'/' AND ([ModuleName] IS NULL OR [ModuleName] = N'POS Billing');
                 """)
         };
 
