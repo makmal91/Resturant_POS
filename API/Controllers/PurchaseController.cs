@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using POSSystem.API.Extensions;
 using POSSystem.Application.Purchase.DTOs;
 using POSSystem.Application.Purchase.Interfaces;
+using POSSystem.Application.Sales.DTOs;
 using POSSystem.Domain;
 
 namespace POSSystem.API.Controllers;
@@ -151,5 +152,48 @@ public class PurchaseController : ControllerBase
         {
             return BadRequest(new { message = ex.Message });
         }
+    }
+
+    // ─── Transaction Correction ────────────────────────────────────────────────
+
+    /// <summary>
+    /// Void a posted purchase.
+    /// Creates PurchaseReversal ledger entries to remove stock and marks purchase as Cancelled.
+    /// </summary>
+    [HttpPost("{id:int}/void")]
+    public async Task<IActionResult> VoidPurchase(int id, [FromBody] VoidPurchaseDto dto)
+    {
+        dto.BusinessId = this.ResolveBusinessId(dto.BusinessId > 0 ? dto.BusinessId : null);
+        dto.BranchId   = this.ResolveBranchId(dto.BranchId > 0 ? dto.BranchId : null);
+
+        if (dto.BranchId <= 0)
+            return BadRequest(new { message = "branchId is required." });
+
+        try
+        {
+            var result = await _purchaseService.VoidPurchaseAsync(id, dto);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Get stock ledger history for a specific purchase.
+    /// Shows all PurchaseEntry and PurchaseReversal entries linked to this purchase.
+    /// </summary>
+    [HttpGet("{id:int}/ledger")]
+    public async Task<IActionResult> GetPurchaseLedgerHistory(
+        int id, [FromQuery] int? branchId, [FromQuery] int? businessId)
+    {
+        var resolvedBusinessId = this.ResolveBusinessId(businessId);
+        var resolvedBranchId   = this.ResolveBranchId(branchId);
+
+        var entries = await _purchaseService.GetPurchaseLedgerHistoryAsync(
+            id, resolvedBusinessId, resolvedBranchId);
+
+        return Ok(entries);
     }
 }

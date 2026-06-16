@@ -11,6 +11,7 @@ import { routeRegistry } from './routeRegistry';
 import LoginPage from './pages/LoginPage';
 import BranchSelectionPage from './pages/BranchSelectionPage';
 import POSBillingPage from './modules/pos/POSBillingPage';
+import EditInvoicePage from './modules/sales/EditInvoicePage';
 
 function App() {
   return (
@@ -58,6 +59,15 @@ function App() {
                             }
                           />
                         ))}
+                        {/* Edit invoice — dynamic route, not in sidebar */}
+                        <Route
+                          path="/sales-invoices/edit/:id"
+                          element={
+                            <ProtectedRoute module="Sales">
+                              <EditInvoicePage />
+                            </ProtectedRoute>
+                          }
+                        />
                         <Route path="*" element={<Navigate to="/" replace />} />
                       </Routes>
                       <FormModal />

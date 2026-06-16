@@ -1,3 +1,4 @@
+using POSSystem.Application.Common.DTOs;
 using POSSystem.Application.Sales.DTOs;
 
 namespace POSSystem.Application.Sales.Interfaces;
@@ -8,6 +9,7 @@ public interface ISalesService
     Task<List<PosProductLookupDto>> SearchProductsAsync(string query, int businessId, int branchId);
     Task<List<PosSearchGroupDto>> SearchProductsGroupedAsync(string query, int businessId, int branchId, int? warehouseId);
     Task<List<PosCustomerDto>> SearchCustomersAsync(string query, int businessId, int branchId);
+    Task<PagedResultDto<SaleInvoiceListDto>> GetSaleInvoicesPagedAsync(SaleInvoiceFilterDto filter);
     Task<SaleInvoiceDto> CreateSaleInvoiceAsync(CreateSaleInvoiceDto dto);
     Task<SaleInvoiceDto> HoldBillAsync(HoldBillDto dto);
     Task<List<SaleInvoiceDto>> GetHeldBillsAsync(int businessId, int branchId);

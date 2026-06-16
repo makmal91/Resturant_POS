@@ -19,6 +19,8 @@ public class PurchaseDto
     public int ItemCount { get; set; }
     public DateTime CreatedDate { get; set; }
     public DateTime? UpdatedDate { get; set; }
+    public DateTime? VoidedAt    { get; set; }
+    public string?  VoidedByName { get; set; }
 }
 
 public class PurchaseDetailDto : PurchaseDto
@@ -80,4 +82,12 @@ public class PostPurchaseDto
 {
     public int BusinessId { get; set; }
     public int BranchId { get; set; }
+}
+
+public class VoidPurchaseDto
+{
+    public int BusinessId { get; set; }
+    public int BranchId { get; set; }
+    public string? VoidedByName { get; set; }
+    public string? Reason { get; set; }
 }

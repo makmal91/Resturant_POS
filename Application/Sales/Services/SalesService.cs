@@ -1,3 +1,4 @@
+using POSSystem.Application.Common.DTOs;
 using POSSystem.Application.Sales.DTOs;
 using POSSystem.Application.Sales.Interfaces;
 using POSSystem.Application.Stock.Interfaces;
@@ -125,6 +126,40 @@ public class SalesService : ISalesService
             Phone = c.Phone ?? string.Empty,
             Email = c.Email ?? string.Empty
         }).ToList();
+    }
+
+    public async Task<PagedResultDto<SaleInvoiceListDto>> GetSaleInvoicesPagedAsync(SaleInvoiceFilterDto filter)
+    {
+        var paged = await _salesRepository.GetPagedAsync(
+            filter.BusinessId, filter.BranchId, filter.Page, filter.PageSize,
+            filter.Search, filter.Status, filter.DateFrom, filter.DateTo);
+
+        return new PagedResultDto<SaleInvoiceListDto>
+        {
+            Data = paged.Data.Select(inv => new SaleInvoiceListDto
+            {
+                Id            = inv.Id,
+                InvoiceNo     = inv.InvoiceNo,
+                CustomerName  = inv.Customer?.Name,
+                CustomerPhone = inv.Customer?.Phone,
+                WarehouseName = inv.Warehouse?.Name ?? string.Empty,
+                SaleDate      = inv.SaleDate,
+                GrandTotal    = inv.GrandTotal,
+                PaidAmount    = inv.PaidAmount,
+                PaymentMethod = inv.PaymentMethod.ToString(),
+                Status        = inv.Status,
+                CashierName   = inv.CashierName,
+                ItemCount     = inv.Items.Count(i => !i.IsDeleted),
+                CreatedDate   = inv.CreatedDate,
+                VoidedAt      = inv.VoidedAt,
+                BranchId      = inv.BranchId,
+                WarehouseId   = inv.WarehouseId,
+                CustomerId    = inv.CustomerId
+            }).ToList(),
+            TotalRecords = paged.TotalRecords,
+            TotalPages   = paged.TotalPages,
+            CurrentPage  = paged.CurrentPage
+        };
     }
 
     public async Task<SaleInvoiceDto> CreateSaleInvoiceAsync(CreateSaleInvoiceDto dto)

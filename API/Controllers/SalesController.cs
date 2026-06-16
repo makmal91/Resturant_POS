@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using POSSystem.API.Extensions;
 using POSSystem.Application.Sales.DTOs;
 using POSSystem.Application.Sales.Interfaces;
+using POSSystem.Domain;
 
 namespace POSSystem.API.Controllers;
 
@@ -16,6 +17,45 @@ public class SalesController : ControllerBase
     public SalesController(ISalesService salesService)
     {
         _salesService = salesService;
+    }
+
+    /// <summary>
+    /// Get paged list of sale invoices (Invoice History page).
+    /// </summary>
+    [HttpGet("invoices")]
+    public async Task<IActionResult> GetInvoices(
+        [FromQuery] int? branchId,
+        [FromQuery] int? businessId,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 25,
+        [FromQuery] string? search = null,
+        [FromQuery] SaleInvoiceStatus? status = null,
+        [FromQuery] DateTime? dateFrom = null,
+        [FromQuery] DateTime? dateTo = null)
+    {
+        var resolvedBusinessId = this.ResolveBusinessId(businessId);
+        var resolvedBranchId   = this.ResolveBranchId(branchId);
+
+        var result = await _salesService.GetSaleInvoicesPagedAsync(new SaleInvoiceFilterDto
+        {
+            BusinessId = resolvedBusinessId,
+            BranchId   = resolvedBranchId,
+            Page       = page,
+            PageSize   = pageSize,
+            Search     = search,
+            Status     = status,
+            DateFrom   = dateFrom,
+            DateTo     = dateTo
+        });
+
+        return Ok(new
+        {
+            invoices     = result.Data,
+            totalRecords = result.TotalRecords,
+            totalPages   = result.TotalPages,
+            currentPage  = result.CurrentPage,
+            pageSize
+        });
     }
 
     /// <summary>
@@ -187,5 +227,71 @@ public class SalesController : ControllerBase
         {
             return BadRequest(new { message = ex.Message });
         }
+    }
+
+    // ─── Transaction Correction ────────────────────────────────────────────────
+
+    /// <summary>
+    /// Update (correct) a completed sale invoice.
+    /// Automatically creates SaleReversal ledger entries for old items
+    /// and new SaleEntry entries for the updated items.
+    /// </summary>
+    [HttpPut("invoice/{id:int}")]
+    public async Task<IActionResult> UpdateSaleInvoice(int id, [FromBody] UpdateSaleInvoiceDto dto)
+    {
+        dto.BusinessId = this.ResolveBusinessId(dto.BusinessId > 0 ? dto.BusinessId : null);
+        dto.BranchId   = this.ResolveBranchId(dto.BranchId > 0 ? dto.BranchId : null);
+
+        if (dto.BranchId <= 0)
+            return BadRequest(new { message = "BranchId is required." });
+
+        try
+        {
+            var result = await _salesService.UpdateSaleInvoiceAsync(id, dto);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Void a completed sale invoice.
+    /// Creates SaleReversal ledger entries to return stock and marks invoice as Voided.
+    /// </summary>
+    [HttpPost("invoice/{id:int}/void")]
+    public async Task<IActionResult> VoidSaleInvoice(int id, [FromBody] VoidSaleInvoiceDto dto)
+    {
+        dto.BusinessId = this.ResolveBusinessId(dto.BusinessId > 0 ? dto.BusinessId : null);
+        dto.BranchId   = this.ResolveBranchId(dto.BranchId > 0 ? dto.BranchId : null);
+
+        if (dto.BranchId <= 0)
+            return BadRequest(new { message = "BranchId is required." });
+
+        try
+        {
+            var result = await _salesService.VoidSaleInvoiceAsync(id, dto);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Get stock ledger history for a specific sale invoice.
+    /// Shows all SaleEntry and SaleReversal entries linked to this invoice.
+    /// </summary>
+    [HttpGet("invoice/{id:int}/ledger")]
+    public async Task<IActionResult> GetInvoiceLedgerHistory(
+        int id, [FromQuery] int? branchId, [FromQuery] int? businessId)
+    {
+        var resolvedBusinessId = this.ResolveBusinessId(businessId);
+        var resolvedBranchId   = this.ResolveBranchId(branchId);
+
+        var entries = await _salesService.GetSaleLedgerHistoryAsync(id, resolvedBusinessId, resolvedBranchId);
+        return Ok(entries);
     }
 }

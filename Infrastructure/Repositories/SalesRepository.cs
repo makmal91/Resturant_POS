@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using POSSystem.Application.Common.DTOs;
 using POSSystem.Application.Sales.Interfaces;
 using POSSystem.Domain;
 using POSSystem.Infrastructure.Data;
@@ -84,6 +85,54 @@ public class SalesRepository : ISalesRepository
                 && s.BusinessId == businessId
                 && s.BranchId == branchId
                 && !s.IsDeleted);
+    }
+
+    public async Task<PagedResultDto<SaleInvoice>> GetPagedAsync(
+        int businessId, int branchId, int page, int pageSize,
+        string? search, SaleInvoiceStatus? status, DateTime? dateFrom, DateTime? dateTo)
+    {
+        page     = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 200);
+
+        var query = _db.SaleInvoices
+            .Include(s => s.Customer)
+            .Include(s => s.Warehouse)
+            .Include(s => s.Branch)
+            .Where(s => s.BusinessId == businessId && s.BranchId == branchId && !s.IsDeleted);
+
+        if (status.HasValue)
+            query = query.Where(s => s.Status == status.Value);
+
+        if (dateFrom.HasValue)
+            query = query.Where(s => s.SaleDate >= dateFrom.Value);
+
+        if (dateTo.HasValue)
+            query = query.Where(s => s.SaleDate <= dateTo.Value);
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var q = search.Trim().ToLower();
+            query = query.Where(s =>
+                s.InvoiceNo.ToLower().Contains(q) ||
+                (s.Customer != null && s.Customer.Name.ToLower().Contains(q)) ||
+                (s.CashierName != null && s.CashierName.ToLower().Contains(q)));
+        }
+
+        var total     = await query.CountAsync();
+        var totalPages = total == 0 ? 0 : (int)Math.Ceiling(total / (double)pageSize);
+        if (totalPages > 0 && page > totalPages) page = totalPages;
+
+        var data = await query
+            .OrderByDescending(s => s.SaleDate)
+            .ThenByDescending(s => s.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return new PagedResultDto<SaleInvoice>
+        {
+            Data = data, TotalRecords = total, TotalPages = totalPages, CurrentPage = page
+        };
     }
 
     public async Task<List<SaleInvoice>> GetHeldBillsAsync(int businessId, int branchId)

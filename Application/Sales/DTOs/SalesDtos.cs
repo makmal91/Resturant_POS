@@ -1,3 +1,4 @@
+using POSSystem.Application.Common.DTOs;
 using POSSystem.Domain;
 
 namespace POSSystem.Application.Sales.DTOs;
@@ -197,6 +198,41 @@ public class SaleInvoiceItemDto
     public decimal TaxAmount { get; set; }
     public decimal LineTotal { get; set; }
     public string? ItemNote { get; set; }
+}
+
+// ─── Invoice History / Paged Query ───────────────────────────────────────────
+
+public class SaleInvoiceFilterDto
+{
+    public int BusinessId { get; set; }
+    public int BranchId { get; set; }
+    public int Page { get; set; } = 1;
+    public int PageSize { get; set; } = 25;
+    public string? Search { get; set; }
+    public SaleInvoiceStatus? Status { get; set; }
+    public DateTime? DateFrom { get; set; }
+    public DateTime? DateTo { get; set; }
+}
+
+public class SaleInvoiceListDto
+{
+    public int Id { get; set; }
+    public string InvoiceNo { get; set; } = string.Empty;
+    public string? CustomerName { get; set; }
+    public string? CustomerPhone { get; set; }
+    public string WarehouseName { get; set; } = string.Empty;
+    public DateTime SaleDate { get; set; }
+    public decimal GrandTotal { get; set; }
+    public decimal PaidAmount { get; set; }
+    public string PaymentMethod { get; set; } = string.Empty;
+    public SaleInvoiceStatus Status { get; set; }
+    public string? CashierName { get; set; }
+    public int ItemCount { get; set; }
+    public DateTime CreatedDate { get; set; }
+    public DateTime? VoidedAt { get; set; }
+    public int BranchId { get; set; }
+    public int WarehouseId { get; set; }
+    public int? CustomerId { get; set; }
 }
 
 // ─── Transaction Correction DTOs ─────────────────────────────────────────────

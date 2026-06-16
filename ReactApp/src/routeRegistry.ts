@@ -25,6 +25,7 @@ import DiscountPage from './modules/discount/DiscountPage';
 import WarehousePage from './modules/warehouse/WarehousePage';
 import PurchasePage from './modules/purchase/PurchasePage';
 import StockLedgerPage from './modules/stock/StockLedgerPage';
+import SaleInvoicesPage from './modules/sales/SaleInvoicesPage';
 // POSBillingPage is registered directly in App.tsx as a fullscreen route (outside Layout)
 
 export const routeRegistry: RouteDefinition[] = [
@@ -48,6 +49,7 @@ export const routeRegistry: RouteDefinition[] = [
   { path: '/warehouses', label: 'Warehouses', component: WarehousePage, module: 'Warehouses' },
   { path: '/purchase', label: 'Purchase', component: PurchasePage, module: 'Purchase' },
   { path: '/stock', label: 'Stock', component: StockLedgerPage, module: 'Stock' },
+  { path: '/sales-invoices', label: 'Invoice History', component: SaleInvoicesPage, module: 'Sales' },
 ];
 
 const routeMap = new Map(routeRegistry.map((route) => [route.path, route]));
