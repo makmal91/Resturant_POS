@@ -92,6 +92,8 @@ const resolveIconKey = (icon: string | null | undefined, name: string): string =
       purchasereports: 'reports',
       stockreports: 'reports',
       systemsettings: 'default',
+      cs: 'default',
+      codesequences: 'default',
       invoices: 'invoices',
       rolespermissions: 'roles',
       subcategories: 'subcategories',

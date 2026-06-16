@@ -45,4 +45,17 @@ public static class TenantRequestExtensions
 
         return 1;
     }
+
+    /// <summary>
+    /// Resolves a concrete branch for branch-scoped operations (e.g. code sequences).
+    /// Explicit query/body branch wins over the global "All Branches" header (0).
+    /// </summary>
+    public static int? ResolveEffectiveBranchId(this ControllerBase controller, int? explicitBranchId = null)
+    {
+        if (explicitBranchId.HasValue && explicitBranchId.Value > 0)
+            return explicitBranchId.Value;
+
+        var resolved = controller.ResolveBranchId(null);
+        return resolved > 0 ? resolved : null;
+    }
 }

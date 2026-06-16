@@ -15,8 +15,6 @@ export interface ReceiptPrintModalProps {
   initialLayout?: ReceiptLayout;
   showBranch?: boolean;
   onNewSale?: () => void;
-  onVoid?: () => void;
-  voidLoading?: boolean;
 }
 
 const ReceiptPrintModal: React.FC<ReceiptPrintModalProps> = ({
@@ -26,8 +24,6 @@ const ReceiptPrintModal: React.FC<ReceiptPrintModalProps> = ({
   initialLayout = 'thermal',
   showBranch = true,
   onNewSale,
-  onVoid,
-  voidLoading = false,
 }) => {
   const { user } = useAuth();
   const businessId = resolveSessionBusinessId(user?.businessId);
@@ -121,18 +117,6 @@ const ReceiptPrintModal: React.FC<ReceiptPrintModalProps> = ({
         </div>
 
         <div className="receipt-modal-actions receipt-no-print">
-          {onVoid && invoice.status === 'Completed' && (
-            <button
-              type="button"
-              onClick={onVoid}
-              disabled={voidLoading}
-              className="receipt-modal-btn receipt-modal-btn--danger w-full"
-              style={{ flex: '1 1 100%' }}
-            >
-              {voidLoading ? 'Voiding…' : 'Void Invoice'}
-            </button>
-          )}
-
           <button type="button" onClick={handlePrint} className="receipt-modal-btn receipt-modal-btn--secondary">
             Print
           </button>

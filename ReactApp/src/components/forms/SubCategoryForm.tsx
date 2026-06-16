@@ -100,6 +100,21 @@ const SubCategoryForm: React.FC<SubCategoryFormProps> = ({
   const [existingImage, setExistingImage] = useState<{ id: number; branchId: number } | null>(null);
   const [removeImage, setRemoveImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isEditMode = Number(safeInitialData?.id ?? 0) > 0;
+
+  const resolvedBranchId =
+    formData.branchId > 0 ? formData.branchId : selectedBranchId && selectedBranchId > 0 ? selectedBranchId : 0;
+
+  const showBranchField =
+    !isEditMode && !(selectedBranchId && selectedBranchId > 0) && !lockBranch;
+
+  useEffect(() => {
+    if (selectedBranchId && selectedBranchId > 0 && !isEditMode) {
+      setFormData((prev) =>
+        prev.branchId === selectedBranchId ? prev : { ...prev, branchId: selectedBranchId }
+      );
+    }
+  }, [selectedBranchId, isEditMode]);
 
   useEffect(() => {
     void fetchBranches();
@@ -185,8 +200,10 @@ const SubCategoryForm: React.FC<SubCategoryFormProps> = ({
       nextErrors.name = 'Sub category name is required';
     }
 
-    if (formData.branchId <= 0) {
-      nextErrors.branchId = 'Branch selection is required';
+    if (resolvedBranchId <= 0) {
+      nextErrors.branchId = showBranchField
+        ? 'Branch selection is required'
+        : 'Select a branch from the header before creating a sub category.';
     }
 
     if (formData.categoryId <= 0) {
@@ -256,6 +273,7 @@ const SubCategoryForm: React.FC<SubCategoryFormProps> = ({
     if (validateForm()) {
       onSubmit({
         ...formData,
+        branchId: resolvedBranchId,
         imageFile,
         removeImage,
       });
@@ -268,7 +286,27 @@ const SubCategoryForm: React.FC<SubCategoryFormProps> = ({
         <p className="mb-6 text-sm text-gray-600">Enter sub category details below.</p>
 
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-          {!lockBranch ? (
+          <CodeFieldWithGenerate
+            label="Code"
+            name="code"
+            value={formData.code}
+            onChange={(code) => setFormData((prev) => ({ ...prev, code }))}
+            module={CODE_MODULES.SubCategory}
+            branchId={resolvedBranchId > 0 ? resolvedBranchId : undefined}
+            isEditMode={isEditMode}
+          />
+
+          <FormInput
+            label="Sub Category Name"
+            name="name"
+            value={formData.name}
+            onChange={handleChange}
+            placeholder="Enter sub category name"
+            required
+            error={errors.name}
+          />
+
+          {showBranchField && (
             <FormSelect
               label="Branch"
               name="branchId"
@@ -284,14 +322,10 @@ const SubCategoryForm: React.FC<SubCategoryFormProps> = ({
               required
               error={errors.branchId}
             />
-          ) : (
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-800">Branch</label>
-              <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
-                {branches.find((branch) => branch.id === formData.branchId)?.name ??
-                  `Branch #${formData.branchId}`}
-              </div>
-            </div>
+          )}
+
+          {!showBranchField && errors.branchId && (
+            <p className="md:col-span-2 -mt-2 text-sm text-red-600">{errors.branchId}</p>
           )}
 
           <FormSelect
@@ -311,26 +345,6 @@ const SubCategoryForm: React.FC<SubCategoryFormProps> = ({
             ]}
             required
             error={errors.categoryId}
-          />
-
-          <FormInput
-            label="Sub Category Name"
-            name="name"
-            value={formData.name}
-            onChange={handleChange}
-            placeholder="Enter sub category name"
-            required
-            error={errors.name}
-          />
-
-          <CodeFieldWithGenerate
-            label="Code"
-            name="code"
-            value={formData.code}
-            onChange={(code) => setFormData((prev) => ({ ...prev, code }))}
-            module={CODE_MODULES.SubCategory}
-            branchId={formData.branchId}
-            placeholder="Auto-generated if empty"
           />
 
           <FormInput

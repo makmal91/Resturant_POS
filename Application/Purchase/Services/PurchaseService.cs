@@ -48,9 +48,7 @@ public class PurchaseService : IPurchaseService
     {
         ValidatePurchaseDto(dto.BranchId, dto.SupplierId, dto.WarehouseId, dto.Items);
 
-        var invoiceNo = string.IsNullOrWhiteSpace(dto.InvoiceNo)
-            ? await _codeGenerator.GenerateAsync(CodeModuleNames.Purchase, dto.BranchId)
-            : dto.InvoiceNo.Trim();
+        var invoiceNo = await _codeGenerator.ResolveAsync(CodeModuleNames.Purchase, dto.BranchId, dto.InvoiceNo);
 
         if (await _purchaseRepository.InvoiceExistsAsync(invoiceNo, dto.BusinessId, dto.BranchId))
             throw new InvalidOperationException($"Invoice number '{invoiceNo}' already exists.");

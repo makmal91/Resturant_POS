@@ -236,7 +236,6 @@ const CustomerForm: React.FC<CustomerFormProps> = ({
               onChange={(customerCode) => setFormData((prev) => ({ ...prev, customerCode }))}
               module={CODE_MODULES.Customer}
               branchId={formData.branchId}
-              placeholder="Auto-generated if empty"
             />
           )}
 

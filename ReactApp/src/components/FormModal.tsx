@@ -1,6 +1,6 @@
 import React, { useMemo, useEffect, useState } from 'react';
 import { useFormModal } from '../contexts/FormModalContext';
-import { BranchForm, BusinessForm, UserForm, MenuForm, InventoryForm, CategoryForm, SubCategoryForm, BrandForm, WarehouseForm, SupplierForm, PurchaseForm, CustomerForm } from './forms';
+import { BranchForm, BusinessForm, UserForm, MenuForm, InventoryForm, CategoryForm, SubCategoryForm, BrandForm, WarehouseForm, SupplierForm, PurchaseForm, CustomerForm, RoleForm, CashTransactionForm, type CashTransactionFormData } from './forms';
 import { BranchService, BusinessService, MenuService, InventoryService } from '../services/apiService';
 import { getApiErrorMessage } from '../services/api';
 import { categoryService } from '../modules/category/categoryService';
@@ -11,9 +11,11 @@ import { supplierService } from '../modules/supplier/supplierService';
 import { purchaseService } from '../modules/purchase/purchaseService';
 import { customerService as apiCustomerService } from '../modules/customer/customerService';
 import { userService, RoleListItem } from '../modules/user/userService';
+import { roleService } from '../services/roleService';
+import { cashFlowService } from '../modules/cashflow/cashFlowService';
 import { useBranchStore } from '../stores/useBranchStore';
 import { useIsGlobalAdmin, useIsMasterUser } from '../hooks/usePermission';
-import { isProtectedRole } from '../types/permissions';
+import { isProtectedRole, hasBranchContext } from '../types/permissions';
 
 interface MenuCategoryOption {
   id: string;
@@ -189,8 +191,8 @@ const FormModal: React.FC = () => {
         return;
       }
 
-      const branchId = Number(editingData?.branchId ?? selectedBranchId ?? 0);
-      if (branchId <= 0) {
+      const branchId = Number(editingData?.branchId ?? selectedBranchId ?? -1);
+      if (!hasBranchContext(branchId)) {
         setPurchaseSuppliers([]);
         setPurchaseWarehouses([]);
         return;
@@ -433,6 +435,70 @@ const FormModal: React.FC = () => {
       closeWithSuccess(isEditMode ? 'Business updated successfully.' : 'Business created successfully.');
     } catch (err: any) {
       setError(getApiErrorMessage(err, 'Failed to save business'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleRoleSubmit = async (data: { name: string; description: string; status: string }) => {
+    setIsSubmitting(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    const name = String(data?.name ?? '').trim();
+    const description = String(data?.description ?? '').trim();
+    const isActive = String(data?.status ?? 'Active').toLowerCase() !== 'inactive';
+
+    if (!name) {
+      setError('Role name is required.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    try {
+      if (isEditMode) {
+        await roleService.updateRole(Number(editingData.id), { name, description, isActive });
+      } else {
+        await roleService.createRole({ name, description, isActive });
+      }
+      closeWithSuccess(isEditMode ? 'Role updated successfully.' : 'Role created successfully.');
+    } catch (err: any) {
+      setError(getApiErrorMessage(err, 'Failed to save role.'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleCashTransactionSubmit = async (data: CashTransactionFormData) => {
+    const branchId = selectedBranchId ?? 0;
+    if (branchId <= 0) {
+      setError('Please select a branch first.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    const parsed = parseFloat(data.amount);
+    if (isNaN(parsed) || parsed <= 0) {
+      setError('Amount must be greater than zero.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    try {
+      await cashFlowService.recordTransaction(
+        branchId,
+        data.transactionType,
+        parsed,
+        data.paymentMethod,
+        data.description,
+        data.referenceNo,
+      );
+      closeWithSuccess('Transaction recorded successfully.');
+    } catch (err: any) {
+      setError(getApiErrorMessage(err, 'Failed to record transaction.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -986,7 +1052,7 @@ const FormModal: React.FC = () => {
             onSubmit={handleCategorySubmit}
             isLoading={isSubmitting}
             submitLabel={isEditMode ? 'Update Category' : 'Create Category'}
-            lockBranch={isEditMode || Number(editingData?.branchId ?? 0) > 0}
+            lockBranch={isEditMode || (!isGlobalAdmin && Boolean(selectedBranchId && selectedBranchId > 0))}
           />
         );
       case 'subcategory':
@@ -1050,6 +1116,24 @@ const FormModal: React.FC = () => {
             lockBranch={isEditMode || (!isGlobalAdmin && Boolean(selectedBranchId && selectedBranchId > 0))}
           />
         );
+      case 'role':
+        return (
+          <RoleForm
+            initialData={editingData}
+            onSubmit={handleRoleSubmit}
+            isLoading={isSubmitting}
+            submitLabel={isEditMode ? 'Update Role' : 'Create Role'}
+            nameReadOnly={isEditMode && isProtectedRole(String(editingData?.name ?? ''))}
+          />
+        );
+      case 'cashTransaction':
+        return (
+          <CashTransactionForm
+            initialData={editingData}
+            onSubmit={handleCashTransactionSubmit}
+            isLoading={isSubmitting}
+          />
+        );
       default:
         return null;
     }
@@ -1067,7 +1151,9 @@ const FormModal: React.FC = () => {
     formType === 'supplier' ||
     formType === 'purchase' ||
     formType === 'customer' ||
-    formType === 'user'
+    formType === 'user' ||
+    formType === 'role' ||
+    formType === 'cashTransaction'
       ? 'max-w-4xl'
       : 'max-w-2xl';
 
@@ -1084,6 +1170,10 @@ const FormModal: React.FC = () => {
             ? 'Purchase'
             : formType === 'customer'
               ? 'Customer'
+              : formType === 'role'
+                ? 'Role'
+                : formType === 'cashTransaction'
+                  ? 'Record Transaction'
               : formType
                 ? formType.charAt(0).toUpperCase() + formType.slice(1)
                 : '';

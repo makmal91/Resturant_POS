@@ -5,6 +5,7 @@ import {
   barcodeFontSize,
   computeRoundOff,
   formatReceiptCurrency,
+  formatReceiptDateCompact,
   formatReceiptDateTime,
   formatReceiptNumber,
   getBalanceDue,
@@ -89,21 +90,17 @@ const ReceiptPrint: React.FC<ReceiptPrintProps> = ({
 
       {/* Invoice information */}
       <section className="receipt-section">
-        <div className="receipt-meta-grid">
-          <div className="receipt-meta-row">
-            <span className="receipt-meta-label">Invoice</span>
-            <span className="receipt-meta-value">{invoice.invoiceNo}</span>
+        <div className="receipt-meta-grid receipt-meta-grid--full">
+          <div className="receipt-meta-row receipt-meta-row--invoice-date">
+            <span className="receipt-meta-pair">
+              <span className="receipt-meta-label">Invoice</span>
+              <span className="receipt-meta-value">{invoice.invoiceNo}</span>
+            </span>
+            <span className="receipt-meta-pair">
+              <span className="receipt-meta-label">Date</span>
+              <span className="receipt-meta-value">{formatReceiptDateCompact(invoice.saleDate)}</span>
+            </span>
           </div>
-          <div className="receipt-meta-row">
-            <span className="receipt-meta-label">Date</span>
-            <span className="receipt-meta-value">{formatReceiptDateTime(invoice.saleDate)}</span>
-          </div>
-          {showBranch && invoice.branchName && (
-            <div className="receipt-meta-row">
-              <span className="receipt-meta-label">Branch</span>
-              <span className="receipt-meta-value">{invoice.branchName}</span>
-            </div>
-          )}
           {cashierName && (
             <div className="receipt-meta-row">
               <span className="receipt-meta-label">Cashier</span>

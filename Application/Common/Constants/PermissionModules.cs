@@ -31,6 +31,7 @@ public static class PermissionModules
     public const string PurchaseReports = "Purchase Reports";
     public const string StockReports = "Stock Reports";
     public const string SystemSettings = "System Settings";
+    public const string CodeSequences = "Code Sequences";
 
     public static readonly IReadOnlyList<string> All =
     [
@@ -63,5 +64,6 @@ public static class PermissionModules
         PurchaseReports,
         StockReports,
         SystemSettings,
+        CodeSequences,
     ];
 }

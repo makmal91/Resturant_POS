@@ -66,6 +66,18 @@ public class CashFlowLedgerFilterDto
     public int PageSize { get; set; } = 50;
 }
 
+public class CashFlowLedgerPageDto
+{
+    public IReadOnlyList<CashFlowTransactionDto> Transactions { get; set; } = Array.Empty<CashFlowTransactionDto>();
+    public int TotalRecords { get; set; }
+    public int TotalPages { get; set; }
+    public int CurrentPage { get; set; }
+    public int PageSize { get; set; }
+    public decimal TotalIn { get; set; }
+    public decimal TotalOut { get; set; }
+    public decimal NetTotal { get; set; }
+}
+
 // ─── Response DTOs ────────────────────────────────────────────────────────────
 
 public class DailyCashSummaryDto

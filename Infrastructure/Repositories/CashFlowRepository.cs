@@ -22,7 +22,7 @@ public class CashFlowRepository : ICashFlowRepository
         return transaction;
     }
 
-    public async Task<PagedResultDto<CashFlowTransactionDto>> GetLedgerPagedAsync(CashFlowLedgerFilterDto filter)
+    public async Task<CashFlowLedgerPageDto> GetLedgerPagedAsync(CashFlowLedgerFilterDto filter)
     {
         var query = _db.CashFlowTransactions
             .Include(t => t.Branch)
@@ -43,6 +43,21 @@ public class CashFlowRepository : ICashFlowRepository
 
         if (filter.PaymentMethod.HasValue)
             query = query.Where(t => t.PaymentMethod == filter.PaymentMethod.Value);
+
+        var inflowTypes = new[]
+        {
+            CashFlowTransactionType.Sale,
+            CashFlowTransactionType.CashIn,
+            CashFlowTransactionType.OpeningBalance,
+        };
+
+        var totalIn = await query
+            .Where(t => inflowTypes.Contains(t.TransactionType))
+            .SumAsync(t => (decimal?)t.Amount) ?? 0m;
+
+        var totalOut = await query
+            .Where(t => !inflowTypes.Contains(t.TransactionType))
+            .SumAsync(t => (decimal?)t.Amount) ?? 0m;
 
         var totalRecords = await query.CountAsync();
 
@@ -67,12 +82,16 @@ public class CashFlowRepository : ICashFlowRepository
             })
             .ToListAsync();
 
-        return new PagedResultDto<CashFlowTransactionDto>
+        return new CashFlowLedgerPageDto
         {
-            Data         = items,
+            Transactions = items,
             TotalRecords = totalRecords,
             TotalPages   = (int)Math.Ceiling(totalRecords / (double)filter.PageSize),
             CurrentPage  = filter.Page,
+            PageSize     = filter.PageSize,
+            TotalIn      = totalIn,
+            TotalOut     = totalOut,
+            NetTotal     = totalIn - totalOut,
         };
     }
 

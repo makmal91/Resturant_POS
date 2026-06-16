@@ -20,33 +20,27 @@ const branchRequestConfig = (branchId?: number) =>
 
 export const codeGeneratorService = {
   preview: async (module: CodeModuleName, branchId?: number) => {
+    const scopedBranchId = branchId && branchId > 0 ? branchId : undefined;
     const response = await apiClient.get<{ code: string }>('/codes/preview', {
-      params: { module, branchId: branchId && branchId > 0 ? branchId : undefined },
-      ...branchRequestConfig(branchId),
+      params: { module, ...(scopedBranchId ? { branchId: scopedBranchId } : {}) },
+      ...(scopedBranchId ? branchRequestConfig(scopedBranchId) : {}),
     });
     return response.data.code;
   },
 
-  generate: async (module: CodeModuleName, branchId?: number) => {
-    const response = await apiClient.post<{ code: string }>(
-      '/codes/generate',
-      null,
-      {
-        params: { module, branchId: branchId && branchId > 0 ? branchId : undefined },
-        ...branchRequestConfig(branchId),
-      }
-    );
-    return response.data.code;
-  },
-
   generateBarcode: async (branchId: number) => {
+    const scopedBranchId = branchId > 0 ? branchId : undefined;
+    if (!scopedBranchId) {
+      throw new Error('BranchId is required.');
+    }
+
     const response = await apiClient.post<{ barcode: string }>(
       '/codes/barcode',
       null,
       {
-        params: { branchId },
-        headers: { 'X-Branch-Id': String(branchId) },
-      }
+        params: { branchId: scopedBranchId },
+        ...branchRequestConfig(scopedBranchId),
+      },
     );
     return response.data.barcode;
   },

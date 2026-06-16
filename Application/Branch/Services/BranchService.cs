@@ -50,9 +50,8 @@ public class BranchService : IBranchService
         if (!await _repository.CityBelongsToCountryAsync(dto.CityId, dto.CountryId))
             throw new InvalidOperationException("Invalid CityId. City does not belong to the selected country.");
 
-        var normalizedCode = string.IsNullOrWhiteSpace(dto.Code)
-            ? await _codeGenerator.GenerateAsync(CodeModuleNames.Branch)
-            : dto.Code.Trim().ToUpperInvariant();
+        var normalizedCode = (await _codeGenerator.ResolveAsync(CodeModuleNames.Branch, null, dto.Code))
+            .ToUpperInvariant();
 
         if (await _repository.CodeExistsAsync(normalizedCode))
             throw new InvalidOperationException("Branch code already exists.");

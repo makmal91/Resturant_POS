@@ -13,6 +13,8 @@ import { usePermissionStore } from '../../stores/usePermissionStore';
 import { usePermission, useIsMasterUser, useIsSuperAdmin } from '../../hooks/usePermission';
 import { isProtectedRole } from '../../types/permissions';
 import { authStorage } from '../../utils/storage';
+import { useFormModal } from '../../contexts/FormModalContext';
+import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
 
 interface ModuleTreeNode {
   id: number;
@@ -223,9 +225,11 @@ const GroupCard: React.FC<GroupCardProps> = ({
 const RolePermissionPage: React.FC = () => {
   const { user } = useAuth();
   const refreshSidebar = useMenuStore((s) => s.refreshSidebarData);
-  const { canEdit } = usePermission('Roles');
+  const { canCreate, canEdit, canDelete } = usePermission('Roles');
   const isSuperAdmin = useIsSuperAdmin();
   const isMasterUser = useIsMasterUser();
+  const { openForm, isOpen } = useFormModal();
+  const { showConfirm } = useConfirmDialog();
 
   const [roles, setRoles] = useState<RoleListItem[]>([]);
   const [selectedRoleId, setSelectedRoleId] = useState<number | null>(null);
@@ -242,21 +246,37 @@ const RolePermissionPage: React.FC = () => {
     setTimeout(() => setNotification(null), 5000);
   }, []);
 
-  useEffect(() => {
-    const loadInitial = async () => {
-      setLoadingRoles(true);
-      try {
-        const roleList = await roleService.getRoles();
-        setRoles(roleList.filter((role) => role.isActive));
-        if (roleList.length > 0) setSelectedRoleId(roleList[0].id);
-      } catch (error) {
-        showNotification('error', getApiErrorMessage(error, 'Failed to load roles.'));
-      } finally {
-        setLoadingRoles(false);
+  const loadRoles = useCallback(async (selectRoleId?: number | null) => {
+    setLoadingRoles(true);
+    try {
+      const roleList = await roleService.getRoles();
+      const activeRoles = roleList.filter((role) => role.isActive);
+      setRoles(activeRoles);
+      if (selectRoleId && activeRoles.some((role) => role.id === selectRoleId)) {
+        setSelectedRoleId(selectRoleId);
+      } else if (activeRoles.length > 0) {
+        setSelectedRoleId((current) =>
+          current && activeRoles.some((role) => role.id === current) ? current : activeRoles[0].id,
+        );
+      } else {
+        setSelectedRoleId(null);
       }
-    };
-    loadInitial();
+    } catch (error) {
+      showNotification('error', getApiErrorMessage(error, 'Failed to load roles.'));
+    } finally {
+      setLoadingRoles(false);
+    }
   }, [showNotification]);
+
+  useEffect(() => {
+    void loadRoles();
+  }, [loadRoles]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      void loadRoles(selectedRoleId);
+    }
+  }, [isOpen, loadRoles, selectedRoleId]);
 
   useEffect(() => {
     if (!selectedRoleId) {
@@ -287,7 +307,42 @@ const RolePermissionPage: React.FC = () => {
   const selectedRole = roles.find((role) => role.id === selectedRoleId);
   const isProtectedRoleSelected = isProtectedRole(selectedRole?.name);
   const canEditSelectedRole = canEdit && (isMasterUser || !isProtectedRoleSelected);
+  const canDeleteSelectedRole = canDelete && (isMasterUser || !isProtectedRoleSelected);
   const normalizedSearch = searchTerm.trim().toLowerCase();
+
+  const handleCreateRole = () => {
+    openForm('role');
+  };
+
+  const handleEditRole = () => {
+    if (!selectedRole) return;
+    openForm('role', {
+      id: selectedRole.id,
+      name: selectedRole.name,
+      description: selectedRole.description,
+      isActive: selectedRole.isActive,
+      status: selectedRole.isActive ? 'Active' : 'Inactive',
+    });
+  };
+
+  const handleDeleteRole = () => {
+    if (!selectedRole || !canDeleteSelectedRole) return;
+    showConfirm({
+      title: 'Delete Role?',
+      message: `Delete role "${selectedRole.name}"? This cannot be undone if the role has no assigned users.`,
+      confirmLabel: 'Delete Role',
+      variant: 'danger',
+      onConfirm: async () => {
+        try {
+          await roleService.deleteRole(selectedRole.id);
+          showNotification('success', `Role "${selectedRole.name}" deleted.`);
+          await loadRoles(null);
+        } catch (error) {
+          showNotification('error', getApiErrorMessage(error, 'Failed to delete role.'));
+        }
+      },
+    });
+  };
 
   const standaloneModules = tree.filter((n) => n.moduleKey !== '' && n.children.length === 0);
   const groupModules = tree.filter((n) => n.moduleKey === '' && n.children.length > 0);
@@ -427,10 +482,9 @@ const RolePermissionPage: React.FC = () => {
   return (
     <div className="p-4 md:p-6 max-w-6xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Role & Access Management</h1>
+        <h1 className="text-2xl font-bold text-gray-900">User Roles & Access</h1>
         <p className="text-sm text-gray-600 mt-1">
-          Control which menu items appear in the sidebar and what actions users can perform.
-          Turn off <strong>Menu access</strong> to hide a module from the sidebar.
+          Create and manage user roles, then control which menu items appear in the sidebar and what actions users can perform.
         </p>
       </div>
 
@@ -472,6 +526,37 @@ const RolePermissionPage: React.FC = () => {
                 This role is read-only for your account.
               </p>
             )}
+            <div className="mt-4 flex flex-wrap gap-2">
+              {canCreate && (
+                <button
+                  type="button"
+                  onClick={handleCreateRole}
+                  className="flex-1 min-w-[7rem] rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+                >
+                  New Role
+                </button>
+              )}
+              {canEdit && selectedRole && (
+                <button
+                  type="button"
+                  onClick={handleEditRole}
+                  disabled={!canEditSelectedRole}
+                  className="flex-1 min-w-[7rem] rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Edit Role
+                </button>
+              )}
+              {canDelete && selectedRole && (
+                <button
+                  type="button"
+                  onClick={handleDeleteRole}
+                  disabled={!canDeleteSelectedRole}
+                  className="flex-1 min-w-[7rem] rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
+                >
+                  Delete
+                </button>
+              )}
+            </div>
             <div className="mt-4 pt-4 border-t border-gray-100 space-y-2 text-xs text-gray-500">
               <p><span className="font-medium text-gray-700">Menu access</span> — show/hide in sidebar</p>
               <p><span className="font-medium text-gray-700">Create / Edit / Delete</span> — allowed actions</p>

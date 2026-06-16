@@ -27,6 +27,7 @@ public class PermissionModuleConfiguration : IEntityTypeConfiguration<Permission
 
         builder.HasIndex(m => m.ModuleKey)
             .IsUnique()
+            .HasFilter("[ModuleKey] <> '' AND [IsDeleted] = 0")
             .HasDatabaseName("idx_module_key");
 
         builder.HasQueryFilter(m => !m.IsDeleted);

@@ -170,17 +170,18 @@ namespace POSSystem.Infrastructure.Migrations
                             Id = 1,
                             Address = "123 Main Street",
                             BusinessId = 1,
-                            CityId = 1,
+                            CityId = 5,
                             ClosingTime = new TimeSpan(0, 22, 0, 0, 0),
                             Code = "MAIN",
-                            CountryId = 1,
-                            CreatedAt = new DateTime(2026, 6, 16, 6, 27, 3, 570, DateTimeKind.Utc).AddTicks(2708),
-                            Email = "main@restaurant.com",
+                            CountryId = 3,
+                            CreatedAt = new DateTime(2026, 6, 16, 15, 43, 46, 146, DateTimeKind.Utc).AddTicks(4665),
+                            CreatedBy = 1,
+                            Email = "info@akhsoft.com",
                             IsActive = true,
                             IsDeleted = false,
                             Name = "Main Branch",
                             OpeningTime = new TimeSpan(0, 11, 0, 0, 0),
-                            Phone = "+1234567890"
+                            Phone = "+923432998052"
                         });
                 });
 
@@ -361,17 +362,182 @@ namespace POSSystem.Infrastructure.Migrations
                         {
                             Id = 1,
                             Address = "123 Main Street",
-                            CreatedAt = new DateTime(2026, 6, 16, 6, 27, 3, 570, DateTimeKind.Utc).AddTicks(2364),
-                            Currency = "USD",
-                            Email = "owner@restaurant.com",
+                            CreatedAt = new DateTime(2026, 6, 16, 15, 43, 46, 146, DateTimeKind.Utc).AddTicks(3814),
+                            CreatedBy = 1,
+                            Currency = "PKR",
+                            Email = "info@akhsoft.com",
                             IsActive = true,
                             IsDeleted = false,
-                            LegalName = "Main Business Pvt Ltd",
-                            Name = "Main Business",
-                            Phone = "+1234567890",
+                            LegalName = "AKHSOFT",
+                            Name = "AKHSOFT",
+                            Phone = "+923432998052",
                             TaxNumber = "NTN-0001",
-                            TimeZone = "UTC"
+                            TimeZone = "Asia/Karachi"
                         });
+                });
+
+            modelBuilder.Entity("POSSystem.Domain.CashFlowTransaction", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("BranchId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("BusinessId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasColumnName("CreatedDate")
+                        .HasDefaultValueSql("GETUTCDATE()");
+
+                    b.Property<int?>("CreatedBy")
+                        .HasColumnType("int")
+                        .HasColumnName("CreatedById");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("UpdatedDate");
+
+                    b.Property<int?>("ModifiedBy")
+                        .HasColumnType("int")
+                        .HasColumnName("ModifiedById");
+
+                    b.Property<int>("PaymentMethod")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ReferenceId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ReferenceNo")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime>("TransactionDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("TransactionType")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BranchId")
+                        .HasDatabaseName("idx_cashflowtransactions_branchid");
+
+                    b.HasIndex("BusinessId")
+                        .HasDatabaseName("idx_cashflowtransactions_businessid");
+
+                    b.HasIndex("BusinessId", "BranchId")
+                        .HasDatabaseName("idx_cashflowtransactions_business_branch");
+
+                    b.HasIndex("BusinessId", "BranchId", "TransactionDate");
+
+                    b.HasIndex("BusinessId", "BranchId", "TransactionType");
+
+                    b.ToTable("CashFlowTransactions", (string)null);
+                });
+
+            modelBuilder.Entity("POSSystem.Domain.CashRegister", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal?>("ActualCash")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("BranchId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("BusinessId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.Property<DateTime?>("ClosedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("ClosedBy")
+                        .HasColumnType("int");
+
+                    b.Property<decimal?>("ClosingCash")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasColumnName("CreatedDate")
+                        .HasDefaultValueSql("GETUTCDATE()");
+
+                    b.Property<int?>("CreatedBy")
+                        .HasColumnType("int")
+                        .HasColumnName("CreatedById");
+
+                    b.Property<decimal?>("Difference")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal?>("ExpectedCash")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<bool>("IsClosed")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("UpdatedDate");
+
+                    b.Property<int?>("ModifiedBy")
+                        .HasColumnType("int")
+                        .HasColumnName("ModifiedById");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<decimal>("OpeningCash")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("RegisterDate")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BranchId")
+                        .HasDatabaseName("idx_cashregisters_branchid");
+
+                    b.HasIndex("BusinessId")
+                        .HasDatabaseName("idx_cashregisters_businessid");
+
+                    b.HasIndex("BusinessId", "BranchId")
+                        .HasDatabaseName("idx_cashregisters_business_branch");
+
+                    b.HasIndex("BusinessId", "BranchId", "RegisterDate")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.ToTable("CashRegisters", (string)null);
                 });
 
             modelBuilder.Entity("POSSystem.Domain.City", b =>
@@ -467,6 +633,46 @@ namespace POSSystem.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("POSSystem.Domain.CodeSequence", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("BranchId")
+                        .HasColumnType("int");
+
+                    b.Property<long>("LastNumber")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("LastResetDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ModuleName")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("Prefix")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<int>("ResetType")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ModuleName", "BranchId")
+                        .IsUnique()
+                        .HasDatabaseName("idx_codesequence_module_branch")
+                        .HasFilter("[BranchId] IS NOT NULL");
+
+                    b.ToTable("CodeSequences", (string)null);
+                });
+
             modelBuilder.Entity("POSSystem.Domain.Country", b =>
                 {
                     b.Property<int>("Id")
@@ -524,6 +730,96 @@ namespace POSSystem.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("POSSystem.Domain.Currency", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
+                    b.Property<decimal>("ExchangeRateToPKR")
+                        .HasColumnType("decimal(18,6)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsBase")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Symbol")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("idx_currency_code");
+
+                    b.ToTable("Currencies", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            Code = "PKR",
+                            ExchangeRateToPKR = 1m,
+                            IsActive = true,
+                            IsBase = true,
+                            Name = "Pakistani Rupee",
+                            Symbol = "₨"
+                        },
+                        new
+                        {
+                            Id = 2,
+                            Code = "USD",
+                            ExchangeRateToPKR = 278m,
+                            IsActive = true,
+                            IsBase = false,
+                            Name = "US Dollar",
+                            Symbol = "$"
+                        },
+                        new
+                        {
+                            Id = 3,
+                            Code = "GBP",
+                            ExchangeRateToPKR = 350m,
+                            IsActive = true,
+                            IsBase = false,
+                            Name = "British Pound",
+                            Symbol = "£"
+                        },
+                        new
+                        {
+                            Id = 4,
+                            Code = "AED",
+                            ExchangeRateToPKR = 75.7m,
+                            IsActive = true,
+                            IsBase = false,
+                            Name = "UAE Dirham",
+                            Symbol = "د.إ"
+                        },
+                        new
+                        {
+                            Id = 5,
+                            Code = "EUR",
+                            ExchangeRateToPKR = 300m,
+                            IsActive = true,
+                            IsBase = false,
+                            Name = "Euro",
+                            Symbol = "€"
+                        });
+                });
+
             modelBuilder.Entity("POSSystem.Domain.Customer", b =>
                 {
                     b.Property<int>("Id")
@@ -548,9 +844,11 @@ namespace POSSystem.Infrastructure.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
-                    b.Property<string>("City")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
+                    b.Property<int?>("CityId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("CountryId")
+                        .HasColumnType("int");
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
@@ -617,8 +915,19 @@ namespace POSSystem.Infrastructure.Migrations
                     b.HasIndex("BusinessId")
                         .HasDatabaseName("idx_customers_businessid");
 
+                    b.HasIndex("CityId")
+                        .HasDatabaseName("idx_customer_cityid");
+
+                    b.HasIndex("CountryId")
+                        .HasDatabaseName("idx_customer_countryid");
+
                     b.HasIndex("BusinessId", "BranchId")
                         .HasDatabaseName("idx_customers_business_branch");
+
+                    b.HasIndex("BusinessId", "BranchId", "CustomerCode")
+                        .IsUnique()
+                        .HasDatabaseName("idx_customer_branch_code")
+                        .HasFilter("[CustomerCode] <> '' AND [IsDeleted] = 0");
 
                     b.HasIndex("BusinessId", "BranchId", "IsWalkIn")
                         .HasDatabaseName("idx_customer_walkin");
@@ -629,6 +938,156 @@ namespace POSSystem.Infrastructure.Migrations
                         .HasFilter("[Phone] IS NOT NULL AND [IsDeleted] = 0");
 
                     b.ToTable("Customers");
+                });
+
+            modelBuilder.Entity("POSSystem.Domain.Expense", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("BranchId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("BusinessId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasColumnName("CreatedDate")
+                        .HasDefaultValueSql("GETUTCDATE()");
+
+                    b.Property<int?>("CreatedBy")
+                        .HasColumnType("int")
+                        .HasColumnName("CreatedById");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("ExpenseCategoryId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("ExpenseDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("UpdatedDate");
+
+                    b.Property<int?>("ModifiedBy")
+                        .HasColumnType("int")
+                        .HasColumnName("ModifiedById");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("PaymentMethod")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ReferenceNo")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BranchId")
+                        .HasDatabaseName("idx_expenses_branchid");
+
+                    b.HasIndex("BusinessId")
+                        .HasDatabaseName("idx_expenses_businessid");
+
+                    b.HasIndex("ExpenseCategoryId");
+
+                    b.HasIndex("BusinessId", "BranchId")
+                        .HasDatabaseName("idx_expenses_business_branch");
+
+                    b.HasIndex("BusinessId", "BranchId", "ExpenseCategoryId");
+
+                    b.HasIndex("BusinessId", "BranchId", "ExpenseDate");
+
+                    b.ToTable("Expenses", (string)null);
+                });
+
+            modelBuilder.Entity("POSSystem.Domain.ExpenseCategory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("BranchId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("BusinessId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasColumnName("CreatedDate")
+                        .HasDefaultValueSql("GETUTCDATE()");
+
+                    b.Property<int?>("CreatedBy")
+                        .HasColumnType("int")
+                        .HasColumnName("CreatedById");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("UpdatedDate");
+
+                    b.Property<int?>("ModifiedBy")
+                        .HasColumnType("int")
+                        .HasColumnName("ModifiedById");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<bool>("Status")
+                        .HasColumnType("bit");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BranchId")
+                        .HasDatabaseName("idx_expensecategories_branchid");
+
+                    b.HasIndex("BusinessId")
+                        .HasDatabaseName("idx_expensecategories_businessid");
+
+                    b.HasIndex("BusinessId", "BranchId")
+                        .HasDatabaseName("idx_expensecategories_business_branch");
+
+                    b.HasIndex("BusinessId", "BranchId", "Name")
+                        .IsUnique()
+                        .HasDatabaseName("idx_expensecategory_branch_name")
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.ToTable("ExpenseCategories", (string)null);
                 });
 
             modelBuilder.Entity("POSSystem.Domain.InventoryItem", b =>
@@ -1197,6 +1656,57 @@ namespace POSSystem.Infrastructure.Migrations
                     b.ToTable("MenuItemVariants");
                 });
 
+            modelBuilder.Entity("POSSystem.Domain.ModuleForm", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("FormCode")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("FormName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("ModuleId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Route")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedDate")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FormCode")
+                        .IsUnique()
+                        .HasDatabaseName("idx_module_form_code");
+
+                    b.HasIndex("ModuleId");
+
+                    b.ToTable("ModuleForms", (string)null);
+                });
+
             modelBuilder.Entity("POSSystem.Domain.Order", b =>
                 {
                     b.Property<int>("Id")
@@ -1479,6 +1989,10 @@ namespace POSSystem.Infrastructure.Migrations
                     b.Property<int>("DisplayOrder")
                         .HasColumnType("int");
 
+                    b.Property<string>("Icon")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
 
@@ -1498,6 +2012,10 @@ namespace POSSystem.Infrastructure.Migrations
                     b.Property<int?>("ParentModuleId")
                         .HasColumnType("int");
 
+                    b.Property<string>("Route")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
                     b.Property<DateTime?>("UpdatedDate")
                         .HasColumnType("datetime2");
 
@@ -1505,7 +2023,8 @@ namespace POSSystem.Infrastructure.Migrations
 
                     b.HasIndex("ModuleKey")
                         .IsUnique()
-                        .HasDatabaseName("idx_module_key");
+                        .HasDatabaseName("idx_module_key")
+                        .HasFilter("[ModuleKey] <> '' AND [IsDeleted] = 0");
 
                     b.HasIndex("ParentModuleId");
 
@@ -2336,6 +2855,52 @@ namespace POSSystem.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("POSSystem.Domain.RoleFormPermission", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("CanCreate")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("CanDelete")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("CanEdit")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("CanView")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime>("CreatedDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("FormId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("RoleId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedDate")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FormId");
+
+                    b.HasIndex("RoleId", "FormId")
+                        .IsUnique()
+                        .HasDatabaseName("idx_role_form_permission");
+
+                    b.ToTable("RoleFormPermissions", (string)null);
+                });
+
             modelBuilder.Entity("POSSystem.Domain.RolePermission", b =>
                 {
                     b.Property<int>("Id")
@@ -2897,6 +3462,11 @@ namespace POSSystem.Infrastructure.Migrations
                     b.HasIndex("BranchId", "CategoryId")
                         .HasDatabaseName("idx_subcategory_branch_category");
 
+                    b.HasIndex("BranchId", "Code")
+                        .IsUnique()
+                        .HasDatabaseName("idx_subcategory_branch_code")
+                        .HasFilter("[Code] IS NOT NULL AND [Code] <> '' AND [IsDeleted] = 0");
+
                     b.HasIndex("BusinessId", "BranchId")
                         .HasDatabaseName("idx_subcategories_business_branch");
 
@@ -2974,6 +3544,11 @@ namespace POSSystem.Infrastructure.Migrations
                         .HasMaxLength(30)
                         .HasColumnType("nvarchar(30)");
 
+                    b.Property<string>("SupplierCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
                     b.Property<string>("TaxNumber")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -2992,6 +3567,11 @@ namespace POSSystem.Infrastructure.Migrations
 
                     b.HasIndex("BusinessId", "BranchId", "Name")
                         .HasDatabaseName("idx_supplier_business_branch_name");
+
+                    b.HasIndex("BusinessId", "BranchId", "SupplierCode")
+                        .IsUnique()
+                        .HasDatabaseName("idx_supplier_branch_code")
+                        .HasFilter("[SupplierCode] <> '' AND [IsDeleted] = 0");
 
                     b.ToTable("Suppliers", (string)null);
                 });
@@ -3177,20 +3757,21 @@ namespace POSSystem.Infrastructure.Migrations
                         new
                         {
                             Id = 1,
-                            BranchId = 0,
+                            BranchId = 1,
                             BusinessId = 1,
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Email = "admin@restaurant.com",
-                            FullName = "System Administrator",
+                            CreatedBy = 1,
+                            Email = "info@infoakhsoft.com",
+                            FullName = "Muhammad Akmal",
                             IsActive = true,
                             IsDeleted = false,
-                            PasswordHash = "$2a$11$QvHz8.HeIU5ThFqjVPVVe.sTuKqDQI6R0nrPz/Z8KqK8qXyxi3H7O",
-                            Phone = "+1234567890",
+                            PasswordHash = "$2a$11$W7Mi6nl3DiHePG3yDxDRv.VuEY5uE2Jfa2VizDS.h78g1bjFEYuuu",
+                            Phone = "+923432998052",
                             RoleId = 1,
                             Salary = 0m,
                             ShiftType = 4,
                             Status = 0,
-                            Username = "admin"
+                            Username = "makmal"
                         });
                 });
 
@@ -3316,10 +3897,62 @@ namespace POSSystem.Infrastructure.Migrations
                     b.Navigation("Branch");
                 });
 
+            modelBuilder.Entity("POSSystem.Domain.CashFlowTransaction", b =>
+                {
+                    b.HasOne("POSSystem.Domain.Branch", "Branch")
+                        .WithMany()
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Branch");
+                });
+
+            modelBuilder.Entity("POSSystem.Domain.CashRegister", b =>
+                {
+                    b.HasOne("POSSystem.Domain.Branch", "Branch")
+                        .WithMany()
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Branch");
+                });
+
             modelBuilder.Entity("POSSystem.Domain.Customer", b =>
                 {
                     b.HasOne("POSSystem.Domain.Branch", "Branch")
                         .WithMany("Customers")
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Branch");
+                });
+
+            modelBuilder.Entity("POSSystem.Domain.Expense", b =>
+                {
+                    b.HasOne("POSSystem.Domain.Branch", "Branch")
+                        .WithMany()
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("POSSystem.Domain.ExpenseCategory", "ExpenseCategory")
+                        .WithMany()
+                        .HasForeignKey("ExpenseCategoryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Branch");
+
+                    b.Navigation("ExpenseCategory");
+                });
+
+            modelBuilder.Entity("POSSystem.Domain.ExpenseCategory", b =>
+                {
+                    b.HasOne("POSSystem.Domain.Branch", "Branch")
+                        .WithMany()
                         .HasForeignKey("BranchId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
@@ -3422,6 +4055,17 @@ namespace POSSystem.Infrastructure.Migrations
                     b.Navigation("Branch");
 
                     b.Navigation("MenuItem");
+                });
+
+            modelBuilder.Entity("POSSystem.Domain.ModuleForm", b =>
+                {
+                    b.HasOne("POSSystem.Domain.PermissionModule", "Module")
+                        .WithMany("Forms")
+                        .HasForeignKey("ModuleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Module");
                 });
 
             modelBuilder.Entity("POSSystem.Domain.Order", b =>
@@ -3697,6 +4341,25 @@ namespace POSSystem.Infrastructure.Migrations
                     b.Navigation("Ingredient");
 
                     b.Navigation("MenuItem");
+                });
+
+            modelBuilder.Entity("POSSystem.Domain.RoleFormPermission", b =>
+                {
+                    b.HasOne("POSSystem.Domain.ModuleForm", "Form")
+                        .WithMany("RoleFormPermissions")
+                        .HasForeignKey("FormId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("POSSystem.Domain.Role", "Role")
+                        .WithMany()
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Form");
+
+                    b.Navigation("Role");
                 });
 
             modelBuilder.Entity("POSSystem.Domain.RolePermission", b =>
@@ -4000,6 +4663,11 @@ namespace POSSystem.Infrastructure.Migrations
                     b.Navigation("Variants");
                 });
 
+            modelBuilder.Entity("POSSystem.Domain.ModuleForm", b =>
+                {
+                    b.Navigation("RoleFormPermissions");
+                });
+
             modelBuilder.Entity("POSSystem.Domain.Order", b =>
                 {
                     b.Navigation("OrderItems");
@@ -4010,6 +4678,8 @@ namespace POSSystem.Infrastructure.Migrations
             modelBuilder.Entity("POSSystem.Domain.PermissionModule", b =>
                 {
                     b.Navigation("ChildModules");
+
+                    b.Navigation("Forms");
 
                     b.Navigation("RolePermissions");
                 });

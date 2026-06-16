@@ -6,6 +6,35 @@ namespace POSSystem.Infrastructure.Data;
 
 public static class PermissionModuleDatabaseInitializer
 {
+    private const string EnsureModuleKeyIndexSql = """
+        IF OBJECT_ID(N'[dbo].[Modules]', N'U') IS NOT NULL
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM sys.indexes
+                WHERE [name] = N'idx_module_key' AND [object_id] = OBJECT_ID(N'[dbo].[Modules]')
+                  AND [has_filter] = 0)
+                DROP INDEX [idx_module_key] ON [dbo].[Modules];
+
+            IF NOT EXISTS (
+                SELECT 1 FROM sys.indexes
+                WHERE [name] = N'idx_module_key' AND [object_id] = OBJECT_ID(N'[dbo].[Modules]'))
+                CREATE UNIQUE INDEX [idx_module_key] ON [dbo].[Modules]([ModuleKey])
+                    WHERE [ModuleKey] <> '' AND [IsDeleted] = 0;
+        END
+        """;
+
+    private static async Task EnsureModuleKeyIndexAsync(POSDbContext context, ILogger logger)
+    {
+        try
+        {
+            await context.Database.ExecuteSqlRawAsync(EnsureModuleKeyIndexSql);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to ensure filtered ModuleKey index.");
+        }
+    }
+
     public static async Task EnsureSchemaAsync(POSDbContext context, ILogger logger)
     {
         var batches = new[]
@@ -99,6 +128,7 @@ public static class PermissionModuleDatabaseInitializer
             }
         }
 
+        await EnsureModuleKeyIndexAsync(context, logger);
         await PermissionModuleSeeder.SeedDefaultModulesAsync(context, logger);
     }
 }
@@ -135,7 +165,7 @@ public static class PermissionModuleSeeder
 
         // User & Role Management
         new("Users", PermissionModules.Users, "User & Role Management", 1, "/users", "U"),
-        new("Roles & Permissions", PermissionModules.Roles, "User & Role Management", 2, "/roles", "R"),
+        new("User Roles", PermissionModules.Roles, "User & Role Management", 2, "/roles", "R"),
 
         // Product Management
         new("Categories", PermissionModules.Categories, "Product Management", 1, "/categories", "C"),
@@ -162,7 +192,9 @@ public static class PermissionModuleSeeder
 
         // Finance
         new("Expenses", PermissionModules.Expenses, "Finance", 1, "/expenses", "Exp"),
-        new("Cash Flow", PermissionModules.CashFlow, "Finance", 2, "/cashflow", "CF"),
+        new("Cash Dashboard", PermissionModules.CashFlow, "Finance", 2, "/cashflow", "CF"),
+        new("Cash Ledger", "CashFlow.Ledger", "Finance", 3, "/cashflow/ledger", "CFL"),
+        new("Cash Summary", "CashFlow.Summary", "Finance", 4, "/cashflow/summary", "CFS"),
 
         // Reports
         new("Sales Reports", PermissionModules.SalesReports, "Reports", 1, "/reports", "Rp"),
@@ -171,6 +203,7 @@ public static class PermissionModuleSeeder
 
         // Settings
         new("System Settings", PermissionModules.SystemSettings, "Settings", 1, "/settings", "Set"),
+        new("Code Sequences", PermissionModules.CodeSequences, "Settings", 2, "/settings/code-sequences", "CS"),
     ];
 
     public static async Task SeedDefaultModulesAsync(POSDbContext context, ILogger logger)
@@ -203,7 +236,8 @@ public static class PermissionModuleSeeder
         {
             "Catalog", "Operations", "Accounts", "Administration",
             "Master Data", "Menu", "Inventory", "Purchase", "POS Billing",
-            "Reports", "Orders", "Taxes", "Discounts"
+            "Reports", "Orders", "Taxes", "Discounts",
+            "Record Transaction"
         };
 
         try
@@ -275,6 +309,12 @@ public static class PermissionModuleSeeder
         }
         catch (Exception ex)
         {
+            foreach (var entry in context.ChangeTracker.Entries<Domain.PermissionModule>()
+                         .Where(e => e.State == EntityState.Added))
+            {
+                entry.State = EntityState.Detached;
+            }
+
             logger.LogWarning(ex, "Failed to seed module {ModuleName}", module.ModuleName);
             return 0;
         }

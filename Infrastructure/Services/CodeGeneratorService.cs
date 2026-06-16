@@ -1,4 +1,3 @@
-using System.Data;
 using Microsoft.EntityFrameworkCore;
 using POSSystem.Application.Common.Constants;
 using POSSystem.Application.Common.Interfaces;
@@ -27,11 +26,42 @@ public class CodeGeneratorService : ICodeGeneratorService
 
     public CodeGeneratorService(POSDbContext context) => _context = context;
 
+    /// <summary>
+    /// Reserves the next code by updating the tracked sequence entity.
+    /// Does not call SaveChanges — the caller must persist in the same unit of work.
+    /// </summary>
     public Task<string> GenerateAsync(string moduleName, int? branchId = null, CancellationToken cancellationToken = default)
         => NextCodeAsync(moduleName, branchId, increment: true, cancellationToken);
 
+    /// <summary>Read-only preview of the next code; never writes to the database.</summary>
     public Task<string> PreviewAsync(string moduleName, int? branchId = null, CancellationToken cancellationToken = default)
         => NextCodeAsync(moduleName, branchId, increment: false, cancellationToken);
+
+    public async Task<string> ResolveAsync(
+        string moduleName,
+        int? branchId,
+        string? requestedCode,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(requestedCode))
+            return await GenerateAsync(moduleName, branchId, cancellationToken);
+
+        var code = requestedCode.Trim();
+        var preview = await PreviewAsync(moduleName, branchId, cancellationToken);
+        if (string.Equals(code, preview, StringComparison.OrdinalIgnoreCase))
+            return await GenerateAsync(moduleName, branchId, cancellationToken);
+
+        if (!ModuleConfigs.TryGetValue(moduleName, out var config))
+            throw new InvalidOperationException($"Unknown code module '{moduleName}'.");
+
+        if (TryParseSequenceNumber(moduleName, code, config, out var parsedNumber)
+            && IsCodeInActivePeriod(moduleName, code))
+        {
+            await SyncSequenceToNumberAsync(moduleName, branchId, config, parsedNumber, cancellationToken);
+        }
+
+        return code;
+    }
 
     public async Task<string> GenerateBarcodeAsync(int businessId, int branchId, CancellationToken cancellationToken = default)
     {
@@ -63,13 +93,73 @@ public class CodeGeneratorService : ICodeGeneratorService
         else if (!branchId.HasValue || branchId.Value <= 0)
             throw new InvalidOperationException($"BranchId is required for module '{moduleName}'.");
 
-        await using var transaction = await _context.Database.BeginTransactionAsync(
-            IsolationLevel.Serializable, cancellationToken);
+        if (increment)
+        {
+            var sequence = await GetOrCreateSequenceForUpdateAsync(moduleName, branchId, config, cancellationToken);
+            ApplyResetIfNeeded(sequence, config.ResetType);
 
-        var sequence = await _context.CodeSequences
+            var nextNumber = sequence.LastNumber + 1;
+            sequence.LastNumber = nextNumber;
+            sequence.LastResetDate = DateTime.UtcNow;
+
+            return FormatCode(moduleName, config, nextNumber);
+        }
+
+        var effectiveLastNumber = await GetEffectiveLastNumberAsync(moduleName, branchId, config, cancellationToken);
+        return FormatCode(moduleName, config, effectiveLastNumber + 1);
+    }
+
+    private async Task<long> GetEffectiveLastNumberAsync(
+        string moduleName,
+        int? branchId,
+        ModuleConfig config,
+        CancellationToken cancellationToken)
+    {
+        var previewSequence = await _context.CodeSequences
+            .AsNoTracking()
             .FirstOrDefaultAsync(
                 s => s.ModuleName == moduleName && s.BranchId == branchId,
                 cancellationToken);
+
+        var maxFromData = await GetMaxUsedNumberFromDataAsync(moduleName, branchId, config, cancellationToken);
+
+        if (previewSequence == null)
+            return maxFromData;
+
+        var effective = new CodeSequence
+        {
+            LastNumber = Math.Max(previewSequence.LastNumber, maxFromData),
+            LastResetDate = previewSequence.LastResetDate,
+            ResetType = previewSequence.ResetType
+        };
+        ApplyResetIfNeeded(effective, config.ResetType);
+        return effective.LastNumber;
+    }
+
+    private async Task<CodeSequence> GetOrCreateSequenceForUpdateAsync(
+        string moduleName,
+        int? branchId,
+        ModuleConfig config,
+        CancellationToken cancellationToken)
+    {
+        CodeSequence? sequence;
+
+        if (branchId == null)
+        {
+            sequence = await _context.CodeSequences
+                .FromSqlInterpolated(
+                    $@"SELECT * FROM CodeSequences WITH (UPDLOCK, HOLDLOCK)
+                       WHERE ModuleName = {moduleName} AND BranchId IS NULL")
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+        else
+        {
+            sequence = await _context.CodeSequences
+                .FromSqlInterpolated(
+                    $@"SELECT * FROM CodeSequences WITH (UPDLOCK, HOLDLOCK)
+                       WHERE ModuleName = {moduleName} AND BranchId = {branchId.Value}")
+                .FirstOrDefaultAsync(cancellationToken);
+        }
 
         if (sequence == null)
         {
@@ -83,23 +173,165 @@ public class CodeGeneratorService : ICodeGeneratorService
                 LastResetDate = DateTime.UtcNow
             };
             _context.CodeSequences.Add(sequence);
-            await _context.SaveChangesAsync(cancellationToken);
         }
 
+        await ReconcileSequenceWithExistingDataAsync(sequence, moduleName, branchId, config, cancellationToken);
+        return sequence;
+    }
+
+    private async Task ReconcileSequenceWithExistingDataAsync(
+        CodeSequence sequence,
+        string moduleName,
+        int? branchId,
+        ModuleConfig config,
+        CancellationToken cancellationToken)
+    {
+        var maxFromData = await GetMaxUsedNumberFromDataAsync(moduleName, branchId, config, cancellationToken);
+        if (maxFromData > sequence.LastNumber)
+        {
+            sequence.LastNumber = maxFromData;
+            sequence.LastResetDate = DateTime.UtcNow;
+        }
+    }
+
+    private async Task<long> GetMaxUsedNumberFromDataAsync(
+        string moduleName,
+        int? branchId,
+        ModuleConfig config,
+        CancellationToken cancellationToken)
+    {
+        var numberStart = config.Prefix.Length + 2;
+        var padLength = config.PadLength;
+        var now = DateTime.UtcNow;
+
+        FormattableString sql = moduleName switch
+        {
+            CodeModuleNames.Branch =>
+                $"""
+                 SELECT ISNULL(MAX(TRY_CAST(SUBSTRING([Code], {numberStart}, 20) AS bigint)), CAST(0 AS bigint))
+                 FROM [Branches]
+                 WHERE [IsDeleted] = 0 AND [Code] LIKE {config.Prefix + "-%"}
+                 """,
+
+            CodeModuleNames.Category =>
+                $"""
+                 SELECT ISNULL(MAX(TRY_CAST(SUBSTRING([Code], {numberStart}, 20) AS bigint)), CAST(0 AS bigint))
+                 FROM [MenuCategories]
+                 WHERE [IsDeleted] = 0 AND [BranchId] = {branchId!.Value} AND [Code] LIKE {config.Prefix + "-%"}
+                 """,
+
+            CodeModuleNames.SubCategory =>
+                $"""
+                 SELECT ISNULL(MAX(TRY_CAST(SUBSTRING([Code], {numberStart}, 20) AS bigint)), CAST(0 AS bigint))
+                 FROM [SubCategories]
+                 WHERE [IsDeleted] = 0 AND [BranchId] = {branchId!.Value} AND [Code] LIKE {config.Prefix + "-%"}
+                 """,
+
+            CodeModuleNames.Product =>
+                $"""
+                 SELECT ISNULL(MAX(TRY_CAST(SUBSTRING([ProductCode], {numberStart}, 20) AS bigint)), CAST(0 AS bigint))
+                 FROM [Products]
+                 WHERE [IsDeleted] = 0 AND [BranchId] = {branchId!.Value} AND [ProductCode] LIKE {config.Prefix + "-%"}
+                 """,
+
+            CodeModuleNames.Customer =>
+                $"""
+                 SELECT ISNULL(MAX(TRY_CAST(SUBSTRING([CustomerCode], {numberStart}, 20) AS bigint)), CAST(0 AS bigint))
+                 FROM [Customers]
+                 WHERE [IsDeleted] = 0 AND [IsWalkIn] = 0 AND [BranchId] = {branchId!.Value}
+                   AND [CustomerCode] LIKE {config.Prefix + "-%"}
+                 """,
+
+            CodeModuleNames.Supplier =>
+                $"""
+                 SELECT ISNULL(MAX(TRY_CAST(SUBSTRING([SupplierCode], {numberStart}, 20) AS bigint)), CAST(0 AS bigint))
+                 FROM [Suppliers]
+                 WHERE [IsDeleted] = 0 AND [BranchId] = {branchId!.Value} AND [SupplierCode] LIKE {config.Prefix + "-%"}
+                 """,
+
+            CodeModuleNames.Purchase =>
+                $"""
+                 SELECT ISNULL(MAX(TRY_CAST(RIGHT([InvoiceNo], {padLength}) AS bigint)), CAST(0 AS bigint))
+                 FROM [Purchases]
+                 WHERE [IsDeleted] = 0 AND [BranchId] = {branchId!.Value}
+                   AND [InvoiceNo] LIKE {$"{config.Prefix}-{now:yyyyMM}-%"}
+                 """,
+
+            CodeModuleNames.SalesInvoice =>
+                $"""
+                 SELECT ISNULL(MAX(TRY_CAST(RIGHT([InvoiceNo], {padLength}) AS bigint)), CAST(0 AS bigint))
+                 FROM [SaleInvoices]
+                 WHERE [IsDeleted] = 0 AND [BranchId] = {branchId!.Value}
+                   AND [InvoiceNo] LIKE {$"{config.Prefix}-{now:yyyyMMdd}-%"}
+                 """,
+
+            _ => throw new InvalidOperationException($"Unknown code module '{moduleName}'.")
+        };
+
+        return await _context.Database.SqlQuery<long>(sql).SingleAsync(cancellationToken);
+    }
+
+    private async Task SyncSequenceToNumberAsync(
+        string moduleName,
+        int? branchId,
+        ModuleConfig config,
+        long parsedNumber,
+        CancellationToken cancellationToken)
+    {
+        if (parsedNumber <= 0)
+            return;
+
+        if (config.IsGlobal)
+            branchId = null;
+        else if (!branchId.HasValue || branchId.Value <= 0)
+            throw new InvalidOperationException($"BranchId is required for module '{moduleName}'.");
+
+        var sequence = await GetOrCreateSequenceForUpdateAsync(moduleName, branchId, config, cancellationToken);
         ApplyResetIfNeeded(sequence, config.ResetType);
 
-        var nextNumber = sequence.LastNumber + 1;
-        var formatted = FormatCode(moduleName, config, nextNumber);
-
-        if (increment)
+        if (parsedNumber > sequence.LastNumber)
         {
-            sequence.LastNumber = nextNumber;
+            sequence.LastNumber = parsedNumber;
             sequence.LastResetDate = DateTime.UtcNow;
-            await _context.SaveChangesAsync(cancellationToken);
         }
+    }
 
-        await transaction.CommitAsync(cancellationToken);
-        return formatted;
+    private static bool TryParseSequenceNumber(string moduleName, string code, ModuleConfig config, out long number)
+    {
+        number = 0;
+        if (string.IsNullOrWhiteSpace(code))
+            return false;
+
+        var parts = code.Split('-', StringSplitOptions.TrimEntries);
+
+        return moduleName switch
+        {
+            CodeModuleNames.Purchase when parts.Length == 3
+                && parts[0].Equals(config.Prefix, StringComparison.OrdinalIgnoreCase)
+                && long.TryParse(parts[2], out number) => true,
+            CodeModuleNames.SalesInvoice when parts.Length == 3
+                && parts[0].Equals(config.Prefix, StringComparison.OrdinalIgnoreCase)
+                && long.TryParse(parts[2], out number) => true,
+            _ when parts.Length == 2
+                && parts[0].Equals(config.Prefix, StringComparison.OrdinalIgnoreCase)
+                && long.TryParse(parts[1], out number) => true,
+            _ => false
+        };
+    }
+
+    private static bool IsCodeInActivePeriod(string moduleName, string code)
+    {
+        var parts = code.Split('-', StringSplitOptions.TrimEntries);
+        var now = DateTime.UtcNow;
+
+        return moduleName switch
+        {
+            CodeModuleNames.Purchase when parts.Length == 3
+                => parts[1] == now.ToString("yyyyMM"),
+            CodeModuleNames.SalesInvoice when parts.Length == 3
+                => parts[1] == now.ToString("yyyyMMdd"),
+            _ => true
+        };
     }
 
     private static void ApplyResetIfNeeded(CodeSequence sequence, CodeResetType resetType)
@@ -140,7 +372,6 @@ public class CodeGeneratorService : ICodeGeneratorService
 
     private static string GenerateEan13()
     {
-        // Prefix 20 = internal/store use range (avoids real manufacturer EAN conflicts)
         var digits = new int[12];
         digits[0] = 2;
         digits[1] = 0;

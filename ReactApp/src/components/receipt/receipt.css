@@ -119,6 +119,41 @@
   gap: 0.5rem;
 }
 
+.receipt-meta-row--invoice-date {
+  align-items: baseline;
+  gap: 0.35rem;
+}
+
+.receipt-meta-pair {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.receipt-meta-pair .receipt-meta-value {
+  white-space: nowrap;
+}
+
+.receipt-print--thermal .receipt-meta-row--invoice-date {
+  font-size: 0.88em;
+}
+
+.receipt-meta-row--invoice-date .receipt-meta-pair:first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.receipt-meta-row--invoice-date .receipt-meta-pair:first-child .receipt-meta-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.receipt-meta-row--invoice-date .receipt-meta-pair:last-child {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
 .receipt-meta-label {
   color: var(--receipt-muted);
   flex-shrink: 0;
@@ -443,9 +478,22 @@
     background: #fff !important;
   }
 
-  .receipt-no-print,
-  .receipt-modal-backdrop {
+  .receipt-no-print {
     display: none !important;
+  }
+
+  .receipt-modal-backdrop {
+    display: block !important;
+    position: absolute !important;
+    inset: auto !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    padding: 0 !important;
+    z-index: auto !important;
   }
 
   .receipt-print--thermal {

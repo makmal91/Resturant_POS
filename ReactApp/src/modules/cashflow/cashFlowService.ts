@@ -82,6 +82,9 @@ export interface LedgerResponse {
   totalPages: number;
   currentPage: number;
   pageSize: number;
+  totalIn: number;
+  totalOut: number;
+  netTotal: number;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

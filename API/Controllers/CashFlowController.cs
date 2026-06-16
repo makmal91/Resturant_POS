@@ -127,11 +127,14 @@ public class CashFlowController : ControllerBase
         var result = await _cashFlowService.GetLedgerAsync(filter);
         return Ok(new
         {
-            transactions = result.Data,
+            transactions = result.Transactions,
             totalRecords = result.TotalRecords,
             totalPages   = result.TotalPages,
             currentPage  = result.CurrentPage,
-            pageSize,
+            pageSize     = result.PageSize,
+            totalIn      = result.TotalIn,
+            totalOut     = result.TotalOut,
+            netTotal     = result.NetTotal,
         });
     }
 

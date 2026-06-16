@@ -23,7 +23,7 @@ public static class NavigationMenuSeeder
         new("Businesses", "/businesses", "B", "Businesses", "Master Data", 1),
         new("Branches", "/branches", "Br", "Branches", "Master Data", 2),
         new("Users", "/users", "U", "Users", "Master Data", 3),
-        new("Roles", "/roles", "R", "Roles", "Master Data", 4),
+        new("User Roles", "/roles", "R", "Roles", "Master Data", 4),
         new("Menu", "/menu", "M", "Menu", "Master Data", 5),
         new("Categories", "/categories", "C", "Categories", "Master Data", 6),
         new("SubCategories", "/subcategories", "SC", "SubCategories", "Master Data", 7),
@@ -98,6 +98,14 @@ public static class NavigationMenuSeeder
     {
         var patches = new List<Task>
         {
+            ExecuteRawSeedAsync(
+                context,
+                logger,
+                "Hide Record Transaction menu",
+                """
+                UPDATE [Menus] SET [IsActive] = 0
+                WHERE [Route] = N'/cashflow/transaction';
+                """),
             ExecuteRawSeedAsync(
                 context,
                 logger,

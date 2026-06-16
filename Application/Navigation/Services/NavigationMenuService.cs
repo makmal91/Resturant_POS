@@ -1,4 +1,5 @@
 using POSSystem.Application.Auth.Interfaces;
+using POSSystem.Application.Common.Constants;
 using POSSystem.Application.Navigation.DTOs;
 using POSSystem.Application.Navigation.Interfaces;
 using POSSystem.Application.Modules.Interfaces;
@@ -84,6 +85,12 @@ public class NavigationMenuService : INavigationMenuService
             return true;
 
         if (viewableNames.Contains(module.ModuleName))
+            return true;
+
+        // Cash flow sub-pages share the main Cash Flow permission.
+        if (!string.IsNullOrWhiteSpace(module.ModuleKey) &&
+            module.ModuleKey.StartsWith("CashFlow.", StringComparison.OrdinalIgnoreCase) &&
+            viewableNames.Contains(PermissionModules.CashFlow))
             return true;
 
         return false;

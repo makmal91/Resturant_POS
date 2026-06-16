@@ -228,21 +228,11 @@ public class MenuService : IMenuService
         }
     }
 
-    private async Task<string> ResolveCategoryCodeAsync(string? requestedCode, int branchId)
-    {
-        if (string.IsNullOrWhiteSpace(requestedCode))
-            return await _codeGenerator.GenerateAsync(CodeModuleNames.Category, branchId);
+    private Task<string> ResolveCategoryCodeAsync(string? requestedCode, int branchId)
+        => _codeGenerator.ResolveAsync(CodeModuleNames.Category, branchId, requestedCode);
 
-        return requestedCode.Trim();
-    }
-
-    private async Task<string> ResolveSubCategoryCodeAsync(string? requestedCode, int branchId)
-    {
-        if (string.IsNullOrWhiteSpace(requestedCode))
-            return await _codeGenerator.GenerateAsync(CodeModuleNames.SubCategory, branchId);
-
-        return requestedCode.Trim();
-    }
+    private Task<string> ResolveSubCategoryCodeAsync(string? requestedCode, int branchId)
+        => _codeGenerator.ResolveAsync(CodeModuleNames.SubCategory, branchId, requestedCode);
 
     private static void ApplyCreateDtoToCategory(MenuCategory category, CreateMenuCategoryDto dto, string resolvedCode)
     {
@@ -288,6 +278,24 @@ public class MenuService : IMenuService
         var message = exception.InnerException?.Message ?? exception.Message;
         return message.Contains("duplicate key", StringComparison.OrdinalIgnoreCase)
             || message.Contains("2601", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string MapCategoryDuplicateKeyMessage(Exception exception)
+    {
+        var message = exception.InnerException?.Message ?? exception.Message;
+        if (message.Contains("idx_menucategory_branch_code", StringComparison.OrdinalIgnoreCase))
+            return "Category code must be unique per branch.";
+
+        return "Category name must be unique per branch.";
+    }
+
+    private static string MapSubCategoryDuplicateKeyMessage(Exception exception)
+    {
+        var message = exception.InnerException?.Message ?? exception.Message;
+        if (message.Contains("idx_subcategory_branch_code", StringComparison.OrdinalIgnoreCase))
+            return "SubCategory code must be unique per branch.";
+
+        return "SubCategory name must be unique within the selected category.";
     }
 
     private async Task<MenuCategory> ValidateSubCategoryContextAsync(int categoryId, int businessId, int branchId)
@@ -384,6 +392,9 @@ public class MenuService : IMenuService
         await ValidateCategoryInputAsync(dto.Name, dto.Code, dto.BusinessId, dto.BranchId);
 
         var resolvedCode = await ResolveCategoryCodeAsync(dto.Code, dto.BranchId);
+        if (await _repository.CategoryCodeExistsAsync(resolvedCode, dto.BusinessId, dto.BranchId))
+            throw new InvalidOperationException("Category code must be unique per branch.");
+
         var hasUploadedImage = imageBytes != null && imageBytes.Length > 0;
 
         var archivedCategory = await _repository.GetCategoryByNameAsync(dto.Name, dto.BusinessId, dto.BranchId);
@@ -399,7 +410,7 @@ public class MenuService : IMenuService
             }
             catch (Exception ex) when (IsDuplicateKeyException(ex))
             {
-                throw new InvalidOperationException("Category name must be unique per branch.");
+                throw new InvalidOperationException(MapCategoryDuplicateKeyMessage(ex));
             }
 
             _cache.Remove(GetPosMenuCacheKey(dto.BusinessId, dto.BranchId));
@@ -418,7 +429,7 @@ public class MenuService : IMenuService
         }
         catch (Exception ex) when (IsDuplicateKeyException(ex))
         {
-            throw new InvalidOperationException("Category name must be unique per branch.");
+            throw new InvalidOperationException(MapCategoryDuplicateKeyMessage(ex));
         }
 
         _cache.Remove(GetPosMenuCacheKey(dto.BusinessId, dto.BranchId));
@@ -470,7 +481,7 @@ public class MenuService : IMenuService
         }
         catch (Exception ex) when (IsDuplicateKeyException(ex))
         {
-            throw new InvalidOperationException("Category name must be unique per branch.");
+            throw new InvalidOperationException(MapCategoryDuplicateKeyMessage(ex));
         }
 
         _cache.Remove(GetPosMenuCacheKey(dto.BusinessId, dto.BranchId));
@@ -589,6 +600,8 @@ public class MenuService : IMenuService
             throw new InvalidOperationException("SubCategory code must be unique per branch.");
 
         var resolvedCode = await ResolveSubCategoryCodeAsync(dto.Code, dto.BranchId);
+        if (await _repository.SubCategoryCodeExistsAsync(resolvedCode, dto.BusinessId, dto.BranchId))
+            throw new InvalidOperationException("SubCategory code must be unique per branch.");
 
         var subCategory = new SubCategory
         {

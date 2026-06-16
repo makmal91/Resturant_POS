@@ -138,7 +138,7 @@ public class CashFlowService : ICashFlowService
         };
     }
 
-    public Task<PagedResultDto<CashFlowTransactionDto>> GetLedgerAsync(CashFlowLedgerFilterDto filter)
+    public Task<CashFlowLedgerPageDto> GetLedgerAsync(CashFlowLedgerFilterDto filter)
         => _repo.GetLedgerPagedAsync(filter);
 
     // ─── Summaries ─────────────────────────────────────────────────────────────

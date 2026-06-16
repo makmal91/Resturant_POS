@@ -82,7 +82,7 @@ public class RoleRepository : IRoleRepository
 
         var permissions = await _context.RolePermissions
             .AsNoTracking()
-            .Where(rp => rp.RoleId == roleId)
+            .Where(rp => rp.RoleId == roleId && !rp.IsDeleted)
             .OrderBy(rp => rp.ModuleName)
             .Select(rp => new RolePermissionDto
             {

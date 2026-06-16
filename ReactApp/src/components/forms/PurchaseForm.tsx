@@ -446,8 +446,8 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
             }}
             module={CODE_MODULES.Purchase}
             branchId={branchId}
-            placeholder="Auto-generated if empty"
             error={errors.invoiceNo}
+            isEditMode={Number(initialData?.id ?? 0) > 0}
           />
 
           <FormInput

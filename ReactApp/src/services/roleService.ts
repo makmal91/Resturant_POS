@@ -154,6 +154,35 @@ export const roleService = {
     return rows.map((row) => normalizePermission(toRecord(row)));
   },
 
+  async createRole(payload: { name: string; description: string; isActive: boolean }): Promise<RoleListItem> {
+    const response = await apiClient.post('/roles', payload);
+    const row = toRecord(response.data);
+    return {
+      id: Number(row.id ?? row.Id ?? 0),
+      name: String(row.name ?? row.Name ?? ''),
+      description: String(row.description ?? row.Description ?? ''),
+      isActive: Boolean(row.isActive ?? row.IsActive ?? true),
+    };
+  },
+
+  async updateRole(
+    id: number,
+    payload: { name: string; description: string; isActive: boolean },
+  ): Promise<RoleListItem> {
+    const response = await apiClient.put(`/roles/${id}`, payload);
+    const row = toRecord(response.data);
+    return {
+      id: Number(row.id ?? row.Id ?? 0),
+      name: String(row.name ?? row.Name ?? ''),
+      description: String(row.description ?? row.Description ?? ''),
+      isActive: Boolean(row.isActive ?? row.IsActive ?? true),
+    };
+  },
+
+  async deleteRole(id: number): Promise<void> {
+    await apiClient.delete(`/roles/${id}`);
+  },
+
   async saveRolePermissions(
     roleId: number,
     permissions: RolePermissionItem[]

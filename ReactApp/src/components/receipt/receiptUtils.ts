@@ -43,6 +43,20 @@ export const formatReceiptDateTime = (value: string | null | undefined): string 
       });
 };
 
+export const formatReceiptDateCompact = (value: string | null | undefined): string => {
+  if (!value) return '—';
+  const d = new Date(value);
+  return Number.isNaN(d.getTime())
+    ? '—'
+    : d.toLocaleString(undefined, {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+};
+
 export const resolveCashierName = (
   invoice: SaleInvoiceDto,
   sessionName?: string | null,

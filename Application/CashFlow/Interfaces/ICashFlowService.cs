@@ -13,7 +13,7 @@ public interface ICashFlowService
 
     // ─── Manual transactions ───────────────────────────────────────────────────
     Task<CashFlowTransactionDto> RecordTransactionAsync(RecordCashTransactionDto dto);
-    Task<PagedResultDto<CashFlowTransactionDto>> GetLedgerAsync(CashFlowLedgerFilterDto filter);
+    Task<CashFlowLedgerPageDto> GetLedgerAsync(CashFlowLedgerFilterDto filter);
 
     // ─── Summaries ─────────────────────────────────────────────────────────────
     Task<DailyCashSummaryDto> GetDailySummaryAsync(int businessId, int branchId, DateTime? date = null);

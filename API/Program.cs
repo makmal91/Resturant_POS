@@ -75,20 +75,9 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<POSDbContext>();
+    var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
     var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("DatabaseInitializer");
-    await UserManagementDatabaseInitializer.EnsureSchemaAsync(db, logger);
-    await PermissionModuleDatabaseInitializer.EnsureSchemaAsync(db, logger);
-    await NavigationMenuDatabaseInitializer.EnsureSchemaAsync(db, logger);
-    await UnitMasterDatabaseInitializer.EnsureSchemaAsync(db, logger);
-    await ProductManagementDatabaseInitializer.EnsureSchemaAsync(db, logger);
-    await PurchaseWarehouseInitializer.EnsureSchemaAsync(db, logger);
-    await SaleInvoiceInitializer.EnsureSchemaAsync(db, logger);
-    await CustomerInitializer.EnsureSchemaAsync(db, logger);
-    await CodeSequenceDatabaseInitializer.EnsureSchemaAsync(db, logger);
-    await CashFlowDatabaseInitializer.EnsureSchemaAsync(db, logger);
-    await MasterDataDatabaseInitializer.EnsureSchemaAsync(db, logger);
-    await RolePermissionSeeder.SeedDefaultPermissionsAsync(db, logger);
-    // Sidebar now uses Modules table as single source of truth (NavigationMenuSeeder deprecated).
+    await DatabaseBootstrapper.InitializeAsync(db, configuration, logger);
 }
 
 // Configure the HTTP request pipeline.

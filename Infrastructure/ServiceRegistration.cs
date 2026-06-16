@@ -21,6 +21,7 @@ using POSSystem.Application.Stock.Interfaces;
 using POSSystem.Application.Sales.Interfaces;
 using POSSystem.Application.Customer.Interfaces;
 using POSSystem.Application.CashFlow.Interfaces;
+using POSSystem.Application.CodeSequence.Interfaces;
 using POSSystem.Application.Common.Interfaces;
 using POSSystem.Infrastructure.Data;
 using POSSystem.Infrastructure.Repositories;
@@ -34,7 +35,12 @@ public static class ServiceRegistration
     public static IServiceCollection AddInfrastructureServices(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddDbContext<POSDbContext>(options =>
-            options.UseSqlServer(configuration.GetConnectionString("DefaultConnection")));
+            options.UseSqlServer(
+                configuration.GetConnectionString("DefaultConnection"),
+                sqlOptions => sqlOptions.EnableRetryOnFailure(
+                    maxRetryCount: 5,
+                    maxRetryDelay: TimeSpan.FromSeconds(10),
+                    errorNumbersToAdd: null)));
 
         // Register repositories
         services.AddScoped<IOrderRepository, OrderRepository>();
@@ -69,6 +75,7 @@ public static class ServiceRegistration
 
         // Centralized code generation
         services.AddScoped<ICodeGeneratorService, CodeGeneratorService>();
+        services.AddScoped<ICodeSequenceService, CodeSequenceService>();
 
         // Add other infrastructure services here
 

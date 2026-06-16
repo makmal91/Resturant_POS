@@ -29,7 +29,10 @@ public static class ApiPermissionMapper
         ["Purchase"] = PermissionModules.Purchase,
         ["Stock"] = PermissionModules.Stock,
         ["Sales"] = PermissionModules.Sales,
-        ["Customers"] = PermissionModules.Customers
+        ["Customers"] = PermissionModules.Customers,
+        ["Expenses"] = PermissionModules.Expenses,
+        ["CashFlow"] = PermissionModules.CashFlow,
+        ["code-sequences"] = PermissionModules.CodeSequences,
     };
 
     public static (string Module, string Action)? Resolve(HttpContext context)
@@ -41,6 +44,15 @@ public static class ApiPermissionMapper
 
         var path = context.Request.Path.Value ?? string.Empty;
         var method = context.Request.Method;
+
+        // Active lookup lists are shared across POS, Purchase, Stock, and Sales modules.
+        if (method.Equals("GET", StringComparison.OrdinalIgnoreCase) &&
+            (path.Contains("/warehouses/active", StringComparison.OrdinalIgnoreCase) ||
+             path.Contains("/suppliers/active", StringComparison.OrdinalIgnoreCase) ||
+             path.Contains("/codes/preview", StringComparison.OrdinalIgnoreCase)))
+        {
+            return null;
+        }
 
         if (path.Contains("/export", StringComparison.OrdinalIgnoreCase))
         {

@@ -31,6 +31,8 @@ import CashLedgerPage from './modules/cashflow/CashLedgerPage';
 import CashFlowSummaryPage from './modules/cashflow/CashFlowSummaryPage';
 import ExpensePage from './modules/expense/ExpensePage';
 import ReportsPage from './modules/reports/ReportsPage';
+import SettingsPage from './modules/settings/SettingsPage';
+import CodeSequencePage from './modules/settings/CodeSequencePage';
 // POSBillingPage is registered directly in App.tsx as a fullscreen route (outside Layout)
 
 export const routeRegistry: RouteDefinition[] = [
@@ -38,7 +40,7 @@ export const routeRegistry: RouteDefinition[] = [
   { path: '/businesses', label: 'Businesses', component: BusinessesList, module: 'Businesses' },
   { path: '/branches', label: 'Branches', component: BranchesList, module: 'Branches' },
   { path: '/users', label: 'Users', component: UserPage, module: 'Users' },
-  { path: '/roles', label: 'Roles', component: RolePermissionPage, module: 'Roles' },
+  { path: '/roles', label: 'User Roles', component: RolePermissionPage, module: 'Roles' },
   { path: '/menu', label: 'Menu', component: MenuList, module: 'Menu' },
   { path: '/categories', label: 'Categories', component: CategoryPage, module: 'Categories' },
   { path: '/subcategories', label: 'SubCategories', component: SubCategoryPage, module: 'SubCategories' },
@@ -60,6 +62,8 @@ export const routeRegistry: RouteDefinition[] = [
   { path: '/cashflow',          label: 'Cash Dashboard',  component: CashFlowDashboardPage, module: 'Cash Flow' },
   { path: '/cashflow/ledger',   label: 'Cash Ledger',     component: CashLedgerPage,        module: 'Cash Flow' },
   { path: '/cashflow/summary',  label: 'Cash Summary',    component: CashFlowSummaryPage,   module: 'Cash Flow' },
+  { path: '/settings', label: 'System Settings', component: SettingsPage, module: 'System Settings' },
+  { path: '/settings/code-sequences', label: 'Code Sequences', component: CodeSequencePage, module: 'Code Sequences' },
 ];
 
 const routeMap = new Map(routeRegistry.map((route) => [route.path, route]));

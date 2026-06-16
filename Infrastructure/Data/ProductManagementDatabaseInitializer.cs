@@ -146,10 +146,16 @@ public static class ProductManagementDatabaseInitializer
                 );
             END
             """,
+            SyncLegacyProductsSchemaSql(),
+            SyncLegacyProductVariantsSchemaSql(),
+            SyncLegacyProductUnitsSchemaSql(),
+            SyncLegacyProductImagesSchemaSql(),
+            SyncLegacyProductBarcodesSchemaSql(),
             """
             IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_product_business_branch_code' AND object_id = OBJECT_ID(N'[dbo].[Products]'))
                 CREATE UNIQUE INDEX [idx_product_business_branch_code] ON [dbo].[Products]([BusinessId], [BranchId], [ProductCode]);
             IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_product_business_branch_sku' AND object_id = OBJECT_ID(N'[dbo].[Products]'))
+               AND COL_LENGTH(N'dbo.Products', N'SKU') IS NOT NULL
                 CREATE INDEX [idx_product_business_branch_sku] ON [dbo].[Products]([BusinessId], [BranchId], [SKU]);
             IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_product_business_branch_category' AND object_id = OBJECT_ID(N'[dbo].[Products]'))
                 CREATE INDEX [idx_product_business_branch_category] ON [dbo].[Products]([BusinessId], [BranchId], [CategoryId]);
@@ -197,4 +203,203 @@ public static class ProductManagementDatabaseInitializer
             }
         }
     }
+
+    private static string SyncLegacyProductsSchemaSql() => """
+        IF OBJECT_ID(N'[dbo].[Products]', N'U') IS NOT NULL
+        BEGIN
+            IF COL_LENGTH(N'dbo.Products', N'ProductName') IS NULL
+               AND COL_LENGTH(N'dbo.Products', N'Name') IS NOT NULL
+                EXEC sp_rename N'dbo.Products.Name', N'ProductName', N'COLUMN';
+
+            IF COL_LENGTH(N'dbo.Products', N'CostPrice') IS NULL
+               AND COL_LENGTH(N'dbo.Products', N'PurchasePrice') IS NOT NULL
+                EXEC sp_rename N'dbo.Products.PurchasePrice', N'CostPrice', N'COLUMN';
+
+            IF COL_LENGTH(N'dbo.Products', N'SellingPrice') IS NULL
+               AND COL_LENGTH(N'dbo.Products', N'SalePrice') IS NOT NULL
+                EXEC sp_rename N'dbo.Products.SalePrice', N'SellingPrice', N'COLUMN';
+
+            IF COL_LENGTH(N'dbo.Products', N'Status') IS NULL
+               AND COL_LENGTH(N'dbo.Products', N'IsActive') IS NOT NULL
+                EXEC sp_rename N'dbo.Products.IsActive', N'Status', N'COLUMN';
+
+            IF COL_LENGTH(N'dbo.Products', N'IsVariantEnabled') IS NULL
+               AND COL_LENGTH(N'dbo.Products', N'HasVariants') IS NOT NULL
+                EXEC sp_rename N'dbo.Products.HasVariants', N'IsVariantEnabled', N'COLUMN';
+
+            IF COL_LENGTH(N'dbo.Products', N'ProductName') IS NULL
+                ALTER TABLE [dbo].[Products] ADD [ProductName] NVARCHAR(200) NOT NULL
+                    CONSTRAINT [DF_Products_ProductName_Legacy] DEFAULT N'';
+
+            IF COL_LENGTH(N'dbo.Products', N'CostPrice') IS NULL
+                ALTER TABLE [dbo].[Products] ADD [CostPrice] DECIMAL(18,2) NOT NULL
+                    CONSTRAINT [DF_Products_CostPrice_Legacy] DEFAULT 0;
+
+            IF COL_LENGTH(N'dbo.Products', N'SellingPrice') IS NULL
+                ALTER TABLE [dbo].[Products] ADD [SellingPrice] DECIMAL(18,2) NOT NULL
+                    CONSTRAINT [DF_Products_SellingPrice_Legacy] DEFAULT 0;
+
+            IF COL_LENGTH(N'dbo.Products', N'WholesalePrice') IS NULL
+                ALTER TABLE [dbo].[Products] ADD [WholesalePrice] DECIMAL(18,2) NOT NULL
+                    CONSTRAINT [DF_Products_WholesalePrice_Legacy] DEFAULT 0;
+
+            IF COL_LENGTH(N'dbo.Products', N'SKU') IS NULL
+                ALTER TABLE [dbo].[Products] ADD [SKU] NVARCHAR(100) NOT NULL
+                    CONSTRAINT [DF_Products_SKU_Legacy] DEFAULT N'';
+
+            IF COL_LENGTH(N'dbo.Products', N'Status') IS NULL
+                ALTER TABLE [dbo].[Products] ADD [Status] BIT NOT NULL
+                    CONSTRAINT [DF_Products_Status_Legacy] DEFAULT 1;
+
+            IF COL_LENGTH(N'dbo.Products', N'IsVariantEnabled') IS NULL
+                ALTER TABLE [dbo].[Products] ADD [IsVariantEnabled] BIT NOT NULL
+                    CONSTRAINT [DF_Products_IsVariantEnabled_Legacy] DEFAULT 0;
+
+            IF COL_LENGTH(N'dbo.Products', N'IsDiscountAllowed') IS NULL
+                ALTER TABLE [dbo].[Products] ADD [IsDiscountAllowed] BIT NOT NULL
+                    CONSTRAINT [DF_Products_IsDiscountAllowed_Legacy] DEFAULT 0;
+
+            IF COL_LENGTH(N'dbo.Products', N'DiscountType') IS NULL
+                ALTER TABLE [dbo].[Products] ADD [DiscountType] INT NULL;
+
+            IF COL_LENGTH(N'dbo.Products', N'DiscountValue') IS NULL
+                ALTER TABLE [dbo].[Products] ADD [DiscountValue] DECIMAL(18,2) NOT NULL
+                    CONSTRAINT [DF_Products_DiscountValue_Legacy] DEFAULT 0;
+
+            IF COL_LENGTH(N'dbo.Products', N'CreatedByName') IS NULL
+                ALTER TABLE [dbo].[Products] ADD [CreatedByName] NVARCHAR(MAX) NULL;
+
+            IF COL_LENGTH(N'dbo.Products', N'ModifiedByName') IS NULL
+                ALTER TABLE [dbo].[Products] ADD [ModifiedByName] NVARCHAR(MAX) NULL;
+        END
+        """;
+
+    private static string SyncLegacyProductVariantsSchemaSql() => """
+        IF OBJECT_ID(N'[dbo].[ProductVariants]', N'U') IS NOT NULL
+        BEGIN
+            IF COL_LENGTH(N'dbo.ProductVariants', N'CostPriceOverride') IS NULL
+               AND COL_LENGTH(N'dbo.ProductVariants', N'PurchasePrice') IS NOT NULL
+                EXEC sp_rename N'dbo.ProductVariants.PurchasePrice', N'CostPriceOverride', N'COLUMN';
+
+            IF COL_LENGTH(N'dbo.ProductVariants', N'SellingPriceOverride') IS NULL
+               AND COL_LENGTH(N'dbo.ProductVariants', N'SalePrice') IS NOT NULL
+                EXEC sp_rename N'dbo.ProductVariants.SalePrice', N'SellingPriceOverride', N'COLUMN';
+
+            IF COL_LENGTH(N'dbo.ProductVariants', N'Status') IS NULL
+               AND COL_LENGTH(N'dbo.ProductVariants', N'IsActive') IS NOT NULL
+                EXEC sp_rename N'dbo.ProductVariants.IsActive', N'Status', N'COLUMN';
+
+            IF COL_LENGTH(N'dbo.ProductVariants', N'CostPriceOverride') IS NULL
+                ALTER TABLE [dbo].[ProductVariants] ADD [CostPriceOverride] DECIMAL(18,2) NULL;
+
+            IF COL_LENGTH(N'dbo.ProductVariants', N'SellingPriceOverride') IS NULL
+                ALTER TABLE [dbo].[ProductVariants] ADD [SellingPriceOverride] DECIMAL(18,2) NULL;
+
+            IF COL_LENGTH(N'dbo.ProductVariants', N'Size') IS NULL
+                ALTER TABLE [dbo].[ProductVariants] ADD [Size] NVARCHAR(50) NOT NULL
+                    CONSTRAINT [DF_ProductVariants_Size_Legacy] DEFAULT N'';
+
+            IF COL_LENGTH(N'dbo.ProductVariants', N'Color') IS NULL
+                ALTER TABLE [dbo].[ProductVariants] ADD [Color] NVARCHAR(50) NOT NULL
+                    CONSTRAINT [DF_ProductVariants_Color_Legacy] DEFAULT N'';
+
+            IF COL_LENGTH(N'dbo.ProductVariants', N'AdditionalPrice') IS NULL
+                ALTER TABLE [dbo].[ProductVariants] ADD [AdditionalPrice] DECIMAL(18,2) NOT NULL
+                    CONSTRAINT [DF_ProductVariants_AdditionalPrice_Legacy] DEFAULT 0;
+
+            IF COL_LENGTH(N'dbo.ProductVariants', N'Status') IS NULL
+                ALTER TABLE [dbo].[ProductVariants] ADD [Status] BIT NOT NULL
+                    CONSTRAINT [DF_ProductVariants_Status_Legacy] DEFAULT 1;
+
+            IF COL_LENGTH(N'dbo.ProductVariants', N'SKU') IS NULL
+                ALTER TABLE [dbo].[ProductVariants] ADD [SKU] NVARCHAR(100) NOT NULL
+                    CONSTRAINT [DF_ProductVariants_SKU_Legacy] DEFAULT N'';
+
+            IF COL_LENGTH(N'dbo.ProductVariants', N'CreatedByName') IS NULL
+                ALTER TABLE [dbo].[ProductVariants] ADD [CreatedByName] NVARCHAR(MAX) NULL;
+
+            IF COL_LENGTH(N'dbo.ProductVariants', N'ModifiedByName') IS NULL
+                ALTER TABLE [dbo].[ProductVariants] ADD [ModifiedByName] NVARCHAR(MAX) NULL;
+        END
+        """;
+
+    private static string SyncLegacyProductUnitsSchemaSql() => """
+        IF OBJECT_ID(N'[dbo].[ProductUnits]', N'U') IS NOT NULL
+        BEGIN
+            IF COL_LENGTH(N'dbo.ProductUnits', N'UnitName') IS NULL
+                ALTER TABLE [dbo].[ProductUnits] ADD [UnitName] NVARCHAR(100) NOT NULL
+                    CONSTRAINT [DF_ProductUnits_UnitName_Legacy] DEFAULT N'Unit';
+
+            IF COL_LENGTH(N'dbo.ProductUnits', N'CostPrice') IS NULL
+                ALTER TABLE [dbo].[ProductUnits] ADD [CostPrice] DECIMAL(18,2) NULL;
+
+            IF COL_LENGTH(N'dbo.ProductUnits', N'SellingPrice') IS NULL
+                ALTER TABLE [dbo].[ProductUnits] ADD [SellingPrice] DECIMAL(18,2) NULL;
+
+            IF COL_LENGTH(N'dbo.ProductUnits', N'WholesalePrice') IS NULL
+                ALTER TABLE [dbo].[ProductUnits] ADD [WholesalePrice] DECIMAL(18,2) NULL;
+
+            IF COL_LENGTH(N'dbo.ProductUnits', N'CreatedByName') IS NULL
+                ALTER TABLE [dbo].[ProductUnits] ADD [CreatedByName] NVARCHAR(MAX) NULL;
+
+            IF COL_LENGTH(N'dbo.ProductUnits', N'ModifiedByName') IS NULL
+                ALTER TABLE [dbo].[ProductUnits] ADD [ModifiedByName] NVARCHAR(MAX) NULL;
+        END
+        """;
+
+    private static string SyncLegacyProductImagesSchemaSql() => """
+        IF OBJECT_ID(N'[dbo].[ProductImages]', N'U') IS NOT NULL
+        BEGIN
+            IF COL_LENGTH(N'dbo.ProductImages', N'FileName') IS NULL
+               AND COL_LENGTH(N'dbo.ProductImages', N'ImageFileName') IS NOT NULL
+                EXEC sp_rename N'dbo.ProductImages.ImageFileName', N'FileName', N'COLUMN';
+
+            IF COL_LENGTH(N'dbo.ProductImages', N'ContentType') IS NULL
+               AND COL_LENGTH(N'dbo.ProductImages', N'ImageContentType') IS NOT NULL
+                EXEC sp_rename N'dbo.ProductImages.ImageContentType', N'ContentType', N'COLUMN';
+
+            IF COL_LENGTH(N'dbo.ProductImages', N'FileName') IS NULL
+                ALTER TABLE [dbo].[ProductImages] ADD [FileName] NVARCHAR(255) NOT NULL
+                    CONSTRAINT [DF_ProductImages_FileName_Legacy] DEFAULT N'';
+
+            IF COL_LENGTH(N'dbo.ProductImages', N'ContentType') IS NULL
+                ALTER TABLE [dbo].[ProductImages] ADD [ContentType] NVARCHAR(100) NOT NULL
+                    CONSTRAINT [DF_ProductImages_ContentType_Legacy] DEFAULT N'';
+
+            IF COL_LENGTH(N'dbo.ProductImages', N'CreatedByName') IS NULL
+                ALTER TABLE [dbo].[ProductImages] ADD [CreatedByName] NVARCHAR(MAX) NULL;
+
+            IF COL_LENGTH(N'dbo.ProductImages', N'ModifiedByName') IS NULL
+                ALTER TABLE [dbo].[ProductImages] ADD [ModifiedByName] NVARCHAR(MAX) NULL;
+        END
+        """;
+
+    private static string SyncLegacyProductBarcodesSchemaSql() => """
+        IF OBJECT_ID(N'[dbo].[ProductBarcodes]', N'U') IS NOT NULL
+        BEGIN
+            IF COL_LENGTH(N'dbo.ProductBarcodes', N'BarcodeValue') IS NULL
+               AND COL_LENGTH(N'dbo.ProductBarcodes', N'Barcode') IS NOT NULL
+                EXEC sp_rename N'dbo.ProductBarcodes.Barcode', N'BarcodeValue', N'COLUMN';
+
+            IF COL_LENGTH(N'dbo.ProductBarcodes', N'BarcodeValue') IS NULL
+                ALTER TABLE [dbo].[ProductBarcodes] ADD [BarcodeValue] NVARCHAR(100) NOT NULL
+                    CONSTRAINT [DF_ProductBarcodes_BarcodeValue_Legacy] DEFAULT N'';
+
+            IF COL_LENGTH(N'dbo.ProductBarcodes', N'ProductUnitId') IS NULL
+                ALTER TABLE [dbo].[ProductBarcodes] ADD [ProductUnitId] INT NULL;
+
+            IF COL_LENGTH(N'dbo.ProductBarcodes', N'ProductVariantId') IS NULL
+                ALTER TABLE [dbo].[ProductBarcodes] ADD [ProductVariantId] INT NULL;
+
+            IF COL_LENGTH(N'dbo.ProductBarcodes', N'IsPrimary') IS NULL
+                ALTER TABLE [dbo].[ProductBarcodes] ADD [IsPrimary] BIT NOT NULL
+                    CONSTRAINT [DF_ProductBarcodes_IsPrimary_Legacy] DEFAULT 0;
+
+            IF COL_LENGTH(N'dbo.ProductBarcodes', N'CreatedByName') IS NULL
+                ALTER TABLE [dbo].[ProductBarcodes] ADD [CreatedByName] NVARCHAR(MAX) NULL;
+
+            IF COL_LENGTH(N'dbo.ProductBarcodes', N'ModifiedByName') IS NULL
+                ALTER TABLE [dbo].[ProductBarcodes] ADD [ModifiedByName] NVARCHAR(MAX) NULL;
+        END
+        """;
 }

@@ -228,6 +228,40 @@ public static class CodeSequenceDatabaseInitializer
                   SELECT 1 FROM [dbo].[CodeSequences] cs
                   WHERE cs.[ModuleName] = N'Supplier' AND cs.[BranchId] = b.[Id]
               );
+            """,
+
+            // Re-sync existing Category sequences when data is ahead of the counter
+            """
+            UPDATE s
+            SET s.[LastNumber] = src.[MaxNum], s.[LastResetDate] = GETUTCDATE()
+            FROM [dbo].[CodeSequences] s
+            INNER JOIN (
+                SELECT b.[Id] AS [BranchId],
+                    ISNULL(MAX(TRY_CAST(SUBSTRING(c.[Code], 5, 20) AS bigint)), 0) AS [MaxNum]
+                FROM [dbo].[Branches] b
+                LEFT JOIN [dbo].[MenuCategories] c
+                    ON c.[BranchId] = b.[Id] AND c.[IsDeleted] = 0 AND c.[Code] LIKE N'CAT-%'
+                WHERE b.[IsDeleted] = 0
+                GROUP BY b.[Id]
+            ) src ON s.[BranchId] = src.[BranchId]
+            WHERE s.[ModuleName] = N'Category' AND s.[LastNumber] < src.[MaxNum];
+            """,
+
+            // Re-sync existing SubCategory sequences when data is ahead of the counter
+            """
+            UPDATE s
+            SET s.[LastNumber] = src.[MaxNum], s.[LastResetDate] = GETUTCDATE()
+            FROM [dbo].[CodeSequences] s
+            INNER JOIN (
+                SELECT b.[Id] AS [BranchId],
+                    ISNULL(MAX(TRY_CAST(SUBSTRING(sc.[Code], 5, 20) AS bigint)), 0) AS [MaxNum]
+                FROM [dbo].[Branches] b
+                LEFT JOIN [dbo].[SubCategories] sc
+                    ON sc.[BranchId] = b.[Id] AND sc.[IsDeleted] = 0 AND sc.[Code] LIKE N'SUB-%'
+                WHERE b.[IsDeleted] = 0
+                GROUP BY b.[Id]
+            ) src ON s.[BranchId] = src.[BranchId]
+            WHERE s.[ModuleName] = N'SubCategory' AND s.[LastNumber] < src.[MaxNum];
             """
         };
 

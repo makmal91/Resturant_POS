@@ -163,7 +163,6 @@ const SupplierForm: React.FC<SupplierFormProps> = ({
               onChange={(supplierCode) => setFormData((prev) => ({ ...prev, supplierCode }))}
               module={CODE_MODULES.Supplier}
               branchId={formData.branchId}
-              placeholder="Auto-generated if empty"
             />
           )}
 

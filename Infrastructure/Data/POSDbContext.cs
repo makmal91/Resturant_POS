@@ -170,17 +170,18 @@ public class POSDbContext : DbContext
         var defaultBusiness = new Business
         {
             Id = 1,
-            Name = "Main Business",
-            LegalName = "Main Business Pvt Ltd",
-            Phone = "+1234567890",
-            Email = "owner@restaurant.com",
+            Name = "AKHSOFT",
+            LegalName = "AKHSOFT",
+            Phone = "+923432998052",
+            Email = "info@akhsoft.com",
             Address = "123 Main Street",
             TaxNumber = "NTN-0001",
             CurrencyId = 1,
             Currency = "PKR",
-            TimeZone = "UTC",
+            TimeZone = "Asia/Karachi",
             IsActive = true,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow,
+            CreatedBy = SeedDefaults.SeedUserId
         };
 
         modelBuilder.Entity<Business>().HasData(defaultBusiness);
@@ -228,21 +229,21 @@ public class POSDbContext : DbContext
             Name = "Main Branch",
             Code = "MAIN",
             Address = "123 Main Street",
-            CountryId = 1,
-            CityId = 1,
-            Phone = "+1234567890",
-            Email = "main@restaurant.com",
+            CountryId = 3,
+            CityId = 5,
+            Phone = "+923432998052",
+            Email = "info@akhsoft.com",
             OpeningTime = new TimeSpan(11, 0, 0),
             ClosingTime = new TimeSpan(22, 0, 0),
             IsActive = true,
             BusinessId = 1,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow,
+            CreatedBy = SeedDefaults.SeedUserId
         };
 
         modelBuilder.Entity<Branch>().HasData(defaultBranch);
 
         var seedDate = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-        const string adminPasswordHash = "$2a$11$QvHz8.HeIU5ThFqjVPVVe.sTuKqDQI6R0nrPz/Z8KqK8qXyxi3H7O"; // Admin@123
 
         var roles = new[]
         {
@@ -258,18 +259,20 @@ public class POSDbContext : DbContext
         var adminUser = new User
         {
             Id = 1,
-            FullName = "System Administrator",
-            Username = "admin",
-            PasswordHash = adminPasswordHash,
-            Phone = "+1234567890",
-            Email = "admin@restaurant.com",
+            FullName = "Muhammad Akmal",
+            Username = "makmal",
+            PasswordHash = SeedDefaults.AdminPasswordHash,
+            Phone = "+923432998052",
+            Email = "info@infoakhsoft.com",
             RoleId = 1,
             BusinessId = 1,
             IsActive = true,
             Salary = 0,
             ShiftType = ShiftType.Flexible,
             Status = UserStatus.Active,
-            CreatedAt = seedDate
+            CreatedAt = seedDate,
+            CreatedBy = SeedDefaults.SeedUserId,
+            BranchId = 1
         };
 
         modelBuilder.Entity<User>().HasData(adminUser);

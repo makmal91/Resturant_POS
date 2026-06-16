@@ -90,7 +90,7 @@ const ReportsPage: React.FC = () => {
 
   // Load warehouses for stock filter
   useEffect(() => {
-    if (!hasBranch || branchId <= 0) {
+    if (!hasBranch) {
       setWarehouses([]);
       return;
     }

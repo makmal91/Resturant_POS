@@ -1,11 +1,13 @@
 import React, {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { hasBranchContext } from '../../types/permissions';
 import { warehouseService, type WarehouseItem } from '../warehouse/warehouseService';
 import { customerService, type CustomerDetail } from '../customer/customerService';
 import {
@@ -263,7 +265,6 @@ const POSBillingPage: React.FC = () => {
   const [showHeld, setShowHeld] = useState(false);
   const [heldBills, setHeldBills] = useState<SaleInvoiceDto[]>([]);
   const [completedInvoice, setCompletedInvoice] = useState<SaleInvoiceDto | null>(null);
-  const [voidLoading, setVoidLoading] = useState(false);
   const [error, setError] = useState('');
 
   const barcodeRef = useRef<HTMLInputElement>(null);
@@ -272,28 +273,36 @@ const POSBillingPage: React.FC = () => {
   const debouncedSearch = useDebounce(searchQuery, 250);
   const debouncedCustomer = useDebounce(customerQuery, 300);
 
+  const effectiveBranchId = useMemo(() => {
+    if (branchId > 0) return branchId;
+    const selectedWarehouse = warehouses.find((w) => w.id === warehouseId);
+    return selectedWarehouse?.branchId ?? 0;
+  }, [branchId, warehouseId, warehouses]);
+
   // ── Load warehouses ──
   useEffect(() => {
-    if (!branchId) return;
+    if (!hasBranchContext(branchId)) return;
     warehouseService.getAllActive(branchId)
       .then((r) => {
-        setWarehouses(r.data);
-        if (r.data.length > 0) setWarehouseId(r.data[0].id);
+        const rows = Array.isArray(r.data) ? r.data : [];
+        setWarehouses(rows);
+        if (rows.length > 0) setWarehouseId(rows[0].id);
       })
       .catch(() => setError('Failed to load warehouses.'));
   }, [branchId]);
 
   // ── Auto-load walk-in customer ──
   useEffect(() => {
-    if (!branchId) return;
-    customerService.getWalkIn(branchId)
+    const loadBranchId = effectiveBranchId > 0 ? effectiveBranchId : (branchId > 0 ? branchId : 0);
+    if (!hasBranchContext(loadBranchId) || loadBranchId <= 0) return;
+    customerService.getWalkIn(loadBranchId)
       .then((r) => {
         const wi: PosCustomer = { id: r.data.id, name: r.data.name, phone: r.data.phone ?? '', email: r.data.email ?? '' };
         setWalkInCustomer(wi);
         setCustomer(wi);   // default selection
       })
       .catch(() => {/* walk-in may not exist yet — that's ok */});
-  }, [branchId]);
+  }, [branchId, effectiveBranchId]);
 
   // ── Keyboard shortcuts ──
   useEffect(() => {
@@ -313,7 +322,9 @@ const POSBillingPage: React.FC = () => {
   useEffect(() => {
     if (!debouncedSearch.trim()) { setSearchResults([]); setExpandedGroups(new Set()); return; }
     setSearchLoading(true);
-    posService.searchProductsGrouped(debouncedSearch, branchId, warehouseId || undefined)
+    const searchBranchId = effectiveBranchId > 0 ? effectiveBranchId : branchId;
+    if (!hasBranchContext(searchBranchId)) { setSearchResults([]); setExpandedGroups(new Set()); return; }
+    posService.searchProductsGrouped(debouncedSearch, searchBranchId, warehouseId || undefined)
       .then((r) => {
         setSearchResults(r.data);
         // Auto-expand if only one product returned, or if any product has variants
@@ -322,15 +333,17 @@ const POSBillingPage: React.FC = () => {
       })
       .catch(() => setSearchResults([]))
       .finally(() => setSearchLoading(false));
-  }, [debouncedSearch, branchId, warehouseId]);
+  }, [debouncedSearch, branchId, effectiveBranchId, warehouseId]);
 
   // ── Customer search ──
   useEffect(() => {
     if (!debouncedCustomer.trim()) { setCustomerResults([]); return; }
-    posService.searchCustomers(debouncedCustomer, branchId)
+    const customerBranchId = effectiveBranchId > 0 ? effectiveBranchId : branchId;
+    if (!hasBranchContext(customerBranchId)) { setCustomerResults([]); return; }
+    posService.searchCustomers(debouncedCustomer, customerBranchId)
       .then((r) => setCustomerResults(r.data))
       .catch(() => setCustomerResults([]));
-  }, [debouncedCustomer, branchId]);
+  }, [debouncedCustomer, branchId, effectiveBranchId]);
 
   // ── Cart helpers ──
   const addToCart = useCallback((lookup: PosProductLookup) => {
@@ -391,7 +404,7 @@ const POSBillingPage: React.FC = () => {
     if (!warehouseId) { setBarcodeError('Select a warehouse first.'); return; }
     setBarcodeLoading(true); setBarcodeError('');
     try {
-      const res = await posService.getProductByBarcode(code, branchId);
+      const res = await posService.getProductByBarcode(code, effectiveBranchId > 0 ? effectiveBranchId : branchId);
       addToCart(res.data);
       setBarcodeInput('');
     } catch {
@@ -404,7 +417,7 @@ const POSBillingPage: React.FC = () => {
 
   // ── Payment ──
   const handlePaymentConfirm = async (method: 'Cash' | 'Card' | 'Mixed', paid: number, cash: number, card: number) => {
-    if (!warehouseId) return;
+    if (!warehouseId || effectiveBranchId <= 0) return;
     setPaymentLoading(true);
     try {
       const res = await posService.createInvoice({
@@ -412,7 +425,7 @@ const POSBillingPage: React.FC = () => {
         paymentMethod: method, paidAmount: paid, cashAmount: cash, cardAmount: card,
         discountAmount: billDiscount,
         cashierName: user?.fullName ?? user?.username ?? undefined,
-        businessId, branchId,
+        businessId, branchId: effectiveBranchId,
         items: cart.map((c) => ({ productId: c.productId, variantId: c.variantId, unitId: c.unitId, quantity: c.quantity, conversionFactor: c.conversionFactor, unitPrice: c.unitPrice, discountPercent: c.discountPercent, discountAmount: c.discountAmount, taxPercent: c.taxPercent, itemNote: c.itemNote ?? undefined }))
       });
       setCompletedInvoice(res.data);
@@ -425,35 +438,12 @@ const POSBillingPage: React.FC = () => {
     }
   };
 
-  // ── Void Invoice ──
-  const handleVoidInvoice = async () => {
-    if (!completedInvoice) return;
-    const confirmed = window.confirm(
-      `⚠ Void invoice ${completedInvoice.invoiceNo}?\n\nStock will be recalculated — all stock deducted by this invoice will be returned to the warehouse.\n\nThis action cannot be undone.`
-    );
-    if (!confirmed) return;
-    setVoidLoading(true);
-    try {
-      const res = await posService.voidInvoice(completedInvoice.id, {
-        businessId,
-        branchId,
-        voidedByName: user?.fullName ?? user?.username ?? undefined,
-        reason: 'Voided from POS',
-      });
-      setCompletedInvoice(res.data);
-    } catch {
-      setError('Failed to void invoice. Please try again.');
-    } finally {
-      setVoidLoading(false);
-    }
-  };
-
   // ── Hold Bill ──
   const handleHoldBill = async () => {
-    if (cart.length === 0 || !warehouseId) return;
+    if (cart.length === 0 || !warehouseId || effectiveBranchId <= 0) return;
     const note = window.prompt('Hold note (optional):') ?? undefined;
     try {
-      await posService.holdBill({ heldNote: note, customerId: customer?.id ?? null, warehouseId, pricingType, discountAmount: billDiscount, businessId, branchId, items: cart.map((c) => ({ productId: c.productId, variantId: c.variantId, unitId: c.unitId, quantity: c.quantity, conversionFactor: c.conversionFactor, unitPrice: c.unitPrice, discountPercent: c.discountPercent, discountAmount: c.discountAmount, taxPercent: c.taxPercent, itemNote: c.itemNote ?? undefined })) });
+      await posService.holdBill({ heldNote: note, customerId: customer?.id ?? null, warehouseId, pricingType, discountAmount: billDiscount, businessId, branchId: effectiveBranchId, items: cart.map((c) => ({ productId: c.productId, variantId: c.variantId, unitId: c.unitId, quantity: c.quantity, conversionFactor: c.conversionFactor, unitPrice: c.unitPrice, discountPercent: c.discountPercent, discountAmount: c.discountAmount, taxPercent: c.taxPercent, itemNote: c.itemNote ?? undefined })) });
       clearCart();
     } catch { setError('Failed to hold bill.'); }
   };
@@ -475,12 +465,12 @@ const POSBillingPage: React.FC = () => {
   };
 
   const loadHeldBills = async () => {
-    try { const r = await posService.getHeldBills(branchId); setHeldBills(r.data); setShowHeld(true); }
+    try { const r = await posService.getHeldBills(effectiveBranchId > 0 ? effectiveBranchId : branchId); setHeldBills(r.data); setShowHeld(true); }
     catch { setError('Failed to load held bills.'); }
   };
 
   const cancelHeldBill = async (id: number) => {
-    try { await posService.cancelHeldBill(id, branchId); setHeldBills((prev) => prev.filter((b) => b.id !== id)); }
+    try { await posService.cancelHeldBill(id, effectiveBranchId > 0 ? effectiveBranchId : branchId); setHeldBills((prev) => prev.filter((b) => b.id !== id)); }
     catch { setError('Failed to cancel bill.'); }
   };
 
@@ -958,13 +948,11 @@ const POSBillingPage: React.FC = () => {
           autoPrint
           onClose={() => setCompletedInvoice(null)}
           onNewSale={() => { setCompletedInvoice(null); barcodeRef.current?.focus(); }}
-          onVoid={completedInvoice.status === 'Completed' ? handleVoidInvoice : undefined}
-          voidLoading={voidLoading}
         />
       )}
       {showQuickAdd && (
         <QuickAddCustomerModal
-          branchId={branchId}
+          branchId={effectiveBranchId > 0 ? effectiveBranchId : branchId}
           onClose={() => setShowQuickAdd(false)}
           onCreated={(c) => {
             const pc: PosCustomer = { id: c.id, name: c.name, phone: c.phone ?? '', email: c.email ?? '' };

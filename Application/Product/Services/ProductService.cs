@@ -238,9 +238,7 @@ public class ProductService : IProductService
 
     private async Task<string> ResolveProductCodeAsync(string? requestedCode, int businessId, int branchId)
     {
-        var productCode = string.IsNullOrWhiteSpace(requestedCode)
-            ? await _codeGenerator.GenerateAsync(CodeModuleNames.Product, branchId)
-            : requestedCode.Trim();
+        var productCode = await _codeGenerator.ResolveAsync(CodeModuleNames.Product, branchId, requestedCode);
 
         if (await _repository.ProductCodeExistsAsync(productCode, businessId, branchId))
             throw new InvalidOperationException("ProductCode must be unique within the selected branch.");

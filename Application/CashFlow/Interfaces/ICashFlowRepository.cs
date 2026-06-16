@@ -8,7 +8,7 @@ public interface ICashFlowRepository
 {
     // ─── Transactions ──────────────────────────────────────────────────────────
     Task<CashFlowTransaction> AddTransactionAsync(CashFlowTransaction transaction);
-    Task<PagedResultDto<CashFlowTransactionDto>> GetLedgerPagedAsync(CashFlowLedgerFilterDto filter);
+    Task<CashFlowLedgerPageDto> GetLedgerPagedAsync(CashFlowLedgerFilterDto filter);
 
     // ─── Cash Register ─────────────────────────────────────────────────────────
     Task<CashRegister?> GetRegisterAsync(int businessId, int branchId, DateTime date);

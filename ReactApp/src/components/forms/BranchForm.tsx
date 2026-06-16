@@ -270,8 +270,8 @@ const BranchForm: React.FC<BranchFormProps> = ({
               if (errors.code) setErrors((prev) => ({ ...prev, code: '' }));
             }}
             module={CODE_MODULES.Branch}
-            placeholder="Auto-generated if empty"
             error={errors.code}
+            isEditMode={Boolean(safeString(safeInitialData?.code))}
           />
 
           <FormSelect

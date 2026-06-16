@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ProductBarcodePayload,
   ProductDetail,
@@ -8,6 +8,9 @@ import {
 } from './productService';
 import { getApiErrorMessage } from '../../services/api';
 import { CODE_MODULES, codeGeneratorService } from '../../services/codeGeneratorService';
+import CodeFieldWithGenerate from '../../components/forms/CodeFieldWithGenerate';
+import { useBranchStore } from '../../stores/useBranchStore';
+import { resolveEffectiveBranchId } from '../../utils/resolveBranchId';
 
 export interface ProductOption {
   id: number;
@@ -77,8 +80,13 @@ const ProductForm: React.FC<ProductFormProps> = ({
   onCancel,
   onSubmit,
 }) => {
+  const selectedBranchId = useBranchStore((state) => state.selectedBranchId);
+  const effectiveBranchId = useMemo(
+    () => resolveEffectiveBranchId(branchId, selectedBranchId) ?? 0,
+    [branchId, selectedBranchId],
+  );
+
   const [error, setError] = useState('');
-  const [isGeneratingCode, setIsGeneratingCode] = useState(false);
   const [isGeneratingBarcode, setIsGeneratingBarcode] = useState(false);
   const [activeTab, setActiveTab] = useState<ProductFormTab>('basic');
   const [primaryImageFile, setPrimaryImageFile] = useState<File | null>(null);
@@ -299,10 +307,20 @@ const ProductForm: React.FC<ProductFormProps> = ({
           <div>
             <h3 className="text-lg font-semibold text-gray-900">Basic Product Information</h3>
             <p className="mt-1 text-sm text-gray-500">
-              Start with the required product name and category. Product code can stay empty and will be generated automatically.
+              Start with the required product name and category. Product code is assigned automatically.
             </p>
           </div>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <CodeFieldWithGenerate
+              label="Product Code"
+              name="productCode"
+              value={formData.productCode ?? ''}
+              onChange={(productCode) => setFormData((prev) => ({ ...prev, productCode }))}
+              module={CODE_MODULES.Product}
+              branchId={effectiveBranchId > 0 ? effectiveBranchId : undefined}
+              isEditMode={Boolean(initialData)}
+              variant="compact"
+            />
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">Product Name *</label>
               <input
@@ -311,36 +329,6 @@ const ProductForm: React.FC<ProductFormProps> = ({
                 onChange={(event) => setFormData((prev) => ({ ...prev, productName: event.target.value }))}
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
               />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Product Code</label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={formData.productCode ?? ''}
-                  placeholder="Auto-generated if empty"
-                  onChange={(event) => setFormData((prev) => ({ ...prev, productCode: event.target.value }))}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
-                />
-                <button
-                  type="button"
-                  disabled={isGeneratingCode}
-                  onClick={async () => {
-                    setIsGeneratingCode(true);
-                    try {
-                      const code = await codeGeneratorService.generate(CODE_MODULES.Product, branchId);
-                      setFormData((prev) => ({ ...prev, productCode: code }));
-                    } catch (err) {
-                      setError(getApiErrorMessage(err, 'Unable to generate product code.'));
-                    } finally {
-                      setIsGeneratingCode(false);
-                    }
-                  }}
-                  className="shrink-0 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
-                >
-                  {isGeneratingCode ? '…' : 'Auto Generate'}
-                </button>
-              </div>
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">SKU</label>
@@ -578,7 +566,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
               onClick={async () => {
                 setIsGeneratingBarcode(true);
                 try {
-                  const barcode = await codeGeneratorService.generateBarcode(branchId);
+                  const barcode = await codeGeneratorService.generateBarcode(effectiveBranchId);
                   setFormData((prev) => ({
                     ...prev,
                     barcodes: [...prev.barcodes, { ...emptyBarcode(), barcodeValue: barcode, isPrimary: prev.barcodes.length === 0 }],

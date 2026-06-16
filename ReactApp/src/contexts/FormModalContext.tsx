@@ -13,6 +13,8 @@ export type FormType =
   | 'supplier'
   | 'purchase'
   | 'customer'
+  | 'role'
+  | 'cashTransaction'
   | null;
 
 const DEFAULT_BRANCH_FORM_DATA = {
@@ -132,6 +134,16 @@ const DEFAULT_CUSTOMER_FORM_DATA = {
   branchId: 0,
 };
 
+const DEFAULT_ROLE_FORM_DATA = {
+  name: '',
+  description: '',
+  status: 'Active',
+};
+
+const DEFAULT_CASH_TRANSACTION_FORM_DATA = {
+  transactionType: 'CashIn' as const,
+};
+
 const DEFAULT_PURCHASE_FORM_DATA = {
   invoiceNo: '',
   supplierId: 0,
@@ -199,6 +211,14 @@ const getDefaultFormData = (type: FormType) => {
 
   if (type === 'customer') {
     return DEFAULT_CUSTOMER_FORM_DATA;
+  }
+
+  if (type === 'role') {
+    return DEFAULT_ROLE_FORM_DATA;
+  }
+
+  if (type === 'cashTransaction') {
+    return DEFAULT_CASH_TRANSACTION_FORM_DATA;
   }
 
   return {};

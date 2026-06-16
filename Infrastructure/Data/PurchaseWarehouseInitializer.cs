@@ -31,6 +31,7 @@ public static class PurchaseWarehouseInitializer
                 );
             END
             """,
+            SyncLegacyWarehousesSchemaSql(),
             """
             IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_warehouse_business_branch_name' AND object_id = OBJECT_ID(N'[dbo].[Warehouses]'))
                 CREATE UNIQUE INDEX [idx_warehouse_business_branch_name] ON [dbo].[Warehouses]([BusinessId], [BranchId], [Name]) WHERE [IsDeleted] = 0;
@@ -40,6 +41,7 @@ public static class PurchaseWarehouseInitializer
             BEGIN
                 CREATE TABLE [dbo].[Suppliers] (
                     [Id] INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                    [SupplierCode] NVARCHAR(50) NOT NULL CONSTRAINT [DF_Suppliers_SupplierCode] DEFAULT N'',
                     [Name] NVARCHAR(200) NOT NULL,
                     [ContactPerson] NVARCHAR(150) NOT NULL CONSTRAINT [DF_Suppliers_ContactPerson] DEFAULT N'',
                     [Phone] NVARCHAR(30) NOT NULL CONSTRAINT [DF_Suppliers_Phone] DEFAULT N'',
@@ -60,9 +62,16 @@ public static class PurchaseWarehouseInitializer
                 );
             END
             """,
+            SyncLegacySuppliersColumnsSql(),
+            SyncLegacySuppliersCodeBackfillSql(),
             """
             IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_supplier_business_branch_name' AND object_id = OBJECT_ID(N'[dbo].[Suppliers]'))
                 CREATE INDEX [idx_supplier_business_branch_name] ON [dbo].[Suppliers]([BusinessId], [BranchId], [Name]);
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_supplier_branch_code' AND object_id = OBJECT_ID(N'[dbo].[Suppliers]'))
+               AND COL_LENGTH(N'dbo.Suppliers', N'SupplierCode') IS NOT NULL
+                CREATE UNIQUE INDEX [idx_supplier_branch_code]
+                    ON [dbo].[Suppliers]([BusinessId], [BranchId], [SupplierCode])
+                    WHERE [SupplierCode] <> '' AND [IsDeleted] = 0;
             """,
             """
             IF OBJECT_ID(N'[dbo].[Purchases]', N'U') IS NULL
@@ -91,8 +100,10 @@ public static class PurchaseWarehouseInitializer
                 );
             END
             """,
+            SyncLegacyPurchasesSchemaSql(),
             """
             IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_purchase_business_branch_invoice' AND object_id = OBJECT_ID(N'[dbo].[Purchases]'))
+               AND COL_LENGTH(N'dbo.Purchases', N'InvoiceNo') IS NOT NULL
                 CREATE UNIQUE INDEX [idx_purchase_business_branch_invoice] ON [dbo].[Purchases]([BusinessId], [BranchId], [InvoiceNo]) WHERE [IsDeleted] = 0;
             IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_purchase_business_branch_status' AND object_id = OBJECT_ID(N'[dbo].[Purchases]'))
                 CREATE INDEX [idx_purchase_business_branch_status] ON [dbo].[Purchases]([BusinessId], [BranchId], [Status]);
@@ -129,6 +140,7 @@ public static class PurchaseWarehouseInitializer
                 );
             END
             """,
+            SyncLegacyPurchaseItemsSchemaSql(),
             """
             IF OBJECT_ID(N'[dbo].[StockLedger]', N'U') IS NULL
             BEGIN
@@ -189,4 +201,134 @@ public static class PurchaseWarehouseInitializer
             }
         }
     }
+
+    private static string SyncLegacyWarehousesSchemaSql() => """
+        IF OBJECT_ID(N'[dbo].[Warehouses]', N'U') IS NOT NULL
+        BEGIN
+            IF COL_LENGTH(N'dbo.Warehouses', N'CreatedByName') IS NULL
+                ALTER TABLE [dbo].[Warehouses] ADD [CreatedByName] NVARCHAR(MAX) NULL;
+
+            IF COL_LENGTH(N'dbo.Warehouses', N'ModifiedByName') IS NULL
+                ALTER TABLE [dbo].[Warehouses] ADD [ModifiedByName] NVARCHAR(MAX) NULL;
+
+            IF COL_LENGTH(N'dbo.Warehouses', N'Address') IS NOT NULL
+               AND EXISTS (
+                    SELECT 1 FROM sys.columns
+                    WHERE object_id = OBJECT_ID(N'dbo.Warehouses')
+                      AND name = N'Address'
+                      AND is_nullable = 1)
+                UPDATE [dbo].[Warehouses] SET [Address] = N'' WHERE [Address] IS NULL;
+        END
+        """;
+
+    private static string SyncLegacySuppliersColumnsSql() => """
+        IF OBJECT_ID(N'[dbo].[Suppliers]', N'U') IS NOT NULL
+        BEGIN
+            IF COL_LENGTH(N'dbo.Suppliers', N'SupplierCode') IS NULL
+               AND COL_LENGTH(N'dbo.Suppliers', N'Code') IS NOT NULL
+                EXEC sp_rename N'dbo.Suppliers.Code', N'SupplierCode', N'COLUMN';
+
+            IF COL_LENGTH(N'dbo.Suppliers', N'SupplierCode') IS NULL
+                ALTER TABLE [dbo].[Suppliers] ADD [SupplierCode] NVARCHAR(50) NOT NULL
+                    CONSTRAINT [DF_Suppliers_SupplierCode_Legacy] DEFAULT N'';
+
+            IF COL_LENGTH(N'dbo.Suppliers', N'ContactPerson') IS NULL
+                ALTER TABLE [dbo].[Suppliers] ADD [ContactPerson] NVARCHAR(150) NOT NULL
+                    CONSTRAINT [DF_Suppliers_ContactPerson_Legacy] DEFAULT N'';
+
+            IF COL_LENGTH(N'dbo.Suppliers', N'TaxNumber') IS NULL
+                ALTER TABLE [dbo].[Suppliers] ADD [TaxNumber] NVARCHAR(50) NOT NULL
+                    CONSTRAINT [DF_Suppliers_TaxNumber_Legacy] DEFAULT N'';
+
+            IF COL_LENGTH(N'dbo.Suppliers', N'Phone') IS NULL
+                ALTER TABLE [dbo].[Suppliers] ADD [Phone] NVARCHAR(30) NOT NULL
+                    CONSTRAINT [DF_Suppliers_Phone_Legacy] DEFAULT N'';
+
+            IF COL_LENGTH(N'dbo.Suppliers', N'Email') IS NULL
+                ALTER TABLE [dbo].[Suppliers] ADD [Email] NVARCHAR(150) NOT NULL
+                    CONSTRAINT [DF_Suppliers_Email_Legacy] DEFAULT N'';
+
+            IF COL_LENGTH(N'dbo.Suppliers', N'Address') IS NULL
+                ALTER TABLE [dbo].[Suppliers] ADD [Address] NVARCHAR(500) NOT NULL
+                    CONSTRAINT [DF_Suppliers_Address_Legacy] DEFAULT N'';
+
+            IF COL_LENGTH(N'dbo.Suppliers', N'CreatedByName') IS NULL
+                ALTER TABLE [dbo].[Suppliers] ADD [CreatedByName] NVARCHAR(MAX) NULL;
+
+            IF COL_LENGTH(N'dbo.Suppliers', N'ModifiedByName') IS NULL
+                ALTER TABLE [dbo].[Suppliers] ADD [ModifiedByName] NVARCHAR(MAX) NULL;
+        END
+        """;
+
+    private static string SyncLegacySuppliersCodeBackfillSql() => """
+        SET QUOTED_IDENTIFIER ON;
+        IF OBJECT_ID(N'[dbo].[Suppliers]', N'U') IS NOT NULL
+           AND COL_LENGTH(N'dbo.Suppliers', N'Code') IS NOT NULL
+           AND COL_LENGTH(N'dbo.Suppliers', N'SupplierCode') IS NOT NULL
+            UPDATE [dbo].[Suppliers]
+            SET [SupplierCode] = [Code]
+            WHERE ([SupplierCode] IS NULL OR [SupplierCode] = N'')
+              AND [Code] IS NOT NULL AND [Code] <> N'';
+        """;
+
+    private static string SyncLegacyPurchasesSchemaSql() => """
+        IF OBJECT_ID(N'[dbo].[Purchases]', N'U') IS NOT NULL
+        BEGIN
+            IF COL_LENGTH(N'dbo.Purchases', N'InvoiceNo') IS NULL
+               AND COL_LENGTH(N'dbo.Purchases', N'PurchaseNumber') IS NOT NULL
+                EXEC sp_rename N'dbo.Purchases.PurchaseNumber', N'InvoiceNo', N'COLUMN';
+
+            IF COL_LENGTH(N'dbo.Purchases', N'WarehouseId') IS NULL
+                ALTER TABLE [dbo].[Purchases] ADD [WarehouseId] INT NOT NULL
+                    CONSTRAINT [DF_Purchases_WarehouseId_Legacy] DEFAULT 1;
+
+            IF COL_LENGTH(N'dbo.Purchases', N'InvoiceNo') IS NULL
+                ALTER TABLE [dbo].[Purchases] ADD [InvoiceNo] NVARCHAR(100) NOT NULL
+                    CONSTRAINT [DF_Purchases_InvoiceNo_Legacy] DEFAULT N'';
+
+            IF COL_LENGTH(N'dbo.Purchases', N'CreatedByName') IS NULL
+                ALTER TABLE [dbo].[Purchases] ADD [CreatedByName] NVARCHAR(MAX) NULL;
+
+            IF COL_LENGTH(N'dbo.Purchases', N'ModifiedByName') IS NULL
+                ALTER TABLE [dbo].[Purchases] ADD [ModifiedByName] NVARCHAR(MAX) NULL;
+        END
+        """;
+
+    private static string SyncLegacyPurchaseItemsSchemaSql() => """
+        IF OBJECT_ID(N'[dbo].[PurchaseItems]', N'U') IS NOT NULL
+        BEGIN
+            IF COL_LENGTH(N'dbo.PurchaseItems', N'CostPrice') IS NULL
+               AND COL_LENGTH(N'dbo.PurchaseItems', N'UnitPrice') IS NOT NULL
+                EXEC sp_rename N'dbo.PurchaseItems.UnitPrice', N'CostPrice', N'COLUMN';
+
+            IF COL_LENGTH(N'dbo.PurchaseItems', N'TotalCost') IS NULL
+               AND COL_LENGTH(N'dbo.PurchaseItems', N'TotalPrice') IS NOT NULL
+                EXEC sp_rename N'dbo.PurchaseItems.TotalPrice', N'TotalCost', N'COLUMN';
+
+            IF COL_LENGTH(N'dbo.PurchaseItems', N'VariantId') IS NULL
+                ALTER TABLE [dbo].[PurchaseItems] ADD [VariantId] INT NULL;
+
+            IF COL_LENGTH(N'dbo.PurchaseItems', N'ConversionFactor') IS NULL
+                ALTER TABLE [dbo].[PurchaseItems] ADD [ConversionFactor] DECIMAL(18,4) NOT NULL
+                    CONSTRAINT [DF_PurchaseItems_ConversionFactor_Legacy] DEFAULT 1;
+
+            IF COL_LENGTH(N'dbo.PurchaseItems', N'BaseQuantity') IS NULL
+                ALTER TABLE [dbo].[PurchaseItems] ADD [BaseQuantity] DECIMAL(18,4) NOT NULL
+                    CONSTRAINT [DF_PurchaseItems_BaseQuantity_Legacy] DEFAULT 0;
+
+            IF COL_LENGTH(N'dbo.PurchaseItems', N'CostPrice') IS NULL
+                ALTER TABLE [dbo].[PurchaseItems] ADD [CostPrice] DECIMAL(18,2) NOT NULL
+                    CONSTRAINT [DF_PurchaseItems_CostPrice_Legacy] DEFAULT 0;
+
+            IF COL_LENGTH(N'dbo.PurchaseItems', N'TotalCost') IS NULL
+                ALTER TABLE [dbo].[PurchaseItems] ADD [TotalCost] DECIMAL(18,2) NOT NULL
+                    CONSTRAINT [DF_PurchaseItems_TotalCost_Legacy] DEFAULT 0;
+
+            IF COL_LENGTH(N'dbo.PurchaseItems', N'CreatedByName') IS NULL
+                ALTER TABLE [dbo].[PurchaseItems] ADD [CreatedByName] NVARCHAR(MAX) NULL;
+
+            IF COL_LENGTH(N'dbo.PurchaseItems', N'ModifiedByName') IS NULL
+                ALTER TABLE [dbo].[PurchaseItems] ADD [ModifiedByName] NVARCHAR(MAX) NULL;
+        END
+        """;
 }

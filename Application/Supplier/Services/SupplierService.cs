@@ -113,9 +113,7 @@ public class SupplierService : ISupplierService
 
     private async Task<string> ResolveSupplierCodeAsync(string? requestedCode, int businessId, int branchId)
     {
-        var code = string.IsNullOrWhiteSpace(requestedCode)
-            ? await _codeGenerator.GenerateAsync(CodeModuleNames.Supplier, branchId)
-            : requestedCode.Trim();
+        var code = await _codeGenerator.ResolveAsync(CodeModuleNames.Supplier, branchId, requestedCode);
 
         if (await _repository.SupplierCodeExistsAsync(code, businessId, branchId))
             throw new InvalidOperationException($"Supplier code '{code}' already exists in this branch.");

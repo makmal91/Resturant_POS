@@ -167,9 +167,7 @@ public class CustomerService : ICustomerService
 
     private async Task<string> ResolveCustomerCodeAsync(string? requestedCode, int businessId, int branchId)
     {
-        var code = string.IsNullOrWhiteSpace(requestedCode)
-            ? await _codeGenerator.GenerateAsync(CodeModuleNames.Customer, branchId)
-            : requestedCode.Trim();
+        var code = await _codeGenerator.ResolveAsync(CodeModuleNames.Customer, branchId, requestedCode);
 
         if (await _repo.CustomerCodeExistsAsync(code, businessId, branchId))
             throw new InvalidOperationException($"Customer code '{code}' already exists in this branch.");

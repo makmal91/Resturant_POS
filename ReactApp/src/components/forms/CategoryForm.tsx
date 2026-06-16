@@ -157,11 +157,16 @@ const CategoryForm: React.FC<CategoryFormProps> = ({
   const resolvedBranchId =
     formData.branchId > 0 ? formData.branchId : selectedBranchId && selectedBranchId > 0 ? selectedBranchId : 0;
 
-  const branchDisplayName =
-    branches.find((branch) => branch.id === resolvedBranchId)?.name ||
-    (resolvedBranchId > 0 ? `Branch #${resolvedBranchId}` : '');
+  const showBranchField =
+    !isEditMode && !(selectedBranchId && selectedBranchId > 0) && !lockBranch;
 
-  const isBranchLocked = lockBranch || isEditMode || Number(initialData?.branchId ?? 0) > 0;
+  useEffect(() => {
+    if (selectedBranchId && selectedBranchId > 0 && !isEditMode) {
+      setFormData((prev) =>
+        prev.branchId === selectedBranchId ? prev : { ...prev, branchId: selectedBranchId }
+      );
+    }
+  }, [selectedBranchId, isEditMode]);
 
   const validateForm = () => {
     const nextErrors: Partial<Record<keyof CategoryFormData | 'imageFile', string>> = {};
@@ -171,7 +176,9 @@ const CategoryForm: React.FC<CategoryFormProps> = ({
     }
 
     if (!resolvedBranchId || resolvedBranchId <= 0) {
-      nextErrors.branchId = 'Branch selection is required';
+      nextErrors.branchId = showBranchField
+        ? 'Branch selection is required'
+        : 'Select a branch from the header before creating a category.';
     }
 
     if (imageFile && !imageFile.type.startsWith('image/')) {
@@ -265,16 +272,27 @@ const CategoryForm: React.FC<CategoryFormProps> = ({
         <p className="text-sm text-gray-600 mb-6">Enter category details below.</p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {isBranchLocked ? (
-            <FormInput
-              label="Branch"
-              name="branchDisplay"
-              value={branchDisplayName}
-              onChange={() => undefined}
-              disabled
-              required
-            />
-          ) : (
+          <CodeFieldWithGenerate
+            label="Code"
+            name="code"
+            value={formData.code}
+            onChange={(code) => setFormData((prev) => ({ ...prev, code }))}
+            module={CODE_MODULES.Category}
+            branchId={resolvedBranchId > 0 ? resolvedBranchId : undefined}
+            isEditMode={isEditMode}
+          />
+
+          <FormInput
+            label="Category Name"
+            name="name"
+            value={formData.name}
+            onChange={handleChange}
+            placeholder="Enter category name"
+            required
+            error={errors.name}
+          />
+
+          {showBranchField && (
             <FormSelect
               label="Branch"
               name="branchId"
@@ -287,29 +305,10 @@ const CategoryForm: React.FC<CategoryFormProps> = ({
               disabled={branchOptions.length === 0}
             />
           )}
-          {isBranchLocked && errors.branchId && (
-            <p className="-mt-4 mb-5 text-sm text-red-600">{errors.branchId}</p>
+
+          {!showBranchField && errors.branchId && (
+            <p className="md:col-span-2 -mt-2 text-sm text-red-600">{errors.branchId}</p>
           )}
-
-          <FormInput
-            label="Category Name"
-            name="name"
-            value={formData.name}
-            onChange={handleChange}
-            placeholder="Enter category name"
-            required
-            error={errors.name}
-          />
-
-          <CodeFieldWithGenerate
-            label="Code"
-            name="code"
-            value={formData.code}
-            onChange={(code) => setFormData((prev) => ({ ...prev, code }))}
-            module={CODE_MODULES.Category}
-            branchId={formData.branchId}
-            placeholder="Auto-generated if empty"
-          />
 
           <FormSelect
             label="Category Type"
