@@ -32,7 +32,7 @@ public class StockLedgerDto
     public string Remarks { get; set; } = string.Empty;
     public int BranchId { get; set; }
     public string BranchName { get; set; } = string.Empty;
-    public DateTime CreatedDate { get; set; }
+    public DateTime CreatedAt { get; set; }
 }
 
 public class StockLedgerFilterDto

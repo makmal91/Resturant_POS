@@ -60,7 +60,7 @@ const normalizeModule = (row: Record<string, unknown>): ModuleListItem => ({
   displayOrder: Number(row.displayOrder ?? row.DisplayOrder ?? 0),
   isActive: Boolean(row.isActive ?? row.IsActive ?? true),
   children: Array.isArray(row.children ?? row.Children)
-    ? (row.children ?? row.Children).map((child) => normalizeModule(toRecord(child)))
+    ? ((row.children ?? row.Children) as unknown[]).map((child) => normalizeModule(toRecord(child)))
     : [],
 });
 

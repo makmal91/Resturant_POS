@@ -27,8 +27,8 @@ public class BusinessDetailDto
     public bool HasLogo { get; set; }
     public string? LogoFileName { get; set; }
     public string? LogoContentType { get; set; }
-    public DateTime CreatedDate { get; set; }
-    public DateTime? UpdatedDate { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? ModifiedAt { get; set; }
 }
 
 public class CreateBusinessDto

@@ -26,20 +26,22 @@ public static class TenantRequestExtensions
 
     public static int ResolveBranchId(this ControllerBase controller, int? fallback = null)
     {
-        if (fallback.HasValue && fallback.Value >= 0)
-            return fallback.Value;
-
-        var claimValue = controller.User?.FindFirst("branchId")?.Value ?? controller.User?.FindFirst("BranchId")?.Value;
-        if (int.TryParse(claimValue, out var claimBranchId) && claimBranchId >= 0)
-            return claimBranchId;
-
+        // X-Branch-Id header represents the user's ACTIVE selection (0 = All Branches).
+        // It must take priority over the JWT claim (which only stores the primary branch at login).
         var headerValue = controller.Request.Headers["X-Branch-Id"].FirstOrDefault();
         if (int.TryParse(headerValue, out var headerBranchId) && headerBranchId >= 0)
             return headerBranchId;
 
+        if (fallback.HasValue && fallback.Value >= 0)
+            return fallback.Value;
+
         var queryValue = controller.Request.Query["branchId"].FirstOrDefault();
         if (int.TryParse(queryValue, out var queryBranchId) && queryBranchId >= 0)
             return queryBranchId;
+
+        var claimValue = controller.User?.FindFirst("branchId")?.Value ?? controller.User?.FindFirst("BranchId")?.Value;
+        if (int.TryParse(claimValue, out var claimBranchId) && claimBranchId >= 0)
+            return claimBranchId;
 
         return 1;
     }

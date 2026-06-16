@@ -19,8 +19,10 @@ public class CustomerRepository : ICustomerRepository
         var page     = Math.Max(1, filter.Page);
         var pageSize = Math.Clamp(filter.PageSize, 1, MaxPageSize);
 
-        var query = _db.Customers
-            .Where(c => c.BusinessId == filter.BusinessId && c.BranchId == filter.BranchId);
+        // BranchId == 0 means "All Branches" — skip branch filter, show entire business
+        var query = filter.BranchId > 0
+            ? _db.Customers.Where(c => c.BusinessId == filter.BusinessId && c.BranchId == filter.BranchId)
+            : _db.Customers.Where(c => c.BusinessId == filter.BusinessId);
 
         if (!string.IsNullOrWhiteSpace(filter.Search))
         {
@@ -55,17 +57,19 @@ public class CustomerRepository : ICustomerRepository
 
     public Task<CustomerEntity?> GetByIdAsync(int id, int businessId, int branchId) =>
         _db.Customers.FirstOrDefaultAsync(c =>
-            c.Id == id && c.BusinessId == businessId && c.BranchId == branchId);
+            c.Id == id && c.BusinessId == businessId && (branchId == 0 || c.BranchId == branchId));
 
     public Task<CustomerEntity?> GetWalkInAsync(int businessId, int branchId) =>
         _db.Customers.FirstOrDefaultAsync(c =>
-            c.IsWalkIn && c.BusinessId == businessId && c.BranchId == branchId && !c.IsDeleted);
+            c.IsWalkIn && c.BusinessId == businessId &&
+            (branchId == 0 || c.BranchId == branchId) && !c.IsDeleted);
 
     public async Task<List<CustomerEntity>> SearchAsync(string query, int businessId, int branchId, int take = 10)
     {
         var q = query.ToLower();
         return await _db.Customers
-            .Where(c => c.BusinessId == businessId && c.BranchId == branchId && c.Status && !c.IsDeleted
+            .Where(c => c.BusinessId == businessId && (branchId == 0 || c.BranchId == branchId)
+                && c.Status && !c.IsDeleted
                 && (c.Name.ToLower().Contains(q) || (c.Phone != null && c.Phone.Contains(q))))
             .OrderBy(c => c.Name)
             .Take(take)
@@ -76,7 +80,7 @@ public class CustomerRepository : ICustomerRepository
         _db.Customers.AnyAsync(c =>
             c.Phone == phone &&
             c.BusinessId == businessId &&
-            c.BranchId == branchId &&
+            (branchId == 0 || c.BranchId == branchId) &&
             !c.IsDeleted &&
             (excludeId == null || c.Id != excludeId));
 
@@ -84,7 +88,7 @@ public class CustomerRepository : ICustomerRepository
     {
         var count = await _db.Customers
             .IgnoreQueryFilters()
-            .CountAsync(c => c.BusinessId == businessId && c.BranchId == branchId);
+            .CountAsync(c => c.BusinessId == businessId && (branchId == 0 || c.BranchId == branchId));
         return count + 1;
     }
 

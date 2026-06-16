@@ -101,7 +101,6 @@ public class BrandService : IBrandService
         brand.Name = dto.Name.Trim();
         brand.Description = dto.Description?.Trim() ?? string.Empty;
         brand.Status = dto.Status;
-        brand.UpdatedDate = DateTime.UtcNow;
 
         ApplyBrandImage(
             brand,
@@ -131,7 +130,6 @@ public class BrandService : IBrandService
                 throw new InvalidOperationException($"Brand {item.Id} not found.");
 
             brand.Status = item.Status;
-            brand.UpdatedDate = DateTime.UtcNow;
         }
 
         await _repository.SaveChangesAsync();
@@ -144,7 +142,6 @@ public class BrandService : IBrandService
             throw new InvalidOperationException("Brand not found.");
 
         brand.IsDeleted = true;
-        brand.UpdatedDate = DateTime.UtcNow;
         await _repository.SaveChangesAsync();
     }
 
@@ -159,12 +156,10 @@ public class BrandService : IBrandService
             HasImage = brand.ImageData != null && brand.ImageData.Length > 0,
             BranchId = brand.BranchId,
             BranchName = brand.Branch?.Name ?? string.Empty,
-            CreatedDate = brand.CreatedDate,
-            UpdatedDate = brand.UpdatedDate,
-            CreatedById = brand.CreatedById,
-            CreatedByName = brand.CreatedByName,
-            ModifiedById = brand.ModifiedById,
-            ModifiedByName = brand.ModifiedByName
+            CreatedAt = brand.CreatedAt,
+            ModifiedAt = brand.ModifiedAt,
+            CreatedBy = brand.CreatedBy,
+            ModifiedBy = brand.ModifiedBy
         };
     }
 

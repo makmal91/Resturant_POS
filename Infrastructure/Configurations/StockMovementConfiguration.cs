@@ -23,7 +23,7 @@ public class StockMovementConfiguration : IEntityTypeConfiguration<StockMovement
         builder.HasIndex(sm => sm.Type)
             .HasDatabaseName("idx_stockmovement_type");
 
-        builder.HasIndex(sm => new { sm.BranchId, sm.CreatedDate })
+        builder.HasIndex(sm => new { sm.BranchId, sm.CreatedAt })
             .HasDatabaseName("idx_stockmovement_branch_createddate");
 
         // Relationships

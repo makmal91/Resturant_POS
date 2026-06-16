@@ -9,12 +9,10 @@ public class BrandDto
     public bool HasImage { get; set; }
     public int BranchId { get; set; }
     public string BranchName { get; set; } = string.Empty;
-    public DateTime CreatedDate { get; set; }
-    public DateTime? UpdatedDate { get; set; }
-    public int? CreatedById { get; set; }
-    public string? CreatedByName { get; set; }
-    public int? ModifiedById { get; set; }
-    public string? ModifiedByName { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? ModifiedAt { get; set; }
+    public int? CreatedBy { get; set; }
+    public int? ModifiedBy { get; set; }
 }
 
 public class BrandDetailDto : BrandDto

@@ -30,9 +30,6 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 
 const isGlobalRole = (roleName?: string) => isGlobalAdminSession(roleName)
 
-const isMasterUser = (user?: StoredUser | null) =>
-  Boolean(user?.isMasterUser || isMasterUserRole(user?.roleName))
-
 const isGlobalAdminUser = (user?: StoredUser | null) =>
   isGlobalAdminSession(user?.roleName, user)
 

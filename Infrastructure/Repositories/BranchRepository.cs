@@ -52,7 +52,7 @@ public class BranchRepository : IBranchRepository
                 CityId = branch.CityId,
                 CityName = city.Name,
                 IsActive = branch.IsActive,
-                CreatedDate = branch.CreatedDate
+                CreatedAt = branch.CreatedAt
             };
 
         return await query.ToListAsync();
@@ -81,8 +81,8 @@ public class BranchRepository : IBranchRepository
                 CityId = branch.CityId,
                 CityName = city.Name,
                 IsActive = branch.IsActive,
-                CreatedDate = branch.CreatedDate,
-                UpdatedDate = branch.UpdatedDate
+                CreatedAt = branch.CreatedAt,
+                ModifiedAt = branch.ModifiedAt
             };
 
         return await query.FirstOrDefaultAsync();

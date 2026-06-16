@@ -111,7 +111,7 @@ public class POSDbContext : DbContext
                 continue;
 
             modelBuilder.Entity(entityType.ClrType)
-                .Property<DateTime>("CreatedDate")
+                .Property<DateTime>("CreatedAt")
                 .HasDefaultValueSql("GETUTCDATE()");
 
             modelBuilder.Entity(entityType.ClrType)
@@ -157,7 +157,7 @@ public class POSDbContext : DbContext
             Currency = "USD",
             TimeZone = "UTC",
             IsActive = true,
-            CreatedDate = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow
         };
 
         modelBuilder.Entity<Business>().HasData(defaultBusiness);
@@ -202,7 +202,7 @@ public class POSDbContext : DbContext
             ClosingTime = new TimeSpan(22, 0, 0),
             IsActive = true,
             BusinessId = 1,
-            CreatedDate = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow
         };
 
         modelBuilder.Entity<Branch>().HasData(defaultBranch);
@@ -212,11 +212,11 @@ public class POSDbContext : DbContext
 
         var roles = new[]
         {
-            new Role { Id = 1, Name = RoleNames.SystemAdmin, Description = "Full system access", Permissions = "all", IsActive = true, CreatedDate = seedDate },
-            new Role { Id = 2, Name = RoleNames.SuperAdmin, Description = "All branches access", Permissions = "all", IsActive = true, CreatedDate = seedDate },
-            new Role { Id = 3, Name = RoleNames.Admin, Description = "Branch-level management", Permissions = "branch_admin", IsActive = true, CreatedDate = seedDate },
-            new Role { Id = 4, Name = RoleNames.Manager, Description = "Operations control", Permissions = "operations", IsActive = true, CreatedDate = seedDate },
-            new Role { Id = 5, Name = RoleNames.Cashier, Description = "POS billing access", Permissions = "pos", IsActive = true, CreatedDate = seedDate }
+            new Role { Id = 1, Name = RoleNames.SystemAdmin, Description = "Full system access", Permissions = "all", IsActive = true, CreatedDate = seedDate, UpdatedDate = null },
+            new Role { Id = 2, Name = RoleNames.SuperAdmin, Description = "All branches access", Permissions = "all", IsActive = true, CreatedDate = seedDate, UpdatedDate = null },
+            new Role { Id = 3, Name = RoleNames.Admin, Description = "Branch-level management", Permissions = "branch_admin", IsActive = true, CreatedDate = seedDate, UpdatedDate = null },
+            new Role { Id = 4, Name = RoleNames.Manager, Description = "Operations control", Permissions = "operations", IsActive = true, CreatedDate = seedDate, UpdatedDate = null },
+            new Role { Id = 5, Name = RoleNames.Cashier, Description = "POS billing access", Permissions = "pos", IsActive = true, CreatedDate = seedDate, UpdatedDate = null }
         };
 
         modelBuilder.Entity<Role>().HasData(roles);
@@ -235,7 +235,7 @@ public class POSDbContext : DbContext
             Salary = 0,
             ShiftType = ShiftType.Flexible,
             Status = UserStatus.Active,
-            CreatedDate = seedDate
+            CreatedAt = seedDate
         };
 
         modelBuilder.Entity<User>().HasData(adminUser);
@@ -270,7 +270,7 @@ public class POSDbContext : DbContext
 
             entry.State = EntityState.Modified;
             entry.Entity.IsDeleted = true;
-            entry.Entity.UpdatedDate = DateTime.UtcNow;
+            entry.Entity.ModifiedAt = DateTime.UtcNow;
 
             if (entry.Entity is User user)
                 user.DeletedAt = DateTime.UtcNow;
@@ -291,17 +291,30 @@ public class POSDbContext : DbContext
     {
         var businessId = _tenantContext.BusinessId ?? 1;
         var branchId = _tenantContext.BranchId ?? 1;
+        var userId = _tenantContext.UserId;
 
         foreach (var entry in ChangeTracker.Entries<BaseEntity>())
         {
-            if (entry.State != EntityState.Added || entry.Entity is Business or User)
+            if (entry.Entity is Business or User)
                 continue;
 
-            if (entry.Entity.BusinessId <= 0)
-                entry.Entity.BusinessId = businessId;
+            if (entry.State == EntityState.Added)
+            {
+                if (entry.Entity.BusinessId <= 0)
+                    entry.Entity.BusinessId = businessId;
 
-            if (entry.Entity is not Branch && entry.Entity.BranchId <= 0)
-                entry.Entity.BranchId = branchId;
+                if (entry.Entity is not Branch && entry.Entity.BranchId <= 0)
+                    entry.Entity.BranchId = branchId;
+
+                if (userId.HasValue && entry.Entity.CreatedBy == null)
+                    entry.Entity.CreatedBy = userId.Value;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.ModifiedAt = DateTime.UtcNow;
+                if (userId.HasValue)
+                    entry.Entity.ModifiedBy = userId.Value;
+            }
         }
 
         foreach (var entry in ChangeTracker.Entries<User>())
@@ -318,6 +331,9 @@ public class POSDbContext : DbContext
                 if (tenantBranchId > 0)
                     entry.Entity.BranchId = tenantBranchId;
             }
+
+            if (userId.HasValue && entry.Entity.CreatedBy == null)
+                entry.Entity.CreatedBy = userId.Value;
         }
     }
 
@@ -326,6 +342,7 @@ public class POSDbContext : DbContext
         var parameter = Expression.Parameter(clrType, "e");
         var businessProperty = Expression.Property(parameter, nameof(BaseEntity.BusinessId));
         var isDeletedProperty = Expression.Property(parameter, nameof(BaseEntity.IsDeleted));
+        // Using new property names (CreatedAt, ModifiedAt, CreatedBy, ModifiedBy)
         var notDeleted = Expression.Equal(isDeletedProperty, Expression.Constant(false));
 
         var isSuperAdmin = _tenantContext.IsMasterUser || _tenantContext.IsSuperAdmin;
@@ -347,7 +364,7 @@ public class POSDbContext : DbContext
                 scopedPredicate = Expression.Equal(businessProperty, Expression.Constant(businessId.Value));
             }
 
-            if (branchId.HasValue && clrType != typeof(Branch))
+            if (branchId.HasValue && branchId.Value > 0 && clrType != typeof(Branch))
             {
                 var branchProperty = Expression.Property(parameter, nameof(BaseEntity.BranchId));
                 var branchPredicate = Expression.Equal(branchProperty, Expression.Constant(branchId.Value));

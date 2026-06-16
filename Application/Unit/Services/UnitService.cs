@@ -66,7 +66,6 @@ public class UnitService : IUnitService
         unit.Description = dto.Description?.Trim() ?? string.Empty;
         unit.ConversionFactor = dto.ConversionFactor;
         unit.Status = dto.IsActive ?? dto.Status;
-        unit.UpdatedDate = DateTime.UtcNow;
 
         await _repository.SaveChangesAsync();
         return MapDto(unit);
@@ -78,7 +77,6 @@ public class UnitService : IUnitService
             ?? throw new InvalidOperationException("Unit not found.");
 
         unit.IsDeleted = true;
-        unit.UpdatedDate = DateTime.UtcNow;
         await _repository.SaveChangesAsync();
     }
 

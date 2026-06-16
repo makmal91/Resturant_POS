@@ -106,8 +106,6 @@ public class PurchaseService : IPurchaseService
         entity.WarehouseId  = dto.WarehouseId;
         entity.PurchaseDate = dto.PurchaseDate;
         entity.Notes        = dto.Notes?.Trim() ?? string.Empty;
-        entity.UpdatedDate  = DateTime.UtcNow;
-
         foreach (var item in entity.Items)
             item.IsDeleted = true;
 
@@ -184,7 +182,6 @@ public class PurchaseService : IPurchaseService
 
         entity.TotalAmount = activeItems.Sum(i => i.TotalCost);
         entity.Status = PurchaseStatus.Posted;
-        entity.UpdatedDate = DateTime.UtcNow;
 
         await _purchaseRepository.SaveChangesAsync();
 
@@ -202,7 +199,6 @@ public class PurchaseService : IPurchaseService
             throw new InvalidOperationException("Cannot delete a posted purchase. Cancel it instead.");
 
         entity.IsDeleted = true;
-        entity.UpdatedDate = DateTime.UtcNow;
         await _purchaseRepository.SaveChangesAsync();
     }
 
@@ -284,7 +280,6 @@ public class PurchaseService : IPurchaseService
         entity.Status       = PurchaseStatus.Cancelled;
         entity.VoidedAt     = DateTime.UtcNow;
         entity.VoidedByName = dto.VoidedByName;
-        entity.UpdatedDate  = DateTime.UtcNow;
 
         await _purchaseRepository.SaveChangesAsync();
         await _stockLedgerRepository.SaveChangesAsync();
@@ -335,8 +330,8 @@ public class PurchaseService : IPurchaseService
         Status = p.Status,
         Notes = p.Notes,
         ItemCount    = p.Items.Count(i => !i.IsDeleted),
-        CreatedDate  = p.CreatedDate,
-        UpdatedDate  = p.UpdatedDate,
+        CreatedAt    = p.CreatedAt,
+        ModifiedAt   = p.ModifiedAt,
         VoidedAt     = p.VoidedAt,
         VoidedByName = p.VoidedByName
     };
@@ -356,8 +351,8 @@ public class PurchaseService : IPurchaseService
         Status       = p.Status,
         Notes        = p.Notes,
         ItemCount    = p.Items.Count(i => !i.IsDeleted),
-        CreatedDate  = p.CreatedDate,
-        UpdatedDate  = p.UpdatedDate,
+        CreatedAt    = p.CreatedAt,
+        ModifiedAt   = p.ModifiedAt,
         VoidedAt     = p.VoidedAt,
         VoidedByName = p.VoidedByName,
         Items = p.Items

@@ -127,12 +127,10 @@ public class BrandRepository : IBrandRepository
                 ImageFileName = b.ImageFileName,
                 BranchId = b.BranchId,
                 BranchName = b.Branch != null ? b.Branch.Name : string.Empty,
-                CreatedDate = b.CreatedDate,
-                UpdatedDate = b.UpdatedDate,
-                CreatedById = b.CreatedById,
-                CreatedByName = b.CreatedByName,
-                ModifiedById = b.ModifiedById,
-                ModifiedByName = b.ModifiedByName
+                CreatedAt = b.CreatedAt,
+                ModifiedAt = b.ModifiedAt,
+                CreatedBy = b.CreatedBy,
+                ModifiedBy = b.ModifiedBy
             })
             .FirstOrDefaultAsync();
     }

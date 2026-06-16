@@ -13,6 +13,11 @@ public class HttpTenantContext : ITenantContext
         _httpContextAccessor = httpContextAccessor;
     }
 
+    public int? UserId =>
+        TryReadIntClaim(ClaimTypes.NameIdentifier) ??
+        TryReadIntClaim("userId") ??
+        TryReadIntClaim("UserId");
+
     public int? BusinessId =>
         TryReadIntClaim("businessId") ??
         TryReadIntClaim("BusinessId") ??
@@ -20,10 +25,13 @@ public class HttpTenantContext : ITenantContext
         TryReadIntQuery("businessId");
 
     public int? BranchId =>
-        TryReadIntClaim("branchId") ??
-        TryReadIntClaim("BranchId") ??
+        // X-Branch-Id header takes priority: it represents the user's ACTIVE branch selection
+        // (0 = All Branches, >0 = specific branch).
+        // JWT branchId claim only holds the primary/default branch at login time.
         TryReadIntHeader("X-Branch-Id") ??
-        TryReadIntQuery("branchId");
+        TryReadIntQuery("branchId") ??
+        TryReadIntClaim("branchId") ??
+        TryReadIntClaim("BranchId");
 
     public bool IsMasterUser
     {

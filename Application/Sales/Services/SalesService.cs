@@ -150,7 +150,7 @@ public class SalesService : ISalesService
                 Status        = inv.Status,
                 CashierName   = inv.CashierName,
                 ItemCount     = inv.Items.Count(i => !i.IsDeleted),
-                CreatedDate   = inv.CreatedDate,
+                CreatedAt   = inv.CreatedAt,
                 VoidedAt      = inv.VoidedAt,
                 BranchId      = inv.BranchId,
                 WarehouseId   = inv.WarehouseId,
@@ -247,7 +247,6 @@ public class SalesService : ISalesService
             throw new InvalidOperationException("Only held bills can be cancelled.");
 
         invoice.Status = SaleInvoiceStatus.Cancelled;
-        invoice.UpdatedDate = DateTime.UtcNow;
         await _salesRepository.SaveChangesAsync();
     }
 
@@ -438,7 +437,7 @@ public class SalesService : ISalesService
         VoidedByName = inv.VoidedByName,
         BranchId     = inv.BranchId,
         BranchName   = inv.Branch?.Name ?? string.Empty,
-        CreatedDate  = inv.CreatedDate,
+        CreatedAt  = inv.CreatedAt,
         Items = inv.Items
             .Where(i => !i.IsDeleted)
             .Select(i => new SaleInvoiceItemDto
@@ -504,7 +503,6 @@ public class SalesService : ISalesService
         invoice.Status       = SaleInvoiceStatus.Voided;
         invoice.VoidedAt     = DateTime.UtcNow;
         invoice.VoidedByName = dto.VoidedByName;
-        invoice.UpdatedDate  = DateTime.UtcNow;
 
         await _salesRepository.SaveChangesAsync();
         await _stockLedgerRepository.SaveChangesAsync();
@@ -606,7 +604,6 @@ public class SalesService : ISalesService
         invoice.GrandTotal    = subTotal - totalDiscount + totalTax;
         invoice.ReturnAmount  = dto.PaidAmount > invoice.GrandTotal
                                     ? dto.PaidAmount - invoice.GrandTotal : 0;
-        invoice.UpdatedDate   = DateTime.UtcNow;
 
         await _salesRepository.SaveChangesAsync();
 

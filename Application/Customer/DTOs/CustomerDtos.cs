@@ -16,7 +16,7 @@ public class CustomerListDto
     public bool   Status         { get; set; }
     public decimal CreditLimit   { get; set; }
     public bool   IsWalkIn       { get; set; }
-    public DateTime CreatedDate  { get; set; }
+    public DateTime CreatedAt  { get; set; }
 }
 
 // ─── Detail ───────────────────────────────────────────────────────────────────
@@ -27,7 +27,7 @@ public class CustomerDetailDto : CustomerListDto
     public string? CNIC          { get; set; }
     public decimal OpeningBalance { get; set; }
     public int    LoyaltyPoints  { get; set; }
-    public DateTime? UpdatedDate { get; set; }
+    public DateTime? ModifiedAt { get; set; }
 }
 
 // ─── Create ───────────────────────────────────────────────────────────────────

@@ -27,7 +27,7 @@ public class PaymentConfiguration : IEntityTypeConfiguration<Payment>
         builder.HasIndex(p => p.Status)
             .HasDatabaseName("idx_payment_status");
 
-        builder.HasIndex(p => new { p.BranchId, p.CreatedDate })
+        builder.HasIndex(p => new { p.BranchId, p.CreatedAt })
             .HasDatabaseName("idx_payment_branch_createddate");
 
         // Relationships

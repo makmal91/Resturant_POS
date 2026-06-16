@@ -98,8 +98,8 @@ public class BusinessRepository : IBusinessRepository
                 HasLogo = b.Logo != null && b.Logo.Length > 0,
                 LogoFileName = b.LogoFileName,
                 LogoContentType = b.LogoContentType,
-                CreatedDate = b.CreatedDate,
-                UpdatedDate = b.UpdatedDate
+                CreatedAt = b.CreatedAt,
+                ModifiedAt = b.ModifiedAt
             })
             .FirstOrDefaultAsync();
     }

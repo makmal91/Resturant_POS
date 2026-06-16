@@ -43,13 +43,13 @@ const TopHeader: React.FC = () => {
     }
   };
 
-  const showBranchSelector = isGlobalAdmin
-    ? branches.length > 0
-    : branches.length > 1;
-  const branchLabel =
-    selectedBranchId === 0
-      ? 'All Branches'
-      : selectedBranch?.name ?? 'Select Branch';
+  // Show selector only when user has a choice to make:
+  // - Global admin always sees it (can switch between branches)
+  // - Regular users see it only when assigned to multiple branches
+  const showBranchSelector = isGlobalAdmin ? branches.length > 0 : branches.length > 1;
+
+  // Label to show when user has exactly 1 branch (read-only context badge)
+  const singleBranchLabel = !showBranchSelector && selectedBranch ? selectedBranch.name : null;
 
   return (
     <header className="bg-white shadow-sm border-b border-gray-200 px-6 py-4">
@@ -92,16 +92,13 @@ const TopHeader: React.FC = () => {
             </div>
           )}
 
-          {!showBranchSelector && selectedBranch && (
-            <span className="hidden text-sm text-gray-600 md:inline">
-              Branch: <span className="font-medium text-gray-900">{selectedBranch.name}</span>
-            </span>
-          )}
-
-          {isGlobalAdmin && selectedBranchId === 0 && (
-            <span className="hidden text-sm text-gray-600 md:inline">
-              Branch: <span className="font-medium text-gray-900">{branchLabel}</span>
-            </span>
+          {singleBranchLabel && (
+            <div className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5">
+              <svg className="h-3.5 w-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0zM15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              <span className="text-sm font-medium text-gray-700">{singleBranchLabel}</span>
+            </div>
           )}
 
           <div className="flex items-center space-x-3">

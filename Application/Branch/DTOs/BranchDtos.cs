@@ -20,7 +20,7 @@ public class BranchListItemDto
     public int CityId { get; set; }
     public string CityName { get; set; } = string.Empty;
     public bool IsActive { get; set; }
-    public DateTime CreatedDate { get; set; }
+    public DateTime CreatedAt { get; set; }
 }
 
 public class BranchDetailDto
@@ -38,8 +38,8 @@ public class BranchDetailDto
     public int CityId { get; set; }
     public string CityName { get; set; } = string.Empty;
     public bool IsActive { get; set; }
-    public DateTime CreatedDate { get; set; }
-    public DateTime? UpdatedDate { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? ModifiedAt { get; set; }
 }
 
 public class CreateBranchDto

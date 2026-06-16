@@ -12,8 +12,8 @@ public class SupplierDto
     public bool IsActive { get; set; }
     public int BranchId { get; set; }
     public string BranchName { get; set; } = string.Empty;
-    public DateTime CreatedDate { get; set; }
-    public DateTime? UpdatedDate { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? ModifiedAt { get; set; }
 }
 
 public class CreateSupplierDto

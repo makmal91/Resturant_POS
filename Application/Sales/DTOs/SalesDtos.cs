@@ -172,7 +172,7 @@ public class SaleInvoiceDto
     public string?  VoidedByName { get; set; }
     public int BranchId { get; set; }
     public string BranchName { get; set; } = string.Empty;
-    public DateTime CreatedDate { get; set; }
+    public DateTime CreatedAt { get; set; }
     public List<SaleInvoiceItemDto> Items { get; set; } = new();
 }
 
@@ -228,7 +228,7 @@ public class SaleInvoiceListDto
     public SaleInvoiceStatus Status { get; set; }
     public string? CashierName { get; set; }
     public int ItemCount { get; set; }
-    public DateTime CreatedDate { get; set; }
+    public DateTime CreatedAt { get; set; }
     public DateTime? VoidedAt { get; set; }
     public int BranchId { get; set; }
     public int WarehouseId { get; set; }

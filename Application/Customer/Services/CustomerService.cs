@@ -99,7 +99,6 @@ public class CustomerService : ICustomerService
         entity.Status        = dto.Status;
         entity.OpeningBalance = dto.OpeningBalance;
         entity.CreditLimit   = dto.CreditLimit;
-        entity.UpdatedDate   = DateTime.UtcNow;
 
         await _repo.SaveChangesAsync();
         return MapDetail(entity);
@@ -112,7 +111,6 @@ public class CustomerService : ICustomerService
         if (entity.IsWalkIn) throw new InvalidOperationException("The walk-in customer cannot be deleted.");
 
         entity.IsDeleted   = true;
-        entity.UpdatedDate = DateTime.UtcNow;
         await _repo.SaveChangesAsync();
     }
 
@@ -166,7 +164,7 @@ public class CustomerService : ICustomerService
         Status       = c.Status,
         CreditLimit  = c.CreditLimit,
         IsWalkIn     = c.IsWalkIn,
-        CreatedDate  = c.CreatedDate
+        CreatedAt  = c.CreatedAt
     };
 
     private static CustomerDetailDto MapDetail(CustomerEntity c) => new()
@@ -185,7 +183,7 @@ public class CustomerService : ICustomerService
         CreditLimit    = c.CreditLimit,
         LoyaltyPoints  = c.LoyaltyPoints,
         IsWalkIn       = c.IsWalkIn,
-        CreatedDate    = c.CreatedDate,
-        UpdatedDate    = c.UpdatedDate
+        CreatedAt    = c.CreatedAt,
+        ModifiedAt   = c.ModifiedAt
     };
 }

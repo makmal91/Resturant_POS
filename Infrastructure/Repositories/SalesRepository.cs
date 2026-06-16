@@ -98,7 +98,7 @@ public class SalesRepository : ISalesRepository
             .Include(s => s.Customer)
             .Include(s => s.Warehouse)
             .Include(s => s.Branch)
-            .Where(s => s.BusinessId == businessId && s.BranchId == branchId && !s.IsDeleted);
+            .Where(s => s.BusinessId == businessId && (branchId == 0 || s.BranchId == branchId) && !s.IsDeleted);
 
         if (status.HasValue)
             query = query.Where(s => s.Status == status.Value);
@@ -150,7 +150,7 @@ public class SalesRepository : ISalesRepository
                 && s.BusinessId == businessId
                 && s.BranchId == branchId
                 && !s.IsDeleted)
-            .OrderByDescending(s => s.CreatedDate)
+            .OrderByDescending(s => s.CreatedAt)
             .ToListAsync();
     }
 

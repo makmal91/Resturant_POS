@@ -78,7 +78,7 @@ const normalizeSidebarItem = (value: Record<string, unknown>): SidebarTreeItem =
       : null,
   displayOrder: Number(value.displayOrder ?? value.DisplayOrder ?? 0),
   children: Array.isArray(value.children ?? value.Children)
-    ? (value.children ?? value.Children as unknown[]).map((c) =>
+    ? ((value.children ?? value.Children) as unknown[]).map((c) =>
         normalizeSidebarItem(c as Record<string, unknown>)
       )
     : [],

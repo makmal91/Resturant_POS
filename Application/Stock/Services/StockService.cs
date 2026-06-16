@@ -109,6 +109,6 @@ public class StockService : IStockService
         Remarks = e.Remarks,
         BranchId = e.BranchId,
         BranchName = e.Branch?.Name ?? string.Empty,
-        CreatedDate = e.CreatedDate
+        CreatedAt = e.CreatedAt
     };
 }

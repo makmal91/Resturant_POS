@@ -9,8 +9,6 @@ public class BranchConfiguration : IEntityTypeConfiguration<Branch>
     public void Configure(EntityTypeBuilder<Branch> builder)
     {
         builder.Ignore(b => b.BranchId);
-        builder.Ignore(b => b.CreatedByName);
-        builder.Ignore(b => b.ModifiedByName);
         builder.Ignore(b => b.Business);
         builder.Ignore(b => b.Country);
         builder.Ignore(b => b.City);

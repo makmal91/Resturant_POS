@@ -55,7 +55,7 @@ const normalizeUser = (row: Record<string, unknown>): UserListItem => ({
   roleName: String(row.roleName ?? row.RoleName ?? ''),
   isActive: Boolean(row.isActive ?? row.IsActive ?? true),
   branches: Array.isArray(row.branches ?? row.Branches)
-    ? (row.branches ?? row.Branches).map((branch: Record<string, unknown>) => ({
+    ? ((row.branches ?? row.Branches) as Record<string, unknown>[]).map((branch) => ({
         branchId: Number(branch.branchId ?? branch.BranchId ?? 0),
         branchName: String(branch.branchName ?? branch.BranchName ?? ''),
       }))

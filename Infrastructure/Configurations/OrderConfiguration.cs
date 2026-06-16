@@ -41,7 +41,7 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.HasIndex(o => o.Status)
             .HasDatabaseName("idx_order_status");
 
-        builder.HasIndex(o => new { o.BranchId, o.CreatedDate })
+        builder.HasIndex(o => new { o.BranchId, o.CreatedAt })
             .HasDatabaseName("idx_order_branchid_createddate");
 
         // Relationships

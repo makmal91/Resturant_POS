@@ -89,7 +89,6 @@ public class SupplierService : ISupplierService
         entity.Address = dto.Address?.Trim() ?? string.Empty;
         entity.TaxNumber = dto.TaxNumber?.Trim() ?? string.Empty;
         entity.IsActive = dto.IsActive;
-        entity.UpdatedDate = DateTime.UtcNow;
 
         await _repository.SaveChangesAsync();
         return MapDto(entity);
@@ -102,7 +101,6 @@ public class SupplierService : ISupplierService
             throw new InvalidOperationException("Supplier not found.");
 
         entity.IsDeleted = true;
-        entity.UpdatedDate = DateTime.UtcNow;
         await _repository.SaveChangesAsync();
     }
 
@@ -118,7 +116,7 @@ public class SupplierService : ISupplierService
         IsActive = s.IsActive,
         BranchId = s.BranchId,
         BranchName = s.Branch?.Name ?? string.Empty,
-        CreatedDate = s.CreatedDate,
-        UpdatedDate = s.UpdatedDate
+        CreatedAt = s.CreatedAt,
+        ModifiedAt = s.ModifiedAt
     };
 }

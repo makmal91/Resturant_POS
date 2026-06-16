@@ -25,13 +25,15 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   if (config.data instanceof FormData) {
     if (config.headers instanceof AxiosHeaders) {
       config.headers.setContentType(false);
-    } else if (typeof config.headers.delete === 'function') {
-      config.headers.delete('Content-Type');
-      config.headers.delete('content-type');
     }
-
-    delete config.headers['Content-Type'];
-    delete config.headers['content-type'];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const hdrs = config.headers as any;
+    if (typeof hdrs.delete === 'function') {
+      hdrs.delete('Content-Type');
+      hdrs.delete('content-type');
+    }
+    delete hdrs['Content-Type'];
+    delete hdrs['content-type'];
   }
 
   const user = authStorage.getUser();

@@ -111,7 +111,6 @@ public class BusinessService : IBusinessService
             business.LogoContentType = logo == null ? null : logoContentType;
         }
 
-        business.UpdatedDate = DateTime.UtcNow;
         await _repository.SaveChangesAsync();
 
         return await _repository.GetDetailByIdAsync(id);

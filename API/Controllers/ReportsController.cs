@@ -29,18 +29,18 @@ public class ReportsController : ControllerBase
         var toDate = to ?? DateTime.UtcNow;
 
         var orderItems = await _db.OrderItems
-            .Where(oi => oi.BusinessId == resolvedBusinessId && oi.BranchId == resolvedBranchId)
+            .Where(oi => oi.BusinessId == resolvedBusinessId && (resolvedBranchId == 0 || oi.BranchId == resolvedBranchId))
             .Include(oi => oi.Order)
             .Include(oi => oi.MenuItem)
             .Where(oi => oi.Order.Status == OrderStatus.Completed &&
-                         oi.Order.CreatedDate >= fromDate &&
-                         oi.Order.CreatedDate <= toDate &&
+                         oi.Order.CreatedAt >= fromDate &&
+                         oi.Order.CreatedAt <= toDate &&
                          oi.MenuItem.ProductType == ProductType.FinishedGood)
             .ToListAsync();
 
         var menuItemIds = orderItems.Select(i => i.MenuItemId).Distinct().ToList();
         var recipes = await _db.Recipes
-            .Where(r => r.BusinessId == resolvedBusinessId && r.BranchId == resolvedBranchId && menuItemIds.Contains(r.MenuItemId))
+            .Where(r => r.BusinessId == resolvedBusinessId && (resolvedBranchId == 0 || r.BranchId == resolvedBranchId) && menuItemIds.Contains(r.MenuItemId))
             .Include(r => r.Ingredient)
             .ToListAsync();
 
@@ -77,7 +77,7 @@ public class ReportsController : ControllerBase
 
         var items = await _db.InventoryItems
             .Where(i => i.BusinessId == resolvedBusinessId &&
-                        i.BranchId == resolvedBranchId &&
+                        (resolvedBranchId == 0 || i.BranchId == resolvedBranchId) &&
                         (i.ProductType == ProductType.RawMaterial || i.ProductType == ProductType.SemiFinished))
             .Select(i => new
             {
@@ -107,7 +107,7 @@ public class ReportsController : ControllerBase
         var toDate = to ?? DateTime.UtcNow;
 
         var branchSales = await _db.Orders
-            .Where(o => o.BusinessId == resolvedBusinessId && o.Status == OrderStatus.Completed && o.CreatedDate >= fromDate && o.CreatedDate <= toDate)
+            .Where(o => o.BusinessId == resolvedBusinessId && o.Status == OrderStatus.Completed && o.CreatedAt >= fromDate && o.CreatedAt <= toDate)
             .GroupBy(o => o.BranchId)
             .Select(g => new
             {

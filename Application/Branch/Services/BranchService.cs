@@ -146,7 +146,6 @@ public class BranchService : IBranchService
             branch.CityId = cityId;
         }
 
-        branch.UpdatedDate = DateTime.UtcNow;
         await _repository.SaveChangesAsync();
 
         return await _repository.GetDetailByIdAsync(id, branch.BusinessId);

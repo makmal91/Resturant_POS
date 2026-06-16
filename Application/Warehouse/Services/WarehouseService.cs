@@ -84,7 +84,6 @@ public class WarehouseService : IWarehouseService
         entity.Code = dto.Code?.Trim() ?? string.Empty;
         entity.Address = dto.Address?.Trim() ?? string.Empty;
         entity.IsActive = dto.IsActive;
-        entity.UpdatedDate = DateTime.UtcNow;
 
         await _repository.SaveChangesAsync();
         return MapDto(entity);
@@ -97,7 +96,6 @@ public class WarehouseService : IWarehouseService
             throw new InvalidOperationException("Warehouse not found.");
 
         entity.IsDeleted = true;
-        entity.UpdatedDate = DateTime.UtcNow;
         await _repository.SaveChangesAsync();
     }
 
@@ -110,7 +108,7 @@ public class WarehouseService : IWarehouseService
         IsActive = w.IsActive,
         BranchId = w.BranchId,
         BranchName = w.Branch?.Name ?? string.Empty,
-        CreatedDate = w.CreatedDate,
-        UpdatedDate = w.UpdatedDate
+        CreatedAt = w.CreatedAt,
+        ModifiedAt = w.ModifiedAt
     };
 }

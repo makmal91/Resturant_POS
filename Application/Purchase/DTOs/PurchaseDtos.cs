@@ -17,8 +17,8 @@ public class PurchaseDto
     public PurchaseStatus Status { get; set; }
     public string Notes { get; set; } = string.Empty;
     public int ItemCount { get; set; }
-    public DateTime CreatedDate { get; set; }
-    public DateTime? UpdatedDate { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? ModifiedAt { get; set; }
     public DateTime? VoidedAt    { get; set; }
     public string?  VoidedByName { get; set; }
 }

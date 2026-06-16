@@ -103,8 +103,8 @@ public class MenuService : IMenuService
             BusinessId = subCategory.BusinessId,
             BranchId = subCategory.BranchId,
             BranchName = subCategory.Branch?.Name ?? string.Empty,
-            CreatedDate = subCategory.CreatedDate,
-            UpdatedDate = subCategory.UpdatedDate
+            CreatedAt = subCategory.CreatedAt,
+            ModifiedAt = subCategory.ModifiedAt
         };
     }
 
@@ -365,7 +365,6 @@ public class MenuService : IMenuService
             ApplyCreateDtoToCategory(archivedCategory, dto);
             ApplyCategoryImage(archivedCategory, imageBytes, imageFileName, imageContentType, hasUploadedImage, false);
             archivedCategory.IsDeleted = false;
-            archivedCategory.UpdatedDate = DateTime.UtcNow;
 
             try
             {
@@ -435,7 +434,6 @@ public class MenuService : IMenuService
         category.Color = dto.Color;
         category.Status = dto.Status;
         category.CategoryType = dto.CategoryType;
-        category.UpdatedDate = DateTime.UtcNow;
         ApplyCategoryImage(category, imageBytes, imageFileName, imageContentType, replaceImage, replaceImage && (imageBytes == null || imageBytes.Length == 0));
 
         try
@@ -468,7 +466,6 @@ public class MenuService : IMenuService
             throw new InvalidOperationException("Cannot delete category that still has subcategories.");
 
         category.IsDeleted = true;
-        category.UpdatedDate = DateTime.UtcNow;
         await _repository.SaveChangesAsync();
         _cache.Remove(GetPosMenuCacheKey(businessId, branchId));
         InvalidateCategoryListCache(businessId, branchId);
@@ -610,7 +607,6 @@ public class MenuService : IMenuService
         subCategory.Status = dto.Status;
         subCategory.Icon = dto.Icon;
         subCategory.CategoryId = dto.CategoryId;
-        subCategory.UpdatedDate = DateTime.UtcNow;
 
         ApplySubCategoryImage(
             subCategory,
@@ -639,7 +635,6 @@ public class MenuService : IMenuService
                 throw new InvalidOperationException($"SubCategory {item.Id} not found.");
 
             subCategory.Status = item.Status;
-            subCategory.UpdatedDate = DateTime.UtcNow;
         }
 
         await _repository.SaveChangesAsync();
@@ -659,7 +654,6 @@ public class MenuService : IMenuService
             throw new InvalidOperationException("Cannot delete subcategory that is used in products.");
 
         subCategory.IsDeleted = true;
-        subCategory.UpdatedDate = DateTime.UtcNow;
         await _repository.SaveChangesAsync();
         InvalidateSubCategoryCaches(businessId, branchId);
     }
@@ -763,7 +757,6 @@ public class MenuService : IMenuService
         menuItem.IsInventoryItem = expectedFlags.isInventoryItem;
         menuItem.IsRecipeItem = expectedFlags.isRecipeItem;
         menuItem.IsPurchasable = expectedFlags.isPurchasable;
-        menuItem.UpdatedDate = DateTime.UtcNow;
 
         await _repository.SaveChangesAsync();
         _cache.Remove(GetPosMenuCacheKey(dto.BusinessId, dto.BranchId));

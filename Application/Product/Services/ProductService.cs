@@ -99,8 +99,6 @@ public class ProductService : IProductService
         product.IsDiscountAllowed = dto.IsDiscountAllowed;
         product.DiscountType = dto.IsDiscountAllowed ? dto.DiscountType : null;
         product.DiscountValue = dto.IsDiscountAllowed ? Math.Max(0, dto.DiscountValue) : 0;
-        product.UpdatedDate = DateTime.UtcNow;
-
         ReplaceUnits(product, dto.Units, dto.BusinessId, dto.BranchId);
         ReplaceVariants(product, dto.IsVariantEnabled ? dto.Variants : new List<ProductVariantWriteDto>(), dto.BusinessId, dto.BranchId);
         await ReplaceBarcodesAsync(product, dto.Barcodes, dto.BusinessId, dto.BranchId);
@@ -114,7 +112,6 @@ public class ProductService : IProductService
         var product = await GetProductOrThrowAsync(id, businessId, branchId);
         ValidateUnits(units);
         ReplaceUnits(product, units, businessId, branchId);
-        product.UpdatedDate = DateTime.UtcNow;
         await _repository.SaveChangesAsync();
         return MapDetailDto(product);
     }
@@ -124,7 +121,6 @@ public class ProductService : IProductService
         var product = await GetProductOrThrowAsync(id, businessId, branchId);
         ReplaceVariants(product, variants, businessId, branchId);
         product.IsVariantEnabled = variants.Count > 0;
-        product.UpdatedDate = DateTime.UtcNow;
         await _repository.SaveChangesAsync();
         return MapDetailDto(product);
     }
@@ -133,7 +129,6 @@ public class ProductService : IProductService
     {
         var product = await GetProductOrThrowAsync(id, businessId, branchId);
         await ReplaceBarcodesAsync(product, barcodes, businessId, branchId);
-        product.UpdatedDate = DateTime.UtcNow;
         await _repository.SaveChangesAsync();
         return MapDetailDto(product);
     }
@@ -170,7 +165,6 @@ public class ProductService : IProductService
             });
         }
 
-        product.UpdatedDate = DateTime.UtcNow;
         await _repository.SaveChangesAsync();
         return MapDetailDto(product);
     }
@@ -183,7 +177,6 @@ public class ProductService : IProductService
             throw new InvalidOperationException("Barcode not found.");
 
         product.Barcodes.Remove(barcode);
-        product.UpdatedDate = DateTime.UtcNow;
         await _repository.SaveChangesAsync();
     }
 
