@@ -18,6 +18,7 @@ public static class NavigationMenuSeeder
         new("Dashboard", null, null, null, null, 1),
         new("Master Data", null, null, null, null, 2),
         new("Operations", null, null, null, null, 3),
+        new("Accounts", null, null, null, null, 4),
         new("Dashboard", "/", "D", "POS Billing", "Dashboard", 1),
         new("Businesses", "/businesses", "B", "Businesses", "Master Data", 1),
         new("Branches", "/branches", "Br", "Branches", "Master Data", 2),
@@ -39,7 +40,12 @@ public static class NavigationMenuSeeder
         new("Inventory", "/inventory", "Inv", "Inventory", "Operations", 3),
         new("Purchase", "/purchase", "Pu", "Purchase", "Operations", 4),
         new("Stock", "/stock", "St", "Stock", "Operations", 5),
-        new("Orders", "/orders", "O", "Orders", "Operations", 6)
+        new("Reports", "/reports", "Rp", "Reports", "Operations", 6),
+        new("Orders", "/orders", "O", "Orders", "Operations", 7),
+        new("Expenses", "/expenses", "Exp", "Expenses", "Accounts", 1),
+        new("Cash Dashboard", "/cashflow", "CF", "Cash Flow", "Accounts", 2),
+        new("Cash Ledger", "/cashflow/ledger", "CFL", "Cash Flow", "Accounts", 3),
+        new("Cash Summary", "/cashflow/summary", "CFS", "Cash Flow", "Accounts", 4)
     ];
 
     public static async Task SeedDefaultMenusAsync(POSDbContext context, ILogger logger)
@@ -80,7 +86,12 @@ public static class NavigationMenuSeeder
         ("/inventory", "Inv"),
         ("/purchase", "Pu"),
         ("/stock", "St"),
+        ("/reports", "Rp"),
         ("/orders", "O"),
+        ("/expenses", "Exp"),
+        ("/cashflow", "CF"),
+        ("/cashflow/ledger", "CFL"),
+        ("/cashflow/summary", "CFS"),
     ];
 
     private static Task PatchExistingMenusAsync(POSDbContext context, ILogger logger)

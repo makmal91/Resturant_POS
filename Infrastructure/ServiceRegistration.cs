@@ -20,6 +20,7 @@ using POSSystem.Application.Purchase.Interfaces;
 using POSSystem.Application.Stock.Interfaces;
 using POSSystem.Application.Sales.Interfaces;
 using POSSystem.Application.Customer.Interfaces;
+using POSSystem.Application.CashFlow.Interfaces;
 using POSSystem.Infrastructure.Data;
 using POSSystem.Infrastructure.Repositories;
 using POSSystem.Infrastructure.Security;
@@ -60,6 +61,9 @@ public static class ServiceRegistration
 
         // Register customer repository
         services.AddScoped<ICustomerRepository, CustomerRepository>();
+
+        // Register cash flow repository
+        services.AddScoped<ICashFlowRepository, CashFlowRepository>();
 
         // Add other infrastructure services here
 

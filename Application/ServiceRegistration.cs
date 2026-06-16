@@ -38,6 +38,8 @@ using POSSystem.Application.Sales.Interfaces;
 using POSSystem.Application.Sales.Services;
 using POSSystem.Application.Customer.Interfaces;
 using POSSystem.Application.Customer.Services;
+using POSSystem.Application.CashFlow.Interfaces;
+using POSSystem.Application.CashFlow.Services;
 
 namespace POSSystem.Application;
 
@@ -95,6 +97,9 @@ public static class ServiceRegistration
 
         // Register customer service
         services.AddScoped<ICustomerService, CustomerService>();
+
+        // Register cash flow service
+        services.AddScoped<ICashFlowService, CashFlowService>();
 
         // Add other application services here
 

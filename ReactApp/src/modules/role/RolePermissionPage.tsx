@@ -8,8 +8,6 @@ import {
 } from '../../services/roleService';
 import { usePermission, useIsMasterUser, useIsSuperAdmin } from '../../hooks/usePermission';
 import { isProtectedRole } from '../../types/permissions';
-import PermissionGate from '../../components/PermissionGate';
-
 const PERMISSION_COLUMNS: { key: PermissionField; label: string }[] = [
   { key: 'canView', label: 'View' },
   { key: 'canCreate', label: 'Add' },
@@ -185,7 +183,11 @@ const RolePermissionPage: React.FC = () => {
 
   const selectedRole = roles.find((role) => role.id === selectedRoleId);
   const isProtectedRoleSelected = isProtectedRole(selectedRole?.name);
-  const canEditSelectedRole = canEdit && (isMasterUser || !isProtectedRoleSelected || !isSuperAdmin);
+
+  // MasterUser can edit any role.
+  // Everyone else (SuperAdmin, Admin) can only edit non-protected roles.
+  // canEdit gate ensures the user has the Roles permission at all.
+  const canEditSelectedRole = canEdit && (isMasterUser || !isProtectedRoleSelected);
 
   return (
     <div className="p-6">
@@ -242,16 +244,15 @@ const RolePermissionPage: React.FC = () => {
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
               <h2 className="text-sm font-semibold text-gray-800">Module Permissions</h2>
-              <PermissionGate module="Roles" action="edit">
-                <button
-                  type="button"
-                  onClick={handleSave}
-                  disabled={saving || loadingPermissions || !selectedRoleId || !canEditSelectedRole}
-                  className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {saving ? 'Saving...' : 'Save Permissions'}
-                </button>
-              </PermissionGate>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saving || loadingPermissions || !selectedRoleId || !canEditSelectedRole}
+                title={!canEditSelectedRole ? 'You do not have permission to edit this role.' : undefined}
+                className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {saving ? 'Saving...' : 'Save Permissions'}
+              </button>
             </div>
 
             {loadingPermissions ? (

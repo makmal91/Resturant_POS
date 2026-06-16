@@ -66,27 +66,41 @@ public static class PermissionModuleSeeder
 
     private static readonly ModuleSeedEntry[] DefaultModules =
     [
-        new("Catalog", "", null, 1),
-        new("Operations", "", null, 2),
-        new("Administration", "", null, 3),
-        new("Categories", PermissionModules.Categories, "Catalog", 1),
-        new("SubCategories", PermissionModules.SubCategories, "Catalog", 2),
-        new("Brands", PermissionModules.Brands, "Catalog", 3),
-        new("Products", PermissionModules.Products, "Catalog", 4),
-        new("Units", PermissionModules.Units, "Catalog", 5),
-        new("Suppliers", PermissionModules.Suppliers, "Catalog", 6),
-        new("Warehouses", PermissionModules.Warehouses, "Catalog", 7),
-        new("Menu", PermissionModules.Menu, "Catalog", 8),
-        new("Inventory", PermissionModules.Inventory, "Operations", 1),
-        new("Purchase", PermissionModules.Purchase, "Operations", 2),
-        new("Stock", PermissionModules.Stock, "Operations", 3),
-        new("Orders", PermissionModules.Orders, "Operations", 4),
-        new("POS Billing", PermissionModules.PosBilling, "Operations", 5),
-        new("Reports", PermissionModules.Reports, "Operations", 6),
-        new("Users", PermissionModules.Users, "Administration", 1),
-        new("Roles", PermissionModules.Roles, "Administration", 2),
-        new("Branches", PermissionModules.Branches, "Administration", 3),
-        new("Businesses", PermissionModules.Businesses, "Administration", 4)
+        // Groups (ParentKey = null)
+        new("Catalog",        "",  null,           1),
+        new("Operations",     "",  null,           2),
+        new("Accounts",       "",  null,           3),
+        new("Administration", "",  null,           4),
+
+        // Catalog
+        new("Categories",   PermissionModules.Categories,   "Catalog", 1),
+        new("SubCategories",PermissionModules.SubCategories,"Catalog", 2),
+        new("Brands",       PermissionModules.Brands,       "Catalog", 3),
+        new("Products",     PermissionModules.Products,     "Catalog", 4),
+        new("Units",        PermissionModules.Units,        "Catalog", 5),
+        new("Suppliers",    PermissionModules.Suppliers,    "Catalog", 6),
+        new("Warehouses",   PermissionModules.Warehouses,   "Catalog", 7),
+        new("Menu",         PermissionModules.Menu,         "Catalog", 8),
+        new("Customers",    PermissionModules.Customers,    "Catalog", 9),
+
+        // Operations
+        new("Inventory",    PermissionModules.Inventory,    "Operations", 1),
+        new("Purchase",     PermissionModules.Purchase,     "Operations", 2),
+        new("Stock",        PermissionModules.Stock,        "Operations", 3),
+        new("Orders",       PermissionModules.Orders,       "Operations", 4),
+        new("POS Billing",  PermissionModules.PosBilling,   "Operations", 5),
+        new("Sales",        PermissionModules.Sales,        "Operations", 6),
+        new("Reports",      PermissionModules.Reports,      "Operations", 7),
+
+        // Accounts
+        new("Expenses",     PermissionModules.Expenses,     "Accounts", 1),
+        new("Cash Flow",    PermissionModules.CashFlow,     "Accounts", 2),
+
+        // Administration
+        new("Users",        PermissionModules.Users,        "Administration", 1),
+        new("Roles",        PermissionModules.Roles,        "Administration", 2),
+        new("Branches",     PermissionModules.Branches,     "Administration", 3),
+        new("Businesses",   PermissionModules.Businesses,   "Administration", 4),
     ];
 
     public static async Task SeedDefaultModulesAsync(POSDbContext context, ILogger logger)

@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using POSSystem.API.Authorization;
 using POSSystem.API.Extensions;
+using POSSystem.Application.Common.Constants;
 using POSSystem.Domain;
 using POSSystem.Infrastructure.Data;
 
@@ -14,13 +16,330 @@ public class ReportsController : ControllerBase
 {
     private readonly POSDbContext _db;
 
-    public ReportsController(POSDbContext db)
+    public ReportsController(POSDbContext db) => _db = db;
+
+    // ─── Sales Report (SaleInvoices) ───────────────────────────────────────────
+
+    /// <summary>Sales summary for a branch and date range (completed invoices).</summary>
+    [HttpGet("sales-summary")]
+    [RequirePermission(PermissionModules.Reports, PermissionActions.View)]
+    public async Task<IActionResult> GetSalesSummary(
+        [FromQuery] int? branchId,
+        [FromQuery] int? businessId,
+        [FromQuery] DateTime? fromDate,
+        [FromQuery] DateTime? toDate)
     {
-        _db = db;
+        var biz    = this.ResolveBusinessId(businessId);
+        var branch = this.ResolveBranchId(branchId);
+
+        var from = (fromDate ?? DateTime.UtcNow.Date.AddDays(-30)).Date;
+        var to   = (toDate   ?? DateTime.UtcNow).Date.AddDays(1);
+
+        var query = _db.SaleInvoices
+            .AsNoTracking()
+            .Where(i => i.BusinessId == biz
+                     && i.Status == SaleInvoiceStatus.Completed
+                     && i.SaleDate >= from
+                     && i.SaleDate < to);
+
+        if (branch > 0)
+            query = query.Where(i => i.BranchId == branch);
+
+        var invoices = await query
+            .Select(i => new
+            {
+                i.GrandTotal,
+                i.DiscountAmount,
+                i.TaxAmount,
+                i.CashAmount,
+                i.CardAmount,
+                i.PaidAmount,
+                i.SaleDate,
+            })
+            .ToListAsync();
+
+        var branchName = branch > 0
+            ? await _db.Branches.AsNoTracking().Where(b => b.Id == branch).Select(b => b.Name).FirstOrDefaultAsync() ?? "Unknown"
+            : "All Branches";
+
+        var dailyTrend = invoices
+            .GroupBy(i => i.SaleDate.Date)
+            .OrderBy(g => g.Key)
+            .Select(g => new
+            {
+                date       = g.Key,
+                invoiceCount = g.Count(),
+                totalSales = g.Sum(x => x.GrandTotal),
+                cashSales  = g.Sum(x => x.CashAmount),
+                cardSales  = g.Sum(x => x.CardAmount),
+            })
+            .ToList();
+
+        return Ok(new
+        {
+            branchId   = branch,
+            branchName,
+            fromDate   = from,
+            toDate     = to.AddDays(-1),
+            totalInvoices  = invoices.Count,
+            totalSales     = invoices.Sum(i => i.GrandTotal),
+            totalDiscount  = invoices.Sum(i => i.DiscountAmount),
+            totalTax       = invoices.Sum(i => i.TaxAmount),
+            totalCash      = invoices.Sum(i => i.CashAmount),
+            totalCard      = invoices.Sum(i => i.CardAmount),
+            totalPaid      = invoices.Sum(i => i.PaidAmount),
+            averageSale    = invoices.Count > 0 ? invoices.Average(i => i.GrandTotal) : 0m,
+            dailyTrend,
+        });
     }
 
+    /// <summary>Product-wise sales breakdown for a branch and date range.</summary>
+    [HttpGet("sales-by-product")]
+    [RequirePermission(PermissionModules.Reports, PermissionActions.View)]
+    public async Task<IActionResult> GetSalesByProduct(
+        [FromQuery] int? branchId,
+        [FromQuery] int? businessId,
+        [FromQuery] DateTime? fromDate,
+        [FromQuery] DateTime? toDate,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 25)
+    {
+        var biz    = this.ResolveBusinessId(businessId);
+        var branch = this.ResolveBranchId(branchId);
+
+        var from = (fromDate ?? DateTime.UtcNow.Date.AddDays(-30)).Date;
+        var to   = (toDate   ?? DateTime.UtcNow).Date.AddDays(1);
+
+        var itemQuery = _db.SaleInvoiceItems
+            .AsNoTracking()
+            .Include(i => i.Product)
+            .Include(i => i.SaleInvoice)
+            .Where(i => i.BusinessId == biz
+                     && i.SaleInvoice.Status == SaleInvoiceStatus.Completed
+                     && i.SaleInvoice.SaleDate >= from
+                     && i.SaleInvoice.SaleDate < to);
+
+        if (branch > 0)
+            itemQuery = itemQuery.Where(i => i.BranchId == branch);
+
+        var grouped = itemQuery
+            .GroupBy(i => new { i.ProductId, ProductName = i.Product.ProductName, ProductCode = i.Product.ProductCode })
+            .Select(g => new
+            {
+                g.Key.ProductId,
+                g.Key.ProductName,
+                g.Key.ProductCode,
+                totalQuantity = g.Sum(x => x.Quantity),
+                totalAmount   = g.Sum(x => x.LineTotal),
+                invoiceCount  = g.Select(x => x.SaleInvoiceId).Distinct().Count(),
+            });
+
+        var totalRecords = await grouped.CountAsync();
+
+        var rows = await grouped
+            .OrderByDescending(g => g.totalAmount)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return Ok(new
+        {
+            products     = rows,
+            totalRecords,
+            totalPages   = (int)Math.Ceiling(totalRecords / (double)pageSize),
+            currentPage  = page,
+            pageSize,
+            fromDate     = from,
+            toDate       = to.AddDays(-1),
+        });
+    }
+
+    // ─── Stock Report (StockLedger) ────────────────────────────────────────────
+
+    /// <summary>Current stock balances with estimated stock value.</summary>
+    [HttpGet("stock-summary")]
+    [RequirePermission(PermissionModules.Reports, PermissionActions.View)]
+    public async Task<IActionResult> GetStockSummary(
+        [FromQuery] int? branchId,
+        [FromQuery] int? businessId,
+        [FromQuery] int? warehouseId,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50)
+    {
+        var biz    = this.ResolveBusinessId(businessId);
+        var branch = this.ResolveBranchId(branchId);
+
+        var ledgerQuery = _db.StockLedgerEntries
+            .AsNoTracking()
+            .Where(e => e.BusinessId == biz);
+
+        if (branch > 0)
+            ledgerQuery = ledgerQuery.Where(e => e.BranchId == branch);
+
+        if (warehouseId.HasValue && warehouseId.Value > 0)
+            ledgerQuery = ledgerQuery.Where(e => e.WarehouseId == warehouseId.Value);
+
+        var balances = await ledgerQuery
+            .GroupBy(e => new { e.ProductId, e.VariantId, e.WarehouseId })
+            .Select(g => new
+            {
+                g.Key.ProductId,
+                g.Key.VariantId,
+                g.Key.WarehouseId,
+                quantity = g.Sum(e => e.QuantityInBaseUnit),
+            })
+            .Where(b => b.quantity != 0)
+            .ToListAsync();
+
+        var productIds   = balances.Select(b => b.ProductId).Distinct().ToList();
+        var variantIds   = balances.Where(b => b.VariantId.HasValue).Select(b => b.VariantId!.Value).Distinct().ToList();
+        var warehouseIds = balances.Select(b => b.WarehouseId).Distinct().ToList();
+
+        var products = await _db.Products.AsNoTracking()
+            .Where(p => productIds.Contains(p.Id))
+            .Select(p => new { p.Id, p.ProductName, p.ProductCode, p.CostPrice })
+            .ToDictionaryAsync(p => p.Id);
+
+        var variantMap = new Dictionary<int, (string VariantName, decimal? CostPriceOverride)>();
+        if (variantIds.Count > 0)
+        {
+            var variantList = await _db.ProductVariants.AsNoTracking()
+                .Where(v => variantIds.Contains(v.Id))
+                .Select(v => new { v.Id, v.VariantName, v.CostPriceOverride })
+                .ToListAsync();
+            foreach (var v in variantList)
+                variantMap[v.Id] = (v.VariantName, v.CostPriceOverride);
+        }
+
+        var warehouses = await _db.Warehouses.AsNoTracking()
+            .Where(w => warehouseIds.Contains(w.Id))
+            .Select(w => new { w.Id, w.Name })
+            .ToDictionaryAsync(w => w.Id);
+
+        var items = balances.Select(b =>
+        {
+            products.TryGetValue(b.ProductId, out var product);
+            variantMap.TryGetValue(b.VariantId ?? 0, out var variant);
+            warehouses.TryGetValue(b.WarehouseId, out var wh);
+
+            var costPrice = variant.CostPriceOverride ?? product?.CostPrice ?? 0m;
+            var stockValue = b.quantity * costPrice;
+
+            return new
+            {
+                productId     = b.ProductId,
+                productName   = product?.ProductName ?? "Unknown",
+                productCode   = product?.ProductCode ?? "",
+                variantId     = b.VariantId,
+                variantName   = variant.VariantName != null ? variant.VariantName : null,
+                warehouseId   = b.WarehouseId,
+                warehouseName = wh?.Name ?? "Unknown",
+                quantity      = b.quantity,
+                costPrice,
+                stockValue,
+            };
+        })
+        .OrderBy(i => i.productName)
+        .ThenBy(i => i.variantName)
+        .ToList();
+
+        var totalRecords = items.Count;
+        var paged = items.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+
+        return Ok(new
+        {
+            items        = paged,
+            totalRecords,
+            totalPages   = (int)Math.Ceiling(totalRecords / (double)Math.Max(pageSize, 1)),
+            currentPage  = page,
+            pageSize,
+            totalQuantity = items.Sum(i => i.quantity),
+            totalStockValue = items.Sum(i => i.stockValue),
+            lowStockCount = items.Count(i => i.quantity > 0 && i.quantity <= 5),
+        });
+    }
+
+    /// <summary>Stock movement summary grouped by ledger type for a date range.</summary>
+    [HttpGet("stock-movement")]
+    [RequirePermission(PermissionModules.Reports, PermissionActions.View)]
+    public async Task<IActionResult> GetStockMovement(
+        [FromQuery] int? branchId,
+        [FromQuery] int? businessId,
+        [FromQuery] int? warehouseId,
+        [FromQuery] DateTime? fromDate,
+        [FromQuery] DateTime? toDate)
+    {
+        var biz    = this.ResolveBusinessId(businessId);
+        var branch = this.ResolveBranchId(branchId);
+
+        var from = (fromDate ?? DateTime.UtcNow.Date.AddDays(-30)).Date;
+        var to   = (toDate   ?? DateTime.UtcNow).Date.AddDays(1);
+
+        var query = _db.StockLedgerEntries
+            .AsNoTracking()
+            .Where(e => e.BusinessId == biz
+                     && e.Date >= from
+                     && e.Date < to);
+
+        if (branch > 0)
+            query = query.Where(e => e.BranchId == branch);
+
+        if (warehouseId.HasValue && warehouseId.Value > 0)
+            query = query.Where(e => e.WarehouseId == warehouseId.Value);
+
+        // Project to memory first — enum.ToString() and nested GroupBy aggregates
+        // are not reliably translatable to SQL Server.
+        var entries = await query
+            .Select(e => new { e.Type, e.QuantityInBaseUnit, e.TotalAmount, e.Date })
+            .ToListAsync();
+
+        var byType = entries
+            .GroupBy(e => e.Type)
+            .Select(g => new
+            {
+                type          = g.Key.ToString(),
+                entryCount    = g.Count(),
+                totalQuantity = g.Sum(e => e.QuantityInBaseUnit),
+                totalIn       = g.Where(e => e.QuantityInBaseUnit > 0).Sum(e => e.QuantityInBaseUnit),
+                totalOut      = g.Where(e => e.QuantityInBaseUnit < 0).Sum(e => Math.Abs(e.QuantityInBaseUnit)),
+                totalAmount   = g.Sum(e => e.TotalAmount),
+            })
+            .OrderBy(g => g.type)
+            .ToList();
+
+        var dailyMovement = entries
+            .GroupBy(e => e.Date.Date)
+            .Select(g => new
+            {
+                date     = g.Key,
+                stockIn  = g.Where(e => e.QuantityInBaseUnit > 0).Sum(e => e.QuantityInBaseUnit),
+                stockOut = g.Where(e => e.QuantityInBaseUnit < 0).Sum(e => Math.Abs(e.QuantityInBaseUnit)),
+                netQty   = g.Sum(e => e.QuantityInBaseUnit),
+            })
+            .OrderBy(g => g.date)
+            .ToList();
+
+        return Ok(new
+        {
+            fromDate      = from,
+            toDate        = to.AddDays(-1),
+            totalEntries  = byType.Sum(t => t.entryCount),
+            totalStockIn  = byType.Sum(t => t.totalIn),
+            totalStockOut = byType.Sum(t => t.totalOut),
+            byType,
+            dailyMovement,
+        });
+    }
+
+    // ─── Legacy endpoints (Orders / InventoryItems) ────────────────────────────
+
     [HttpGet("sales")]
-    public async Task<IActionResult> GetSalesReport([FromQuery] int branchId, [FromQuery] int? businessId = null, [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null)
+    [RequirePermission(PermissionModules.Reports, PermissionActions.View)]
+    public async Task<IActionResult> GetSalesReport(
+        [FromQuery] int branchId,
+        [FromQuery] int? businessId = null,
+        [FromQuery] DateTime? from = null,
+        [FromQuery] DateTime? to = null)
     {
         var resolvedBusinessId = this.ResolveBusinessId(businessId);
         var resolvedBranchId = this.ResolveBranchId(branchId);
@@ -70,7 +389,10 @@ public class ReportsController : ControllerBase
     }
 
     [HttpGet("inventory")]
-    public async Task<IActionResult> GetInventoryReport([FromQuery] int branchId, [FromQuery] int? businessId = null)
+    [RequirePermission(PermissionModules.Reports, PermissionActions.View)]
+    public async Task<IActionResult> GetInventoryReport(
+        [FromQuery] int branchId,
+        [FromQuery] int? businessId = null)
     {
         var resolvedBusinessId = this.ResolveBusinessId(businessId);
         var resolvedBranchId = this.ResolveBranchId(branchId);
@@ -100,30 +422,56 @@ public class ReportsController : ControllerBase
     }
 
     [HttpGet("sales-by-business")]
-    public async Task<IActionResult> GetBusinessSalesReport([FromQuery] int? businessId = null, [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null)
+    [RequirePermission(PermissionModules.Reports, PermissionActions.View)]
+    public async Task<IActionResult> GetBusinessSalesReport(
+        [FromQuery] int? businessId = null,
+        [FromQuery] DateTime? from = null,
+        [FromQuery] DateTime? to = null)
     {
         var resolvedBusinessId = this.ResolveBusinessId(businessId);
-        var fromDate = from ?? DateTime.UtcNow.Date;
-        var toDate = to ?? DateTime.UtcNow;
+        var fromDate = (from ?? DateTime.UtcNow.Date).Date;
+        var toDate   = (to   ?? DateTime.UtcNow).Date.AddDays(1);
 
-        var branchSales = await _db.Orders
-            .Where(o => o.BusinessId == resolvedBusinessId && o.Status == OrderStatus.Completed && o.CreatedAt >= fromDate && o.CreatedAt <= toDate)
-            .GroupBy(o => o.BranchId)
+        var branchSales = await _db.SaleInvoices
+            .AsNoTracking()
+            .Where(i => i.BusinessId == resolvedBusinessId
+                     && i.Status == SaleInvoiceStatus.Completed
+                     && i.SaleDate >= fromDate
+                     && i.SaleDate < toDate)
+            .GroupBy(i => i.BranchId)
             .Select(g => new
             {
-                branchId = g.Key,
-                totalOrders = g.Count(),
-                totalSales = g.Sum(x => x.TotalAmount)
+                branchId    = g.Key,
+                totalInvoices = g.Count(),
+                totalSales  = g.Sum(x => x.GrandTotal),
+                totalCash   = g.Sum(x => x.CashAmount),
+                totalCard   = g.Sum(x => x.CardAmount),
             })
             .ToListAsync();
+
+        var branchIds = branchSales.Select(b => b.branchId).ToList();
+        var branchNames = await _db.Branches.AsNoTracking()
+            .Where(b => branchIds.Contains(b.Id))
+            .ToDictionaryAsync(b => b.Id, b => b.Name);
+
+        var branches = branchSales.Select(b => new
+        {
+            b.branchId,
+            branchName  = branchNames.GetValueOrDefault(b.branchId, "Unknown"),
+            b.totalInvoices,
+            b.totalSales,
+            b.totalCash,
+            b.totalCard,
+        }).ToList();
 
         return Ok(new
         {
             businessId = resolvedBusinessId,
-            from = fromDate,
-            to = toDate,
-            totalSales = branchSales.Sum(x => x.totalSales),
-            branches = branchSales
+            fromDate,
+            toDate     = toDate.AddDays(-1),
+            totalSales = branches.Sum(x => x.totalSales),
+            totalInvoices = branches.Sum(x => x.totalInvoices),
+            branches,
         });
     }
 }

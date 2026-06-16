@@ -89,12 +89,10 @@ public static class RolePermissionSeeder
 
         if (string.Equals(roleName, RoleNames.Admin, StringComparison.OrdinalIgnoreCase))
         {
+            // Admin can manage everything including Role permissions
+            // (protected roles like SystemAdmin/SuperAdmin are restricted at the API layer)
             return PermissionModules.All
-                .Select(module =>
-                {
-                    var isRolesModule = string.Equals(module, PermissionModules.Roles, StringComparison.OrdinalIgnoreCase);
-                    return (module, true, !isRolesModule, !isRolesModule, !isRolesModule, true, true);
-                })
+                .Select(module => (module, true, true, true, true, true, true))
                 .ToList();
         }
 
@@ -109,6 +107,8 @@ public static class RolePermissionSeeder
                         (module, true, false, false, false, true, false),
                     PermissionModules.PosBilling =>
                         (module, true, false, false, false, false, false),
+                    PermissionModules.Expenses or PermissionModules.CashFlow =>
+                        (module, true, true, false, false, true, false),
                     _ => (module, true, true, true, false, true, true)
                 })
                 .ToList();

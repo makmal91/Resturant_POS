@@ -26,6 +26,11 @@ import WarehousePage from './modules/warehouse/WarehousePage';
 import PurchasePage from './modules/purchase/PurchasePage';
 import StockLedgerPage from './modules/stock/StockLedgerPage';
 import SaleInvoicesPage from './modules/sales/SaleInvoicesPage';
+import CashFlowDashboardPage from './modules/cashflow/CashFlowDashboardPage';
+import CashLedgerPage from './modules/cashflow/CashLedgerPage';
+import CashFlowSummaryPage from './modules/cashflow/CashFlowSummaryPage';
+import ExpensePage from './modules/expense/ExpensePage';
+import ReportsPage from './modules/reports/ReportsPage';
 // POSBillingPage is registered directly in App.tsx as a fullscreen route (outside Layout)
 
 export const routeRegistry: RouteDefinition[] = [
@@ -49,7 +54,12 @@ export const routeRegistry: RouteDefinition[] = [
   { path: '/warehouses', label: 'Warehouses', component: WarehousePage, module: 'Warehouses' },
   { path: '/purchase', label: 'Purchase', component: PurchasePage, module: 'Purchase' },
   { path: '/stock', label: 'Stock', component: StockLedgerPage, module: 'Stock' },
+  { path: '/reports', label: 'Reports', component: ReportsPage, module: 'Reports' },
   { path: '/sales-invoices', label: 'Invoice History', component: SaleInvoicesPage, module: 'Sales' },
+  { path: '/expenses',          label: 'Expenses',        component: ExpensePage,           module: 'Expenses' },
+  { path: '/cashflow',          label: 'Cash Dashboard',  component: CashFlowDashboardPage, module: 'Cash Flow' },
+  { path: '/cashflow/ledger',   label: 'Cash Ledger',     component: CashLedgerPage,        module: 'Cash Flow' },
+  { path: '/cashflow/summary',  label: 'Cash Summary',    component: CashFlowSummaryPage,   module: 'Cash Flow' },
 ];
 
 const routeMap = new Map(routeRegistry.map((route) => [route.path, route]));

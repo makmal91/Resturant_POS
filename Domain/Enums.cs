@@ -82,13 +82,31 @@ public enum PurchaseStatus
 
 public enum StockLedgerType
 {
-    PurchaseEntry    = 1,   // Stock in from a supplier purchase
-    SaleEntry        = 2,   // Stock out from a customer sale
-    PurchaseReturn   = 3,   // Stock returned back to supplier
-    Adjustment       = 4,   // Manual stock adjustment
-    TransferOut      = 5,   // Stock moved out of a warehouse
-    TransferIn       = 6,   // Stock received into a warehouse
-    SaleReturn       = 7,   // Stock returned by a customer
-    SaleReversal     = 8,   // Reversal of a sale — stock returns to warehouse
-    PurchaseReversal = 9,   // Reversal of a purchase — stock removed from warehouse
+    PurchaseEntry    = 1,
+    SaleEntry        = 2,
+    PurchaseReturn   = 3,
+    Adjustment       = 4,
+    TransferOut      = 5,
+    TransferIn       = 6,
+    SaleReturn       = 7,
+    SaleReversal     = 8,
+    PurchaseReversal = 9,
+}
+
+public enum CashFlowTransactionType
+{
+    Sale            = 1,
+    Expense         = 2,
+    CashIn          = 3,
+    CashOut         = 4,
+    BankTransfer    = 5,
+    OpeningBalance  = 6,
+    ClosingBalance  = 7,
+}
+
+public enum CashFlowPaymentMethod
+{
+    Cash    = 1,
+    Bank    = 2,
+    Wallet  = 3,
 }

@@ -12,6 +12,9 @@ import LoginPage from './pages/LoginPage';
 import BranchSelectionPage from './pages/BranchSelectionPage';
 import POSBillingPage from './modules/pos/POSBillingPage';
 import EditInvoicePage from './modules/sales/EditInvoicePage';
+import OpeningCashPage from './modules/cashflow/OpeningCashPage';
+import ClosingCashPage from './modules/cashflow/ClosingCashPage';
+import CashTransactionPage from './modules/cashflow/CashTransactionPage';
 
 function App() {
   return (
@@ -65,6 +68,31 @@ function App() {
                           element={
                             <ProtectedRoute module="Sales">
                               <EditInvoicePage />
+                            </ProtectedRoute>
+                          }
+                        />
+                        {/* Cash Flow — form pages, not in sidebar */}
+                        <Route
+                          path="/cashflow/opening"
+                          element={
+                            <ProtectedRoute module="Cash Flow">
+                              <OpeningCashPage />
+                            </ProtectedRoute>
+                          }
+                        />
+                        <Route
+                          path="/cashflow/closing"
+                          element={
+                            <ProtectedRoute module="Cash Flow">
+                              <ClosingCashPage />
+                            </ProtectedRoute>
+                          }
+                        />
+                        <Route
+                          path="/cashflow/transaction"
+                          element={
+                            <ProtectedRoute module="Cash Flow">
+                              <CashTransactionPage />
                             </ProtectedRoute>
                           }
                         />

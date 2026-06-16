@@ -57,6 +57,13 @@ public class POSDbContext : DbContext
     // POS Sales module
     public DbSet<SaleInvoice> SaleInvoices { get; set; } = null!;
     public DbSet<SaleInvoiceItem> SaleInvoiceItems { get; set; } = null!;
+
+    // Cash Flow module
+    public DbSet<CashFlowTransaction> CashFlowTransactions { get; set; } = null!;
+    public DbSet<CashRegister> CashRegisters { get; set; } = null!;
+
+    // Expenses module
+    public DbSet<Expense> Expenses { get; set; } = null!;
     #endregion
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -101,6 +108,9 @@ public class POSDbContext : DbContext
         modelBuilder.ApplyConfiguration(new StockLedgerConfiguration());
         modelBuilder.ApplyConfiguration(new SaleInvoiceConfiguration());
         modelBuilder.ApplyConfiguration(new SaleInvoiceItemConfiguration());
+        modelBuilder.ApplyConfiguration(new CashFlowTransactionConfiguration());
+        modelBuilder.ApplyConfiguration(new CashRegisterConfiguration());
+        modelBuilder.ApplyConfiguration(new ExpenseConfiguration());
 
         // Configure BaseEntity default values
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
