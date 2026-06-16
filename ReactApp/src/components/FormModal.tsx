@@ -1052,7 +1052,6 @@ const FormModal: React.FC = () => {
             onSubmit={handleCategorySubmit}
             isLoading={isSubmitting}
             submitLabel={isEditMode ? 'Update Category' : 'Create Category'}
-            lockBranch={isEditMode || (!isGlobalAdmin && Boolean(selectedBranchId && selectedBranchId > 0))}
           />
         );
       case 'subcategory':
@@ -1062,7 +1061,6 @@ const FormModal: React.FC = () => {
             onSubmit={handleSubCategorySubmit}
             isLoading={isSubmitting}
             submitLabel={isEditMode ? 'Update Sub Category' : 'Create Sub Category'}
-            lockBranch={isEditMode || (!isGlobalAdmin && Boolean(selectedBranchId && selectedBranchId > 0))}
           />
         );
       case 'brand':
@@ -1072,7 +1070,6 @@ const FormModal: React.FC = () => {
             onSubmit={handleBrandSubmit}
             isLoading={isSubmitting}
             submitLabel={isEditMode ? 'Update Brand' : 'Create Brand'}
-            lockBranch={isEditMode || (!isGlobalAdmin && Boolean(selectedBranchId && selectedBranchId > 0))}
           />
         );
       case 'warehouse':
@@ -1082,7 +1079,6 @@ const FormModal: React.FC = () => {
             onSubmit={handleWarehouseSubmit}
             isLoading={isSubmitting}
             submitLabel={isEditMode ? 'Update Warehouse' : 'Create Warehouse'}
-            lockBranch={isEditMode || (!isGlobalAdmin && Boolean(selectedBranchId && selectedBranchId > 0))}
           />
         );
       case 'supplier':
@@ -1092,7 +1088,6 @@ const FormModal: React.FC = () => {
             onSubmit={handleSupplierSubmit}
             isLoading={isSubmitting}
             submitLabel={isEditMode ? 'Update Supplier' : 'Create Supplier'}
-            lockBranch={isEditMode || (!isGlobalAdmin && Boolean(selectedBranchId && selectedBranchId > 0))}
           />
         );
       case 'purchase':
@@ -1103,7 +1098,6 @@ const FormModal: React.FC = () => {
             warehouses={purchaseWarehouses}
             onSubmit={handlePurchaseSubmit}
             isLoading={isSubmitting || isPurchaseMetaLoading}
-            lockBranch={isEditMode || (!isGlobalAdmin && Boolean(selectedBranchId && selectedBranchId > 0))}
           />
         );
       case 'customer':
@@ -1113,7 +1107,6 @@ const FormModal: React.FC = () => {
             onSubmit={handleCustomerSubmit}
             isLoading={isSubmitting}
             submitLabel={isEditMode ? 'Update Customer' : 'Create Customer'}
-            lockBranch={isEditMode || (!isGlobalAdmin && Boolean(selectedBranchId && selectedBranchId > 0))}
           />
         );
       case 'role':

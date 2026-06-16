@@ -44,8 +44,15 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
     user?.roleName === 'Super Admin' ||
     user?.roleName === 'SuperAdmin';
 
-  if (selectedBranchId === null && isGlobalAdmin) {
-    selectedBranchId = 0;
+  if (selectedBranchId === null) {
+    const authBranches = authStorage.getBranches();
+    if (authBranches.length === 1) {
+      selectedBranchId = authBranches[0].id;
+    } else if (isGlobalAdmin && authBranches.length > 1) {
+      selectedBranchId = 0;
+    } else if (authBranches.length > 0) {
+      selectedBranchId = authBranches[0].id;
+    }
   }
 
   const businessId = user?.businessId ?? Number(localStorage.getItem('businessId') ?? 0);

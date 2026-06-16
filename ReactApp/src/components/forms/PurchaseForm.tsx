@@ -4,7 +4,7 @@ import CodeFieldWithGenerate from './CodeFieldWithGenerate';
 import { CODE_MODULES } from '../../services/codeGeneratorService';
 import { safeString } from '../../utils/safeValues';
 import apiClient from '../../services/api';
-import { useBranchStore } from '../../stores/useBranchStore';
+import { useFormBranchId } from '../../hooks/useFormBranchId';
 
 export interface PurchaseItemFormData {
   productId: number;
@@ -90,7 +90,6 @@ interface PurchaseFormProps {
   warehouses?: LookupOption[];
   onSubmit: (data: PurchaseFormData, mode: PurchaseSubmitMode) => void;
   isLoading?: boolean;
-  lockBranch?: boolean;
 }
 
 const emptyRow = (): ItemRow => ({
@@ -150,19 +149,9 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
   warehouses = [],
   onSubmit,
   isLoading = false,
-  lockBranch = false,
 }) => {
   const isPosted = initialData?.status === 'Posted';
-  const branches = useBranchStore((state) => state.branches);
-  const fetchBranches = useBranchStore((state) => state.fetchBranches);
-  const selectedBranchId = useBranchStore((state) => state.selectedBranchId);
-
-  const branchId = useMemo(() => {
-    const fromData = Number(initialData?.branchId ?? 0);
-    if (fromData > 0) return fromData;
-    if (selectedBranchId && selectedBranchId > 0) return selectedBranchId;
-    return 0;
-  }, [initialData?.branchId, selectedBranchId]);
+  const { branchId, branchError } = useFormBranchId(initialData?.branchId);
 
   const [invoiceNo, setInvoiceNo] = useState(safeString(initialData?.invoiceNo));
   const [supplierId, setSupplierId] = useState(Number(initialData?.supplierId ?? 0));
@@ -183,10 +172,6 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
   const [searchLoading, setSearchLoading] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchDropdownRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    void fetchBranches();
-  }, [fetchBranches]);
 
   useEffect(() => {
     setInvoiceNo(safeString(initialData?.invoiceNo));
@@ -360,7 +345,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     const nextErrors: Record<string, string> = {};
     if (supplierId <= 0) nextErrors.supplierId = 'Supplier is required';
     if (warehouseId <= 0) nextErrors.warehouseId = 'Warehouse is required';
-    if (branchId <= 0) nextErrors.branchId = 'Branch selection is required';
+    if (branchId <= 0) nextErrors.branchId = branchError ?? 'Branch is required';
 
     const invalidRows = rows.filter((r) => r.productId > 0 && (r.unitId <= 0 || r.quantity <= 0));
     const emptyRows = rows.filter((r) => r.productId <= 0);
@@ -427,13 +412,8 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
 
         {/* ── Header fields ── */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {lockBranch && (
-            <div className="md:col-span-2">
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Branch</label>
-              <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600">
-                {branches.find((b) => b.id === branchId)?.name ?? `Branch #${branchId}`}
-              </div>
-            </div>
+          {errors.branchId && (
+            <p className="md:col-span-2 text-sm text-red-600">{errors.branchId}</p>
           )}
 
           <CodeFieldWithGenerate

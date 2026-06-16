@@ -1,4 +1,5 @@
 import { useBranchStore } from '../stores/useBranchStore'
+import { getCurrentBranchId, isAllBranchesMode } from '../services/branchContext'
 import { hasBranchContext } from '../types/permissions'
 import { useIsGlobalAdmin } from './usePermission'
 
@@ -6,9 +7,9 @@ export const useBranchWriteAccess = () => {
   const selectedBranchId = useBranchStore((state) => state.selectedBranchId)
   const isGlobalAdmin = useIsGlobalAdmin()
   const hasBranchSelection = hasBranchContext(selectedBranchId)
-  const isGlobalMode = selectedBranchId === 0
+  const isGlobalMode = isAllBranchesMode() || selectedBranchId === 0
   const canWriteInView = isGlobalAdmin
-    ? hasBranchSelection
+    ? hasBranchSelection && getCurrentBranchId() !== null
     : hasBranchSelection && !isGlobalMode
 
   const resolveEntityBranchId = (entityBranchId?: number | null): number => {
@@ -16,8 +17,9 @@ export const useBranchWriteAccess = () => {
       return entityBranchId
     }
 
-    if (selectedBranchId && selectedBranchId > 0) {
-      return selectedBranchId
+    const current = getCurrentBranchId()
+    if (current !== null) {
+      return current
     }
 
     return 0
@@ -32,6 +34,10 @@ export const useBranchWriteAccess = () => {
       return 'Select a specific branch to continue.'
     }
 
+    if (isGlobalMode) {
+      return 'Select a specific branch from the header before saving.'
+    }
+
     return null
   }
 
@@ -44,5 +50,6 @@ export const useBranchWriteAccess = () => {
     canWriteInView,
     resolveEntityBranchId,
     getWriteBlockMessage,
+    currentBranchId: getCurrentBranchId(),
   }
 }

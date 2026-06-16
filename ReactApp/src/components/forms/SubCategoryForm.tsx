@@ -6,7 +6,7 @@ import AuthenticatedImage from '../AuthenticatedImage';
 import { categoryService } from '../../modules/category/categoryService';
 import { subCategoryService } from '../../modules/subcategory/subcategoryService';
 import { safeString } from '../../utils/safeValues';
-import { useBranchStore } from '../../stores/useBranchStore';
+import { useFormBranchId } from '../../hooks/useFormBranchId';
 
 export interface SubCategoryFormData {
   name: string;
@@ -31,7 +31,6 @@ interface SubCategoryFormProps {
   onSubmit: (data: SubCategoryFormData & { imageFile?: File | null; removeImage?: boolean }) => void;
   isLoading?: boolean;
   submitLabel?: string;
-  lockBranch?: boolean;
 }
 
 const DEFAULT_SUBCATEGORY_FORM_DATA: SubCategoryFormData = {
@@ -68,24 +67,16 @@ const SubCategoryForm: React.FC<SubCategoryFormProps> = ({
   onSubmit,
   isLoading = false,
   submitLabel = 'Create Sub Category',
-  lockBranch = false,
 }) => {
-  const branches = useBranchStore((state) => state.branches);
-  const fetchBranches = useBranchStore((state) => state.fetchBranches);
-  const selectedBranchId = useBranchStore((state) => state.selectedBranchId);
+  const { branchId: resolvedBranchId, branchError } = useFormBranchId(initialData?.branchId);
 
   const safeInitialData = useMemo(() => {
     const base = initialData ?? DEFAULT_SUBCATEGORY_FORM_DATA;
-    if (base.branchId && Number(base.branchId) > 0) {
-      return base;
+    if (resolvedBranchId > 0) {
+      return { ...base, branchId: resolvedBranchId };
     }
-
-    if (selectedBranchId && selectedBranchId > 0) {
-      return { ...base, branchId: selectedBranchId };
-    }
-
     return base;
-  }, [initialData, selectedBranchId]);
+  }, [initialData, resolvedBranchId]);
 
   const [formData, setFormData] = useState<SubCategoryFormData>(() =>
     buildSubCategoryFormData(safeInitialData)
@@ -102,23 +93,13 @@ const SubCategoryForm: React.FC<SubCategoryFormProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isEditMode = Number(safeInitialData?.id ?? 0) > 0;
 
-  const resolvedBranchId =
-    formData.branchId > 0 ? formData.branchId : selectedBranchId && selectedBranchId > 0 ? selectedBranchId : 0;
-
-  const showBranchField =
-    !isEditMode && !(selectedBranchId && selectedBranchId > 0) && !lockBranch;
-
   useEffect(() => {
-    if (selectedBranchId && selectedBranchId > 0 && !isEditMode) {
+    if (resolvedBranchId > 0 && !isEditMode) {
       setFormData((prev) =>
-        prev.branchId === selectedBranchId ? prev : { ...prev, branchId: selectedBranchId }
+        prev.branchId === resolvedBranchId ? prev : { ...prev, branchId: resolvedBranchId },
       );
     }
-  }, [selectedBranchId, isEditMode]);
-
-  useEffect(() => {
-    void fetchBranches();
-  }, [fetchBranches]);
+  }, [resolvedBranchId, isEditMode]);
 
   useEffect(() => {
     setFormData(buildSubCategoryFormData(safeInitialData));
@@ -153,8 +134,7 @@ const SubCategoryForm: React.FC<SubCategoryFormProps> = ({
   }, [imageFile]);
 
   useEffect(() => {
-    const branchId = Number(formData.branchId ?? 0);
-    if (branchId <= 0) {
+    if (resolvedBranchId <= 0) {
       setCategories([]);
       return;
     }
@@ -163,7 +143,7 @@ const SubCategoryForm: React.FC<SubCategoryFormProps> = ({
     const loadCategories = async () => {
       setIsCategoriesLoading(true);
       try {
-        const response = await categoryService.getAll(branchId, 1, 1000);
+        const response = await categoryService.getAll(resolvedBranchId, 1, 1000);
         const rows = Array.isArray(response.data?.categories) ? response.data.categories : [];
         if (!isCancelled) {
           setCategories(
@@ -188,7 +168,7 @@ const SubCategoryForm: React.FC<SubCategoryFormProps> = ({
     return () => {
       isCancelled = true;
     };
-  }, [formData.branchId]);
+  }, [resolvedBranchId]);
 
   const showStoredImage = !imagePreviewUrl && !removeImage && existingImage;
   const showPreview = Boolean(imagePreviewUrl || showStoredImage);
@@ -201,9 +181,7 @@ const SubCategoryForm: React.FC<SubCategoryFormProps> = ({
     }
 
     if (resolvedBranchId <= 0) {
-      nextErrors.branchId = showBranchField
-        ? 'Branch selection is required'
-        : 'Select a branch from the header before creating a sub category.';
+      nextErrors.branchId = branchError ?? 'Select a branch from the header before creating a sub category.';
     }
 
     if (formData.categoryId <= 0) {
@@ -229,7 +207,7 @@ const SubCategoryForm: React.FC<SubCategoryFormProps> = ({
     setFormData((prev) => ({
       ...prev,
       [name]:
-        name === 'displayOrder' || name === 'categoryId' || name === 'branchId'
+        name === 'displayOrder' || name === 'categoryId'
           ? Number(value || 0)
           : value,
     }));
@@ -306,25 +284,7 @@ const SubCategoryForm: React.FC<SubCategoryFormProps> = ({
             error={errors.name}
           />
 
-          {showBranchField && (
-            <FormSelect
-              label="Branch"
-              name="branchId"
-              value={String(formData.branchId || '')}
-              onChange={handleChange}
-              options={[
-                { label: 'Select branch', value: '' },
-                ...branches.map((branch) => ({
-                  label: branch.name,
-                  value: String(branch.id),
-                })),
-              ]}
-              required
-              error={errors.branchId}
-            />
-          )}
-
-          {!showBranchField && errors.branchId && (
+          {errors.branchId && (
             <p className="md:col-span-2 -mt-2 text-sm text-red-600">{errors.branchId}</p>
           )}
 

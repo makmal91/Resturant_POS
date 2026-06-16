@@ -1,17 +1,15 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { useIsGlobalAdmin } from '../hooks/usePermission';
+import { useCurrentBranch } from '../hooks/useCurrentBranch';
 import { useBranchStore } from '../stores/useBranchStore';
 
 const TopHeader: React.FC = () => {
   const navigate = useNavigate();
   const { user, logout, selectedBranchId, setBranch } = useAuth();
-  const branches = useBranchStore((state) => state.branches);
   const setSelectedBranchId = useBranchStore((state) => state.setSelectedBranchId);
-  const isGlobalAdmin = useIsGlobalAdmin();
+  const { showBranchSelector, canViewAllBranches, activeBranches } = useCurrentBranch();
 
-  const selectedBranch = branches.find((branch) => branch.id === selectedBranchId) ?? null;
   const initials = (user?.fullName || user?.username || 'U')
     .split(' ')
     .map((part) => part.charAt(0))
@@ -26,7 +24,7 @@ const TopHeader: React.FC = () => {
 
   const handleBranchChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     const value = event.target.value;
-    if (!value) {
+    if (!value && value !== '0') {
       return;
     }
 
@@ -42,14 +40,6 @@ const TopHeader: React.FC = () => {
       navigate('/select-branch');
     }
   };
-
-  // Show selector only when user has a choice to make:
-  // - Global admin always sees it (can switch between branches)
-  // - Regular users see it only when assigned to multiple branches
-  const showBranchSelector = isGlobalAdmin ? branches.length > 0 : branches.length > 1;
-
-  // Label to show when user has exactly 1 branch (read-only context badge)
-  const singleBranchLabel = !showBranchSelector && selectedBranch ? selectedBranch.name : null;
 
   return (
     <header className="bg-white shadow-sm border-b border-gray-200 px-6 py-4">
@@ -81,23 +71,13 @@ const TopHeader: React.FC = () => {
                 onChange={handleBranchChange}
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
               >
-                {!isGlobalAdmin && <option value="">Select Branch</option>}
-                {isGlobalAdmin && <option value={0}>All Branches</option>}
-                {branches.map((branch) => (
+                {canViewAllBranches && <option value={0}>All Branches</option>}
+                {activeBranches.map((branch) => (
                   <option key={branch.id} value={branch.id}>
                     {branch.name}
                   </option>
                 ))}
               </select>
-            </div>
-          )}
-
-          {singleBranchLabel && (
-            <div className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5">
-              <svg className="h-3.5 w-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0zM15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-              <span className="text-sm font-medium text-gray-700">{singleBranchLabel}</span>
             </div>
           )}
 

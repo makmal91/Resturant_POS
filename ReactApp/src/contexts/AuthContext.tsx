@@ -37,11 +37,15 @@ const resolveInitialBranchId = (
   user: StoredUser,
   branches: StoredBranch[]
 ): number | null => {
-  if (isGlobalAdminUser(user)) {
+  if (branches.length === 1) {
+    return branches[0].id
+  }
+
+  if (isGlobalAdminUser(user) && branches.length > 1) {
     return 0
   }
 
-  if (branches.length >= 1) {
+  if (branches.length > 1) {
     return branches[0].id
   }
 
@@ -248,13 +252,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     if (snapshot.token && snapshot.user) {
-      const branchId =
+      let branchId =
         snapshot.selectedBranchId ??
-        (isGlobalAdminUser(snapshot.user)
-          ? 0
-          : snapshot.branches.length > 0
-            ? snapshot.branches[0].id
-            : null)
+        (snapshot.branches.length === 1
+          ? snapshot.branches[0].id
+          : isGlobalAdminUser(snapshot.user) && snapshot.branches.length > 1
+            ? 0
+            : snapshot.branches.length > 0
+              ? snapshot.branches[0].id
+              : isGlobalAdminUser(snapshot.user)
+                ? 0
+                : null)
+
+      if (snapshot.branches.length === 1 && (branchId === null || branchId === 0)) {
+        branchId = snapshot.branches[0].id
+      }
 
       applySession(
         snapshot.user,

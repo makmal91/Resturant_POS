@@ -1,9 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { FormButton, FormInput, FormSelect, FormTextarea } from './index';
 import { useBusinessCurrency } from '../../hooks/useBusinessCurrency';
-import { useBranchStore } from '../../stores/useBranchStore';
+import { useFormBranchId } from '../../hooks/useFormBranchId';
 import type { CashFlowPaymentMethod, CashFlowTransactionType } from '../../modules/cashflow/cashFlowService';
-
 export interface CashTransactionFormData {
   transactionType: CashFlowTransactionType;
   paymentMethod: CashFlowPaymentMethod;
@@ -34,8 +33,7 @@ const CashTransactionForm: React.FC<CashTransactionFormProps> = ({
   submitLabel = 'Record Transaction',
 }) => {
   const initialType = initialData?.transactionType ?? 'CashIn';
-  const { selectedBranchId, getSelectedBranch } = useBranchStore();
-  const branchName = getSelectedBranch()?.name ?? (selectedBranchId ? `Branch ${selectedBranchId}` : '—');
+  const { branchError } = useFormBranchId();
   const { symbol, currencyCode, loading: currencyLoading } = useBusinessCurrency();
 
   const [formData, setFormData] = useState<CashTransactionFormData>(() => buildDefaultFormData(initialType));
@@ -60,12 +58,12 @@ const CashTransactionForm: React.FC<CashTransactionFormProps> = ({
 
     if (!formData.amount.trim()) {
       nextErrors.amount = 'Amount is required';
-    } else if (isNaN(parsed) || parsed <= 0) {
+    } else     if (isNaN(parsed) || parsed <= 0) {
       nextErrors.amount = 'Amount must be greater than zero';
     }
 
     setErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0;
+    return Object.keys(nextErrors).length === 0 && !branchError;
   };
 
   const handleReset = () => {
@@ -88,13 +86,9 @@ const CashTransactionForm: React.FC<CashTransactionFormProps> = ({
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <FormInput
-            label="Branch"
-            name="branchName"
-            value={branchName}
-            onChange={() => undefined}
-            disabled
-          />
+          {branchError && (
+            <p className="md:col-span-2 text-sm text-red-600">{branchError}</p>
+          )}
 
           <FormInput
             label="Currency"

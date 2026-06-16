@@ -3,7 +3,7 @@ import { FormButton, FormInput, FormSelect, FormTextarea } from './index';
 import AuthenticatedImage from '../AuthenticatedImage';
 import { brandService } from '../../modules/brand/brandService';
 import { safeString } from '../../utils/safeValues';
-import { useBranchStore } from '../../stores/useBranchStore';
+import { useFormBranchId } from '../../hooks/useFormBranchId';
 
 export interface BrandFormData {
   name: string;
@@ -19,7 +19,6 @@ interface BrandFormProps {
   onSubmit: (data: BrandFormData & { imageFile?: File | null; removeImage?: boolean }) => void;
   isLoading?: boolean;
   submitLabel?: string;
-  lockBranch?: boolean;
 }
 
 const DEFAULT_BRAND_FORM_DATA: BrandFormData = {
@@ -48,24 +47,16 @@ const BrandForm: React.FC<BrandFormProps> = ({
   onSubmit,
   isLoading = false,
   submitLabel = 'Create Brand',
-  lockBranch = false,
 }) => {
-  const branches = useBranchStore((state) => state.branches);
-  const fetchBranches = useBranchStore((state) => state.fetchBranches);
-  const selectedBranchId = useBranchStore((state) => state.selectedBranchId);
+  const { branchId: resolvedBranchId, branchError } = useFormBranchId(initialData?.branchId);
 
   const safeInitialData = useMemo(() => {
     const base = initialData ?? DEFAULT_BRAND_FORM_DATA;
-    if (base.branchId && Number(base.branchId) > 0) {
-      return base;
+    if (resolvedBranchId > 0) {
+      return { ...base, branchId: resolvedBranchId };
     }
-
-    if (selectedBranchId && selectedBranchId > 0) {
-      return { ...base, branchId: selectedBranchId };
-    }
-
     return base;
-  }, [initialData, selectedBranchId]);
+  }, [initialData, resolvedBranchId]);
 
   const [formData, setFormData] = useState<BrandFormData>(() => buildBrandFormData(safeInitialData));
   const [errors, setErrors] = useState<Partial<Record<keyof BrandFormData | 'imageFile', string>>>({});
@@ -74,10 +65,6 @@ const BrandForm: React.FC<BrandFormProps> = ({
   const [existingImage, setExistingImage] = useState<{ id: number; branchId: number } | null>(null);
   const [removeImage, setRemoveImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    void fetchBranches();
-  }, [fetchBranches]);
 
   useEffect(() => {
     setFormData(buildBrandFormData(safeInitialData));
@@ -101,6 +88,14 @@ const BrandForm: React.FC<BrandFormProps> = ({
   }, [safeInitialData]);
 
   useEffect(() => {
+    if (resolvedBranchId > 0) {
+      setFormData((prev) =>
+        prev.branchId === resolvedBranchId ? prev : { ...prev, branchId: resolvedBranchId },
+      );
+    }
+  }, [resolvedBranchId]);
+
+  useEffect(() => {
     if (imageFile) {
       const objectUrl = URL.createObjectURL(imageFile);
       setImagePreviewUrl(objectUrl);
@@ -121,8 +116,8 @@ const BrandForm: React.FC<BrandFormProps> = ({
       nextErrors.name = 'Brand name is required';
     }
 
-    if (formData.branchId <= 0) {
-      nextErrors.branchId = 'Branch selection is required';
+    if (resolvedBranchId <= 0) {
+      nextErrors.branchId = branchError ?? 'Branch is required';
     }
 
     if (imageFile) {
@@ -146,7 +141,7 @@ const BrandForm: React.FC<BrandFormProps> = ({
     const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
-      [name]: name === 'branchId' ? Number(value || 0) : value,
+      [name]: value,
     }));
     setErrors((prev) => ({ ...prev, [name]: '' }));
   };
@@ -186,6 +181,7 @@ const BrandForm: React.FC<BrandFormProps> = ({
     if (validateForm()) {
       onSubmit({
         ...formData,
+        branchId: resolvedBranchId,
         imageFile,
         removeImage,
       });
@@ -198,30 +194,8 @@ const BrandForm: React.FC<BrandFormProps> = ({
         <p className="mb-6 text-sm text-gray-600">Enter brand details below.</p>
 
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-          {!lockBranch ? (
-            <FormSelect
-              label="Branch"
-              name="branchId"
-              value={String(formData.branchId || '')}
-              onChange={handleChange}
-              options={[
-                { label: 'Select branch', value: '' },
-                ...branches.map((branch) => ({
-                  label: branch.name,
-                  value: String(branch.id),
-                })),
-              ]}
-              required
-              error={errors.branchId}
-            />
-          ) : (
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-800">Branch</label>
-              <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
-                {branches.find((branch) => branch.id === formData.branchId)?.name ??
-                  `Branch #${formData.branchId}`}
-              </div>
-            </div>
+          {errors.branchId && (
+            <p className="md:col-span-2 -mt-2 text-sm text-red-600">{errors.branchId}</p>
           )}
 
           <FormInput

@@ -208,35 +208,35 @@ public class CodeGeneratorService : ICodeGeneratorService
         {
             CodeModuleNames.Branch =>
                 $"""
-                 SELECT ISNULL(MAX(TRY_CAST(SUBSTRING([Code], {numberStart}, 20) AS bigint)), CAST(0 AS bigint))
+                 SELECT ISNULL(MAX(TRY_CAST(SUBSTRING([Code], {numberStart}, 20) AS bigint)), CAST(0 AS bigint)) AS [Value]
                  FROM [Branches]
                  WHERE [IsDeleted] = 0 AND [Code] LIKE {config.Prefix + "-%"}
                  """,
 
             CodeModuleNames.Category =>
                 $"""
-                 SELECT ISNULL(MAX(TRY_CAST(SUBSTRING([Code], {numberStart}, 20) AS bigint)), CAST(0 AS bigint))
+                 SELECT ISNULL(MAX(TRY_CAST(SUBSTRING([Code], {numberStart}, 20) AS bigint)), CAST(0 AS bigint)) AS [Value]
                  FROM [MenuCategories]
                  WHERE [IsDeleted] = 0 AND [BranchId] = {branchId!.Value} AND [Code] LIKE {config.Prefix + "-%"}
                  """,
 
             CodeModuleNames.SubCategory =>
                 $"""
-                 SELECT ISNULL(MAX(TRY_CAST(SUBSTRING([Code], {numberStart}, 20) AS bigint)), CAST(0 AS bigint))
+                 SELECT ISNULL(MAX(TRY_CAST(SUBSTRING([Code], {numberStart}, 20) AS bigint)), CAST(0 AS bigint)) AS [Value]
                  FROM [SubCategories]
                  WHERE [IsDeleted] = 0 AND [BranchId] = {branchId!.Value} AND [Code] LIKE {config.Prefix + "-%"}
                  """,
 
             CodeModuleNames.Product =>
                 $"""
-                 SELECT ISNULL(MAX(TRY_CAST(SUBSTRING([ProductCode], {numberStart}, 20) AS bigint)), CAST(0 AS bigint))
+                 SELECT ISNULL(MAX(TRY_CAST(SUBSTRING([ProductCode], {numberStart}, 20) AS bigint)), CAST(0 AS bigint)) AS [Value]
                  FROM [Products]
                  WHERE [IsDeleted] = 0 AND [BranchId] = {branchId!.Value} AND [ProductCode] LIKE {config.Prefix + "-%"}
                  """,
 
             CodeModuleNames.Customer =>
                 $"""
-                 SELECT ISNULL(MAX(TRY_CAST(SUBSTRING([CustomerCode], {numberStart}, 20) AS bigint)), CAST(0 AS bigint))
+                 SELECT ISNULL(MAX(TRY_CAST(SUBSTRING([CustomerCode], {numberStart}, 20) AS bigint)), CAST(0 AS bigint)) AS [Value]
                  FROM [Customers]
                  WHERE [IsDeleted] = 0 AND [IsWalkIn] = 0 AND [BranchId] = {branchId!.Value}
                    AND [CustomerCode] LIKE {config.Prefix + "-%"}
@@ -244,14 +244,14 @@ public class CodeGeneratorService : ICodeGeneratorService
 
             CodeModuleNames.Supplier =>
                 $"""
-                 SELECT ISNULL(MAX(TRY_CAST(SUBSTRING([SupplierCode], {numberStart}, 20) AS bigint)), CAST(0 AS bigint))
+                 SELECT ISNULL(MAX(TRY_CAST(SUBSTRING([SupplierCode], {numberStart}, 20) AS bigint)), CAST(0 AS bigint)) AS [Value]
                  FROM [Suppliers]
                  WHERE [IsDeleted] = 0 AND [BranchId] = {branchId!.Value} AND [SupplierCode] LIKE {config.Prefix + "-%"}
                  """,
 
             CodeModuleNames.Purchase =>
                 $"""
-                 SELECT ISNULL(MAX(TRY_CAST(RIGHT([InvoiceNo], {padLength}) AS bigint)), CAST(0 AS bigint))
+                 SELECT ISNULL(MAX(TRY_CAST(RIGHT([InvoiceNo], {padLength}) AS bigint)), CAST(0 AS bigint)) AS [Value]
                  FROM [Purchases]
                  WHERE [IsDeleted] = 0 AND [BranchId] = {branchId!.Value}
                    AND [InvoiceNo] LIKE {$"{config.Prefix}-{now:yyyyMM}-%"}
@@ -259,7 +259,7 @@ public class CodeGeneratorService : ICodeGeneratorService
 
             CodeModuleNames.SalesInvoice =>
                 $"""
-                 SELECT ISNULL(MAX(TRY_CAST(RIGHT([InvoiceNo], {padLength}) AS bigint)), CAST(0 AS bigint))
+                 SELECT ISNULL(MAX(TRY_CAST(RIGHT([InvoiceNo], {padLength}) AS bigint)), CAST(0 AS bigint)) AS [Value]
                  FROM [SaleInvoices]
                  WHERE [IsDeleted] = 0 AND [BranchId] = {branchId!.Value}
                    AND [InvoiceNo] LIKE {$"{config.Prefix}-{now:yyyyMMdd}-%"}

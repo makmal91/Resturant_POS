@@ -1,5 +1,5 @@
 import React from 'react'
-import { useIsGlobalAdmin } from '../../hooks/usePermission'
+import { useCurrentBranch } from '../../hooks/useCurrentBranch'
 import { useBranchStore } from '../../stores/useBranchStore'
 import { useAuth } from '../../contexts/AuthContext'
 
@@ -35,18 +35,15 @@ const BranchSelector: React.FC<BranchSelectorProps> = ({
   adminMode = false,
 }) => {
   const { setBranch } = useAuth()
-  const branches = useBranchStore((state) => state.branches)
   const selectedBranchId = useBranchStore((state) => state.selectedBranchId)
   const setSelectedBranchId = useBranchStore((state) => state.setSelectedBranchId)
-  const isGlobalAdmin = useIsGlobalAdmin()
+  const { showBranchSelector, canViewAllBranches, activeBranches } = useCurrentBranch()
 
-  // Single-branch users should never see a branch selector in forms.
-  // The active branch is already globally set via the TopHeader.
-  if (!adminMode && !isGlobalAdmin && branches.length <= 1) {
+  if (!adminMode && !showBranchSelector) {
     return null
   }
 
-  const canUseAllBranches = allowAllBranches && isGlobalAdmin
+  const canUseAllBranches = allowAllBranches && canViewAllBranches
 
   const handleChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     const value = event.target.value
@@ -74,7 +71,7 @@ const BranchSelector: React.FC<BranchSelectorProps> = ({
       >
         <option value="">Select Branch</option>
         {canUseAllBranches && <option value={0}>All Branches</option>}
-        {branches.map((branch) => (
+        {activeBranches.map((branch) => (
           <option key={branch.id} value={branch.id}>
             {branch.name}
           </option>

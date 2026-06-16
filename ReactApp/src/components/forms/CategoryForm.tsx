@@ -5,7 +5,7 @@ import { CODE_MODULES } from '../../services/codeGeneratorService';
 import AuthenticatedImage from '../AuthenticatedImage';
 import { categoryService } from '../../modules/category/categoryService';
 import { safeString } from '../../utils/safeValues';
-import { useBranchStore } from '../../stores/useBranchStore';
+import { useFormBranchId } from '../../hooks/useFormBranchId';
 
 export interface CategoryFormData {
   name: string;
@@ -25,7 +25,6 @@ interface CategoryFormProps {
   onSubmit: (data: CategoryFormData & { imageFile?: File | null; removeImage?: boolean }) => void;
   isLoading?: boolean;
   submitLabel?: string;
-  lockBranch?: boolean;
 }
 
 const DEFAULT_CATEGORY_FORM_DATA: CategoryFormData = {
@@ -70,24 +69,16 @@ const CategoryForm: React.FC<CategoryFormProps> = ({
   onSubmit,
   isLoading = false,
   submitLabel = 'Create Category',
-  lockBranch = false,
 }) => {
-  const branches = useBranchStore((state) => state.branches);
-  const fetchBranches = useBranchStore((state) => state.fetchBranches);
-  const selectedBranchId = useBranchStore((state) => state.selectedBranchId);
+  const { branchId: resolvedBranchId, branchError } = useFormBranchId(initialData?.branchId);
 
   const safeInitialData = useMemo(() => {
     const base = initialData ?? DEFAULT_CATEGORY_FORM_DATA;
-    if (base.branchId && Number(base.branchId) > 0) {
-      return base;
+    if (resolvedBranchId > 0) {
+      return { ...base, branchId: resolvedBranchId };
     }
-
-    if (selectedBranchId && selectedBranchId > 0) {
-      return { ...base, branchId: selectedBranchId };
-    }
-
     return base;
-  }, [initialData, selectedBranchId]);
+  }, [initialData, resolvedBranchId]);
 
   const [formData, setFormData] = useState<CategoryFormData>(() => buildCategoryFormData(safeInitialData));
   const [errors, setErrors] = useState<Partial<Record<keyof CategoryFormData | 'imageFile', string>>>({});
@@ -97,10 +88,6 @@ const CategoryForm: React.FC<CategoryFormProps> = ({
   const [removeImage, setRemoveImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isEditMode = Number(safeInitialData?.id ?? 0) > 0;
-
-  useEffect(() => {
-    void fetchBranches();
-  }, [fetchBranches]);
 
   useEffect(() => {
     const categoryId = Number(safeInitialData?.id ?? 0);
@@ -143,30 +130,13 @@ const CategoryForm: React.FC<CategoryFormProps> = ({
     }
   }, [safeInitialData]);
 
-  const branchOptions = useMemo(
-    () =>
-      branches
-        .filter((branch) => branch.id > 0)
-        .map((branch) => ({
-          label: branch.name,
-          value: branch.id,
-        })),
-    [branches]
-  );
-
-  const resolvedBranchId =
-    formData.branchId > 0 ? formData.branchId : selectedBranchId && selectedBranchId > 0 ? selectedBranchId : 0;
-
-  const showBranchField =
-    !isEditMode && !(selectedBranchId && selectedBranchId > 0) && !lockBranch;
-
   useEffect(() => {
-    if (selectedBranchId && selectedBranchId > 0 && !isEditMode) {
+    if (resolvedBranchId > 0 && !isEditMode) {
       setFormData((prev) =>
-        prev.branchId === selectedBranchId ? prev : { ...prev, branchId: selectedBranchId }
+        prev.branchId === resolvedBranchId ? prev : { ...prev, branchId: resolvedBranchId },
       );
     }
-  }, [selectedBranchId, isEditMode]);
+  }, [resolvedBranchId, isEditMode]);
 
   const validateForm = () => {
     const nextErrors: Partial<Record<keyof CategoryFormData | 'imageFile', string>> = {};
@@ -176,9 +146,7 @@ const CategoryForm: React.FC<CategoryFormProps> = ({
     }
 
     if (!resolvedBranchId || resolvedBranchId <= 0) {
-      nextErrors.branchId = showBranchField
-        ? 'Branch selection is required'
-        : 'Select a branch from the header before creating a category.';
+      nextErrors.branchId = branchError ?? 'Select a branch from the header before creating a category.';
     }
 
     if (imageFile && !imageFile.type.startsWith('image/')) {
@@ -200,9 +168,7 @@ const CategoryForm: React.FC<CategoryFormProps> = ({
       [name]:
         name === 'displayOrder'
           ? Number(value || 0)
-          : name === 'branchId'
-            ? Number(value || 0)
-            : value,
+          : value,
     }));
     setErrors((prev) => ({ ...prev, [name]: '' }));
   };
@@ -292,21 +258,7 @@ const CategoryForm: React.FC<CategoryFormProps> = ({
             error={errors.name}
           />
 
-          {showBranchField && (
-            <FormSelect
-              label="Branch"
-              name="branchId"
-              value={formData.branchId || ''}
-              onChange={handleChange}
-              options={branchOptions}
-              placeholder="Select branch"
-              required
-              error={errors.branchId}
-              disabled={branchOptions.length === 0}
-            />
-          )}
-
-          {!showBranchField && errors.branchId && (
+          {errors.branchId && (
             <p className="md:col-span-2 -mt-2 text-sm text-red-600">{errors.branchId}</p>
           )}
 

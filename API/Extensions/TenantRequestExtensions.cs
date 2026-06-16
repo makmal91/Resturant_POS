@@ -47,6 +47,16 @@ public static class TenantRequestExtensions
     }
 
     /// <summary>
+    /// Returns the active branch for scoped operations, or null in All Branches mode.
+    /// Mirrors frontend getCurrentBranchId().
+    /// </summary>
+    public static int? GetCurrentBranchId(this ControllerBase controller)
+    {
+        var resolved = controller.ResolveBranchId(null);
+        return resolved > 0 ? resolved : null;
+    }
+
+    /// <summary>
     /// Resolves a concrete branch for branch-scoped operations (e.g. code sequences).
     /// Explicit query/body branch wins over the global "All Branches" header (0).
     /// </summary>
