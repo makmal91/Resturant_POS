@@ -398,32 +398,233 @@ public class SalesService : ISalesService
         PricingType = inv.PricingType,
         Notes = inv.Notes,
         HeldNote = inv.HeldNote,
-        CashierName = inv.CashierName,
-        BranchId = inv.BranchId,
-        BranchName = inv.Branch?.Name ?? string.Empty,
-        CreatedDate = inv.CreatedDate,
+        CashierName  = inv.CashierName,
+        VoidedAt     = inv.VoidedAt,
+        VoidedByName = inv.VoidedByName,
+        BranchId     = inv.BranchId,
+        BranchName   = inv.Branch?.Name ?? string.Empty,
+        CreatedDate  = inv.CreatedDate,
         Items = inv.Items
             .Where(i => !i.IsDeleted)
             .Select(i => new SaleInvoiceItemDto
             {
-                Id = i.Id,
-                ProductId = i.ProductId,
-                ProductName = i.Product?.ProductName ?? string.Empty,
-                ProductCode = i.Product?.ProductCode ?? string.Empty,
-                VariantId = i.VariantId,
-                VariantName = i.Variant?.VariantName,
-                VariantSize = i.Variant?.Size,
-                VariantColor = i.Variant?.Color,
-                UnitId = i.UnitId,
-                UnitName = i.Unit?.UnitName ?? string.Empty,
-                Quantity = i.Quantity,
-                UnitPrice = i.UnitPrice,
-                DiscountPercent = i.DiscountPercent,
-                DiscountAmount = i.DiscountAmount,
-                TaxPercent = i.TaxPercent,
-                TaxAmount = i.TaxAmount,
-                LineTotal = i.LineTotal,
-                ItemNote = i.ItemNote
+                Id               = i.Id,
+                ProductId        = i.ProductId,
+                ProductName      = i.Product?.ProductName ?? string.Empty,
+                ProductCode      = i.Product?.ProductCode ?? string.Empty,
+                VariantId        = i.VariantId,
+                VariantName      = i.Variant?.VariantName,
+                VariantSize      = i.Variant?.Size,
+                VariantColor     = i.Variant?.Color,
+                UnitId           = i.UnitId,
+                UnitName         = i.Unit?.UnitName ?? string.Empty,
+                Quantity         = i.Quantity,
+                ConversionFactor = i.ConversionFactor,
+                BaseQuantity     = i.BaseQuantity,
+                UnitPrice        = i.UnitPrice,
+                DiscountPercent  = i.DiscountPercent,
+                DiscountAmount   = i.DiscountAmount,
+                TaxPercent       = i.TaxPercent,
+                TaxAmount        = i.TaxAmount,
+                LineTotal        = i.LineTotal,
+                ItemNote         = i.ItemNote
             }).ToList()
     };
+
+    // ─── Transaction Correction ────────────────────────────────────────────────
+
+    public async Task<SaleInvoiceDto> VoidSaleInvoiceAsync(int id, VoidSaleInvoiceDto dto)
+    {
+        var invoice = await _salesRepository.GetByIdAsync(id, dto.BusinessId, dto.BranchId)
+            ?? throw new InvalidOperationException("Invoice not found.");
+
+        if (invoice.Status != SaleInvoiceStatus.Completed)
+            throw new InvalidOperationException(
+                $"Only completed invoices can be voided. Current status: {invoice.Status}.");
+
+        // Load the original SaleEntry ledger records for this invoice
+        var originalEntries = await _stockLedgerRepository.GetByReferenceAsync(
+            id, dto.BusinessId, dto.BranchId, StockLedgerType.SaleEntry);
+
+        // Create reversal entries — positive qty returns stock to warehouse
+        var reversals = originalEntries.Select(e => new StockLedger
+        {
+            ProductId          = e.ProductId,
+            VariantId          = e.VariantId,
+            WarehouseId        = e.WarehouseId,   // same warehouse as original
+            Type               = StockLedgerType.SaleReversal,
+            ReferenceId        = id,
+            QuantityInBaseUnit = -e.QuantityInBaseUnit,   // flip sign: was negative, now positive
+            UnitPrice          = e.UnitPrice,
+            TotalAmount        = e.TotalAmount,
+            Date               = DateTime.UtcNow,
+            Remarks            = $"Void of Sale — Invoice: {invoice.InvoiceNo}" +
+                                 (string.IsNullOrWhiteSpace(dto.Reason) ? "" : $" | Reason: {dto.Reason}"),
+            BusinessId         = dto.BusinessId,
+            BranchId           = dto.BranchId
+        }).ToList();
+
+        await _stockLedgerRepository.AddRangeAsync(reversals);
+
+        invoice.Status       = SaleInvoiceStatus.Voided;
+        invoice.VoidedAt     = DateTime.UtcNow;
+        invoice.VoidedByName = dto.VoidedByName;
+        invoice.UpdatedDate  = DateTime.UtcNow;
+
+        await _salesRepository.SaveChangesAsync();
+        await _stockLedgerRepository.SaveChangesAsync();
+
+        var result = await _salesRepository.GetByIdAsync(id, dto.BusinessId, dto.BranchId);
+        return MapInvoiceDto(result!);
+    }
+
+    public async Task<SaleInvoiceDto> UpdateSaleInvoiceAsync(int id, UpdateSaleInvoiceDto dto)
+    {
+        ValidateInvoiceDto(dto.BranchId, dto.WarehouseId, dto.Items);
+
+        var invoice = await _salesRepository.GetByIdAsync(id, dto.BusinessId, dto.BranchId)
+            ?? throw new InvalidOperationException("Invoice not found.");
+
+        if (invoice.Status != SaleInvoiceStatus.Completed)
+            throw new InvalidOperationException(
+                $"Only completed invoices can be edited. Current status: {invoice.Status}.");
+
+        // STEP 1: Reverse the existing stock ledger entries
+        var originalEntries = await _stockLedgerRepository.GetByReferenceAsync(
+            id, dto.BusinessId, dto.BranchId, StockLedgerType.SaleEntry);
+
+        var reversals = originalEntries.Select(e => new StockLedger
+        {
+            ProductId          = e.ProductId,
+            VariantId          = e.VariantId,
+            WarehouseId        = e.WarehouseId,
+            Type               = StockLedgerType.SaleReversal,
+            ReferenceId        = id,
+            QuantityInBaseUnit = -e.QuantityInBaseUnit,
+            UnitPrice          = e.UnitPrice,
+            TotalAmount        = e.TotalAmount,
+            Date               = DateTime.UtcNow,
+            Remarks            = $"Correction Reversal — Invoice: {invoice.InvoiceNo}",
+            BusinessId         = dto.BusinessId,
+            BranchId           = dto.BranchId
+        }).ToList();
+
+        await _stockLedgerRepository.AddRangeAsync(reversals);
+
+        // STEP 2: Soft-delete all existing line items
+        foreach (var item in invoice.Items)
+            item.IsDeleted = true;
+
+        // STEP 3: Rebuild invoice header and items
+        decimal subTotal = 0, totalDiscount = 0, totalTax = 0;
+
+        foreach (var i in dto.Items)
+        {
+            var lineDiscount = i.DiscountAmount > 0
+                ? i.DiscountAmount
+                : i.DiscountPercent > 0 ? i.UnitPrice * i.Quantity * i.DiscountPercent / 100 : 0;
+
+            var grossLine = i.UnitPrice * i.Quantity;
+            var netAfterDiscount = grossLine - lineDiscount;
+            var lineTax = i.TaxPercent > 0 ? netAfterDiscount * i.TaxPercent / 100 : 0;
+            var lineTotal = netAfterDiscount + lineTax;
+
+            subTotal       += grossLine;
+            totalDiscount  += lineDiscount;
+            totalTax       += lineTax;
+
+            var cf = i.ConversionFactor > 0 ? i.ConversionFactor : 1m;
+            invoice.Items.Add(new SaleInvoiceItem
+            {
+                ProductId        = i.ProductId,
+                VariantId        = i.VariantId,
+                UnitId           = i.UnitId,
+                Quantity         = i.Quantity,
+                ConversionFactor = cf,
+                BaseQuantity     = i.Quantity * cf,
+                UnitPrice        = i.UnitPrice,
+                DiscountPercent  = i.DiscountPercent,
+                DiscountAmount   = lineDiscount,
+                TaxPercent       = i.TaxPercent,
+                TaxAmount        = lineTax,
+                LineTotal        = lineTotal,
+                ItemNote         = i.ItemNote,
+                BusinessId       = dto.BusinessId,
+                BranchId         = dto.BranchId
+            });
+        }
+
+        totalDiscount += dto.DiscountAmount;
+
+        invoice.CustomerId    = dto.CustomerId;
+        invoice.WarehouseId   = dto.WarehouseId;
+        invoice.PricingType   = dto.PricingType;
+        invoice.PaymentMethod = dto.PaymentMethod;
+        invoice.PaidAmount    = dto.PaidAmount;
+        invoice.CashAmount    = dto.CashAmount;
+        invoice.CardAmount    = dto.CardAmount;
+        invoice.Notes         = dto.Notes;
+        invoice.CashierName   = dto.CashierName;
+        invoice.SubTotal      = subTotal;
+        invoice.DiscountAmount = totalDiscount;
+        invoice.TaxAmount     = totalTax;
+        invoice.GrandTotal    = subTotal - totalDiscount + totalTax;
+        invoice.ReturnAmount  = dto.PaidAmount > invoice.GrandTotal
+                                    ? dto.PaidAmount - invoice.GrandTotal : 0;
+        invoice.UpdatedDate   = DateTime.UtcNow;
+
+        await _salesRepository.SaveChangesAsync();
+
+        // STEP 4: Write new SaleEntry ledger records for updated items
+        foreach (var item in invoice.Items.Where(i => !i.IsDeleted))
+        {
+            await _stockLedgerRepository.AddAsync(new StockLedger
+            {
+                ProductId          = item.ProductId,
+                VariantId          = item.VariantId,
+                WarehouseId        = invoice.WarehouseId,
+                Type               = StockLedgerType.SaleEntry,
+                ReferenceId        = invoice.Id,
+                QuantityInBaseUnit = -item.BaseQuantity,
+                UnitPrice          = item.UnitPrice,
+                TotalAmount        = item.LineTotal,
+                Date               = invoice.SaleDate,
+                Remarks            = $"Sale (Corrected) — Invoice: {invoice.InvoiceNo}",
+                BusinessId         = dto.BusinessId,
+                BranchId           = dto.BranchId
+            });
+        }
+
+        await _stockLedgerRepository.SaveChangesAsync();
+
+        var result = await _salesRepository.GetByIdAsync(id, dto.BusinessId, dto.BranchId);
+        return MapInvoiceDto(result!);
+    }
+
+    public async Task<List<SaleLedgerEntryDto>> GetSaleLedgerHistoryAsync(
+        int invoiceId, int businessId, int branchId)
+    {
+        var entries = await _stockLedgerRepository.GetByReferenceAsync(
+            invoiceId, businessId, branchId);   // all types
+
+        return entries
+            .OrderBy(e => e.Date)
+            .ThenBy(e => e.Id)
+            .Select(e => new SaleLedgerEntryDto
+            {
+                Id               = e.Id,
+                Type             = e.Type.ToString(),
+                ProductId        = e.ProductId,
+                ProductName      = e.Product?.ProductName ?? string.Empty,
+                VariantId        = e.VariantId,
+                VariantName      = e.Variant?.VariantName,
+                WarehouseId      = e.WarehouseId,
+                WarehouseName    = e.Warehouse?.Name ?? string.Empty,
+                QuantityInBaseUnit = e.QuantityInBaseUnit,
+                UnitPrice        = e.UnitPrice,
+                TotalAmount      = e.TotalAmount,
+                Date             = e.Date,
+                Remarks          = e.Remarks
+            }).ToList();
+    }
 }

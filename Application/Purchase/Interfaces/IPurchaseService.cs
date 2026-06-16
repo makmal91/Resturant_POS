@@ -1,5 +1,6 @@
 using POSSystem.Application.Common.DTOs;
 using POSSystem.Application.Purchase.DTOs;
+using POSSystem.Application.Sales.DTOs;
 using POSSystem.Domain;
 
 namespace POSSystem.Application.Purchase.Interfaces;
@@ -12,4 +13,8 @@ public interface IPurchaseService
     Task<PurchaseDetailDto?> UpdatePurchaseAsync(int id, UpdatePurchaseDto dto);
     Task<PurchaseDetailDto> PostPurchaseAsync(int id, PostPurchaseDto dto);
     Task DeletePurchaseAsync(int id, int businessId, int branchId);
+
+    // ─── Transaction correction ───────────────────────────────────────────────
+    Task<PurchaseDetailDto> VoidPurchaseAsync(int id, VoidPurchaseDto dto);
+    Task<List<SaleLedgerEntryDto>> GetPurchaseLedgerHistoryAsync(int purchaseId, int businessId, int branchId);
 }

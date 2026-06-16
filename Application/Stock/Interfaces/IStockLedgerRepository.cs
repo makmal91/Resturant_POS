@@ -17,5 +17,7 @@ public interface IStockLedgerRepository
     /// </summary>
     Task<Dictionary<string, decimal>> GetStockForProductsAsync(
         int businessId, int branchId, IEnumerable<int> productIds, int? warehouseId);
+    Task<List<StockLedger>> GetByReferenceAsync(
+        int referenceId, int businessId, int branchId, params StockLedgerType[] types);
     Task SaveChangesAsync();
 }

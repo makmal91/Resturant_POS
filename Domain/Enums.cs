@@ -89,4 +89,6 @@ public enum StockLedgerType
     TransferOut      = 5,   // Stock moved out of a warehouse
     TransferIn       = 6,   // Stock received into a warehouse
     SaleReturn       = 7,   // Stock returned by a customer
+    SaleReversal     = 8,   // Reversal of a sale — stock returns to warehouse
+    PurchaseReversal = 9,   // Reversal of a purchase — stock removed from warehouse
 }

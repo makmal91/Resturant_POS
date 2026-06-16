@@ -6,7 +6,8 @@ public enum SaleInvoiceStatus
     Completed = 1,
     Held = 2,
     Cancelled = 3,
-    Returned = 4
+    Returned  = 4,
+    Voided    = 5   // invoice was voided after completion; stock reversed via ledger
 }
 
 public enum SalePaymentMethod
@@ -41,7 +42,9 @@ public class SaleInvoice : BaseEntity
     public PricingType PricingType { get; set; } = PricingType.Retail;
     public string? Notes { get; set; }
     public string? HeldNote { get; set; }
-    public string? CashierName { get; set; }
+    public string? CashierName   { get; set; }
+    public DateTime? VoidedAt    { get; set; }
+    public string?  VoidedByName { get; set; }
 
     public virtual Customer? Customer { get; set; }
     public virtual Warehouse Warehouse { get; set; } = null!;

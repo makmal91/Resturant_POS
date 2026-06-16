@@ -1,6 +1,7 @@
 using POSSystem.Application.Common.DTOs;
 using POSSystem.Application.Purchase.DTOs;
 using POSSystem.Application.Purchase.Interfaces;
+using POSSystem.Application.Sales.DTOs;
 using POSSystem.Application.Stock.Interfaces;
 using POSSystem.Domain;
 
@@ -70,29 +71,74 @@ public class PurchaseService : IPurchaseService
         if (entity == null)
             throw new InvalidOperationException("Purchase not found.");
 
-        if (entity.Status == PurchaseStatus.Posted)
-            throw new InvalidOperationException("Cannot edit a posted purchase.");
-
         ValidatePurchaseDto(dto.BranchId, dto.SupplierId, dto.WarehouseId, dto.Items);
 
         if (await _purchaseRepository.InvoiceExistsAsync(dto.InvoiceNo, dto.BusinessId, dto.BranchId, id))
             throw new InvalidOperationException($"Invoice number '{dto.InvoiceNo}' already exists.");
 
-        entity.InvoiceNo = dto.InvoiceNo.Trim();
-        entity.SupplierId = dto.SupplierId;
-        entity.WarehouseId = dto.WarehouseId;
+        // If purchase is already Posted, reverse existing stock ledger entries first
+        if (entity.Status == PurchaseStatus.Posted)
+        {
+            var originalEntries = await _stockLedgerRepository.GetByReferenceAsync(
+                id, dto.BusinessId, dto.BranchId, StockLedgerType.PurchaseEntry);
+
+            var reversals = originalEntries.Select(e => new StockLedger
+            {
+                ProductId          = e.ProductId,
+                VariantId          = e.VariantId,
+                WarehouseId        = e.WarehouseId,
+                Type               = StockLedgerType.PurchaseReversal,
+                ReferenceId        = id,
+                QuantityInBaseUnit = -e.QuantityInBaseUnit,   // flip: was +, now -
+                UnitPrice          = e.UnitPrice,
+                TotalAmount        = e.TotalAmount,
+                Date               = DateTime.UtcNow,
+                Remarks            = $"Correction Reversal — Invoice: {entity.InvoiceNo}",
+                BusinessId         = dto.BusinessId,
+                BranchId           = dto.BranchId
+            }).ToList();
+
+            await _stockLedgerRepository.AddRangeAsync(reversals);
+        }
+
+        entity.InvoiceNo    = dto.InvoiceNo.Trim();
+        entity.SupplierId   = dto.SupplierId;
+        entity.WarehouseId  = dto.WarehouseId;
         entity.PurchaseDate = dto.PurchaseDate;
-        entity.Notes = dto.Notes?.Trim() ?? string.Empty;
-        entity.UpdatedDate = DateTime.UtcNow;
+        entity.Notes        = dto.Notes?.Trim() ?? string.Empty;
+        entity.UpdatedDate  = DateTime.UtcNow;
 
         foreach (var item in entity.Items)
-        {
             item.IsDeleted = true;
-        }
 
         BuildItems(entity, dto.Items, dto.BusinessId, dto.BranchId);
 
+        // If was Posted, re-apply new stock entries and keep Posted status
+        if (entity.Status == PurchaseStatus.Posted)
+        {
+            var activeItems = entity.Items.Where(i => !i.IsDeleted).ToList();
+            foreach (var item in activeItems)
+            {
+                await _stockLedgerRepository.AddAsync(new StockLedger
+                {
+                    ProductId          = item.ProductId,
+                    VariantId          = item.VariantId,
+                    WarehouseId        = entity.WarehouseId,
+                    Type               = StockLedgerType.PurchaseEntry,
+                    ReferenceId        = entity.Id,
+                    QuantityInBaseUnit = item.BaseQuantity,
+                    UnitPrice          = item.CostPrice,
+                    TotalAmount        = item.TotalCost,
+                    Date               = entity.PurchaseDate,
+                    Remarks            = $"Purchase (Corrected) — Invoice: {entity.InvoiceNo}",
+                    BusinessId         = dto.BusinessId,
+                    BranchId           = dto.BranchId
+                });
+            }
+        }
+
         await _purchaseRepository.SaveChangesAsync();
+        await _stockLedgerRepository.SaveChangesAsync();
 
         var updated = await _purchaseRepository.GetByIdWithItemsAsync(id, dto.BusinessId, dto.BranchId);
         return MapDetailDto(updated!);
@@ -203,6 +249,77 @@ public class PurchaseService : IPurchaseService
         purchase.TotalAmount = total;
     }
 
+    public async Task<PurchaseDetailDto> VoidPurchaseAsync(int id, VoidPurchaseDto dto)
+    {
+        var entity = await _purchaseRepository.GetByIdWithItemsAsync(id, dto.BusinessId, dto.BranchId)
+            ?? throw new InvalidOperationException("Purchase not found.");
+
+        if (entity.Status != PurchaseStatus.Posted)
+            throw new InvalidOperationException(
+                $"Only posted purchases can be voided. Current status: {entity.Status}.");
+
+        // Reverse all PurchaseEntry records for this purchase
+        var originalEntries = await _stockLedgerRepository.GetByReferenceAsync(
+            id, dto.BusinessId, dto.BranchId, StockLedgerType.PurchaseEntry);
+
+        var reversals = originalEntries.Select(e => new StockLedger
+        {
+            ProductId          = e.ProductId,
+            VariantId          = e.VariantId,
+            WarehouseId        = e.WarehouseId,
+            Type               = StockLedgerType.PurchaseReversal,
+            ReferenceId        = id,
+            QuantityInBaseUnit = -e.QuantityInBaseUnit,   // was positive, now negative → stock out
+            UnitPrice          = e.UnitPrice,
+            TotalAmount        = e.TotalAmount,
+            Date               = DateTime.UtcNow,
+            Remarks            = $"Void of Purchase — Invoice: {entity.InvoiceNo}" +
+                                 (string.IsNullOrWhiteSpace(dto.Reason) ? "" : $" | Reason: {dto.Reason}"),
+            BusinessId         = dto.BusinessId,
+            BranchId           = dto.BranchId
+        }).ToList();
+
+        await _stockLedgerRepository.AddRangeAsync(reversals);
+
+        entity.Status       = PurchaseStatus.Cancelled;
+        entity.VoidedAt     = DateTime.UtcNow;
+        entity.VoidedByName = dto.VoidedByName;
+        entity.UpdatedDate  = DateTime.UtcNow;
+
+        await _purchaseRepository.SaveChangesAsync();
+        await _stockLedgerRepository.SaveChangesAsync();
+
+        var result = await _purchaseRepository.GetByIdWithItemsAsync(id, dto.BusinessId, dto.BranchId);
+        return MapDetailDto(result!);
+    }
+
+    public async Task<List<SaleLedgerEntryDto>> GetPurchaseLedgerHistoryAsync(
+        int purchaseId, int businessId, int branchId)
+    {
+        var entries = await _stockLedgerRepository.GetByReferenceAsync(
+            purchaseId, businessId, branchId);
+
+        return entries
+            .OrderBy(e => e.Date)
+            .ThenBy(e => e.Id)
+            .Select(e => new SaleLedgerEntryDto
+            {
+                Id                 = e.Id,
+                Type               = e.Type.ToString(),
+                ProductId          = e.ProductId,
+                ProductName        = e.Product?.ProductName ?? string.Empty,
+                VariantId          = e.VariantId,
+                VariantName        = e.Variant?.VariantName,
+                WarehouseId        = e.WarehouseId,
+                WarehouseName      = e.Warehouse?.Name ?? string.Empty,
+                QuantityInBaseUnit = e.QuantityInBaseUnit,
+                UnitPrice          = e.UnitPrice,
+                TotalAmount        = e.TotalAmount,
+                Date               = e.Date,
+                Remarks            = e.Remarks
+            }).ToList();
+    }
+
     private static PurchaseDto MapDto(Domain.Purchase p) => new()
     {
         Id = p.Id,
@@ -217,28 +334,32 @@ public class PurchaseService : IPurchaseService
         TotalAmount = p.TotalAmount,
         Status = p.Status,
         Notes = p.Notes,
-        ItemCount = p.Items.Count(i => !i.IsDeleted),
-        CreatedDate = p.CreatedDate,
-        UpdatedDate = p.UpdatedDate
+        ItemCount    = p.Items.Count(i => !i.IsDeleted),
+        CreatedDate  = p.CreatedDate,
+        UpdatedDate  = p.UpdatedDate,
+        VoidedAt     = p.VoidedAt,
+        VoidedByName = p.VoidedByName
     };
 
     private static PurchaseDetailDto MapDetailDto(Domain.Purchase p) => new()
     {
-        Id = p.Id,
-        InvoiceNo = p.InvoiceNo,
-        SupplierId = p.SupplierId,
+        Id           = p.Id,
+        InvoiceNo    = p.InvoiceNo,
+        SupplierId   = p.SupplierId,
         SupplierName = p.Supplier?.Name ?? string.Empty,
-        WarehouseId = p.WarehouseId,
+        WarehouseId  = p.WarehouseId,
         WarehouseName = p.Warehouse?.Name ?? string.Empty,
-        BranchId = p.BranchId,
-        BranchName = p.Branch?.Name ?? string.Empty,
+        BranchId     = p.BranchId,
+        BranchName   = p.Branch?.Name ?? string.Empty,
         PurchaseDate = p.PurchaseDate,
-        TotalAmount = p.TotalAmount,
-        Status = p.Status,
-        Notes = p.Notes,
-        ItemCount = p.Items.Count(i => !i.IsDeleted),
-        CreatedDate = p.CreatedDate,
-        UpdatedDate = p.UpdatedDate,
+        TotalAmount  = p.TotalAmount,
+        Status       = p.Status,
+        Notes        = p.Notes,
+        ItemCount    = p.Items.Count(i => !i.IsDeleted),
+        CreatedDate  = p.CreatedDate,
+        UpdatedDate  = p.UpdatedDate,
+        VoidedAt     = p.VoidedAt,
+        VoidedByName = p.VoidedByName,
         Items = p.Items
             .Where(i => !i.IsDeleted)
             .Select(i => new PurchaseItemDto

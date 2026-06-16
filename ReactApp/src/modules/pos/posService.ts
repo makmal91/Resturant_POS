@@ -142,7 +142,9 @@ export interface SaleInvoiceDto {
   paymentMethod: 'Cash' | 'Card' | 'Mixed';
   cashAmount: number;
   cardAmount: number;
-  status: 'Draft' | 'Completed' | 'Held' | 'Cancelled' | 'Returned';
+  status: 'Draft' | 'Completed' | 'Held' | 'Cancelled' | 'Returned' | 'Voided';
+  voidedAt: string | null;
+  voidedByName: string | null;
   pricingType: 'Retail' | 'Wholesale';
   notes: string | null;
   heldNote: string | null;
@@ -165,6 +167,8 @@ export interface SaleInvoiceItemResult {
   unitId: number;
   unitName: string;
   quantity: number;
+  conversionFactor: number;
+  baseQuantity: number;
   unitPrice: number;
   discountPercent: number;
   discountAmount: number;
@@ -172,6 +176,45 @@ export interface SaleInvoiceItemResult {
   taxAmount: number;
   lineTotal: number;
   itemNote: string | null;
+}
+
+export interface SaleLedgerEntry {
+  id: number;
+  type: string;
+  productId: number;
+  productName: string;
+  variantId: number | null;
+  variantName: string | null;
+  warehouseId: number;
+  warehouseName: string;
+  quantityInBaseUnit: number;
+  unitPrice: number;
+  totalAmount: number;
+  date: string;
+  remarks: string;
+}
+
+export interface VoidInvoicePayload {
+  businessId: number;
+  branchId: number;
+  voidedByName?: string;
+  reason?: string;
+}
+
+export interface UpdateSaleInvoicePayload {
+  customerId?: number | null;
+  warehouseId: number;
+  pricingType: 'Retail' | 'Wholesale';
+  paymentMethod: 'Cash' | 'Card' | 'Mixed';
+  paidAmount: number;
+  cashAmount: number;
+  cardAmount: number;
+  discountAmount: number;
+  notes?: string;
+  cashierName?: string;
+  businessId: number;
+  branchId: number;
+  items: SaleInvoiceItem[];
 }
 
 // ─── Cart item (local state only) ──────────────────────────────────────────
@@ -344,6 +387,18 @@ export const posService = {
 
   getInvoiceById: (id: number, branchId: number) =>
     apiClient.get<SaleInvoiceDto>(`/sales/invoice/${id}`, {
+      params: { branchId },
+      ...bh(branchId),
+    }),
+
+  voidInvoice: (id: number, payload: VoidInvoicePayload) =>
+    apiClient.post<SaleInvoiceDto>(`/sales/invoice/${id}/void`, payload, bh(payload.branchId)),
+
+  updateInvoice: (id: number, payload: UpdateSaleInvoicePayload) =>
+    apiClient.put<SaleInvoiceDto>(`/sales/invoice/${id}`, payload, bh(payload.branchId)),
+
+  getInvoiceLedgerHistory: (id: number, branchId: number) =>
+    apiClient.get<SaleLedgerEntry[]>(`/sales/invoice/${id}/ledger`, {
       params: { branchId },
       ...bh(branchId),
     }),

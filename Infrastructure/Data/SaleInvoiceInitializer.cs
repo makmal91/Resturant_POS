@@ -101,6 +101,12 @@ public static class SaleInvoiceInitializer
                     ADD [BaseQuantity] DECIMAL(18,4) NOT NULL CONSTRAINT [DF_SaleInvoiceItems_BaseQuantity] DEFAULT 0;
             """,
             """
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[SaleInvoices]') AND name = N'VoidedAt')
+                ALTER TABLE [dbo].[SaleInvoices] ADD [VoidedAt] DATETIME2 NULL;
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[SaleInvoices]') AND name = N'VoidedByName')
+                ALTER TABLE [dbo].[SaleInvoices] ADD [VoidedByName] NVARCHAR(200) NULL;
+            """,
+            """
             IF NOT EXISTS (SELECT 1 FROM [dbo].[PermissionModules] WHERE [ModuleName] = N'Sales')
                 INSERT INTO [dbo].[PermissionModules] ([ModuleName], [BusinessId], [BranchId], [CreatedDate], [IsDeleted])
                 VALUES (N'Sales', 1, 1, GETUTCDATE(), 0);

@@ -167,6 +167,8 @@ public class SaleInvoiceDto
     public string? Notes { get; set; }
     public string? HeldNote { get; set; }
     public string? CashierName { get; set; }
+    public DateTime? VoidedAt    { get; set; }
+    public string?  VoidedByName { get; set; }
     public int BranchId { get; set; }
     public string BranchName { get; set; } = string.Empty;
     public DateTime CreatedDate { get; set; }
@@ -186,6 +188,8 @@ public class SaleInvoiceItemDto
     public int UnitId { get; set; }
     public string UnitName { get; set; } = string.Empty;
     public decimal Quantity { get; set; }
+    public decimal ConversionFactor { get; set; }
+    public decimal BaseQuantity { get; set; }
     public decimal UnitPrice { get; set; }
     public decimal DiscountPercent { get; set; }
     public decimal DiscountAmount { get; set; }
@@ -193,4 +197,48 @@ public class SaleInvoiceItemDto
     public decimal TaxAmount { get; set; }
     public decimal LineTotal { get; set; }
     public string? ItemNote { get; set; }
+}
+
+// ─── Transaction Correction DTOs ─────────────────────────────────────────────
+
+public class UpdateSaleInvoiceDto
+{
+    public int? CustomerId { get; set; }
+    public int WarehouseId { get; set; }
+    public PricingType PricingType { get; set; } = PricingType.Retail;
+    public SalePaymentMethod PaymentMethod { get; set; } = SalePaymentMethod.Cash;
+    public decimal PaidAmount { get; set; }
+    public decimal CashAmount { get; set; }
+    public decimal CardAmount { get; set; }
+    public decimal DiscountAmount { get; set; }
+    public string? Notes { get; set; }
+    public string? CashierName { get; set; }
+    public int BusinessId { get; set; }
+    public int BranchId { get; set; }
+    public List<CreateSaleInvoiceItemDto> Items { get; set; } = new();
+}
+
+public class VoidSaleInvoiceDto
+{
+    public int BusinessId { get; set; }
+    public int BranchId { get; set; }
+    public string? VoidedByName { get; set; }
+    public string? Reason { get; set; }
+}
+
+public class SaleLedgerEntryDto
+{
+    public int Id { get; set; }
+    public string Type { get; set; } = string.Empty;
+    public int ProductId { get; set; }
+    public string ProductName { get; set; } = string.Empty;
+    public int? VariantId { get; set; }
+    public string? VariantName { get; set; }
+    public int WarehouseId { get; set; }
+    public string WarehouseName { get; set; } = string.Empty;
+    public decimal QuantityInBaseUnit { get; set; }
+    public decimal UnitPrice { get; set; }
+    public decimal TotalAmount { get; set; }
+    public DateTime Date { get; set; }
+    public string Remarks { get; set; } = string.Empty;
 }

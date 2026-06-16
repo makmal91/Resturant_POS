@@ -166,6 +166,14 @@ public static class PurchaseWarehouseInitializer
                 CREATE INDEX [idx_ledger_business_branch_product_variant_warehouse] ON [dbo].[StockLedger]([BusinessId], [BranchId], [ProductId], [VariantId], [WarehouseId]);
             IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_ledger_business_branch_date' AND object_id = OBJECT_ID(N'[dbo].[StockLedger]'))
                 CREATE INDEX [idx_ledger_business_branch_date] ON [dbo].[StockLedger]([BusinessId], [BranchId], [Date] DESC);
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_ledger_reference' AND object_id = OBJECT_ID(N'[dbo].[StockLedger]'))
+                CREATE INDEX [idx_ledger_reference] ON [dbo].[StockLedger]([ReferenceId], [BusinessId], [BranchId], [Type]);
+            """,
+            """
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[Purchases]') AND name = N'VoidedAt')
+                ALTER TABLE [dbo].[Purchases] ADD [VoidedAt] DATETIME2 NULL;
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[Purchases]') AND name = N'VoidedByName')
+                ALTER TABLE [dbo].[Purchases] ADD [VoidedByName] NVARCHAR(200) NULL;
             """
         };
 

@@ -234,69 +234,102 @@ interface ReceiptModalProps {
   invoice: SaleInvoiceDto;
   onClose: () => void;
   onNewSale: () => void;
+  onVoid?: () => void;
+  voidLoading?: boolean;
 }
 
-const ReceiptModal: React.FC<ReceiptModalProps> = ({ invoice, onClose, onNewSale }) => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden border border-gray-200 max-h-[90vh] flex flex-col">
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-        <div>
-          <h2 className="text-lg font-bold text-gray-800">Receipt</h2>
-          <p className="text-xs text-gray-500">{invoice.invoiceNo}</p>
-        </div>
-        <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 text-xl transition">×</button>
-      </div>
-
-      <div className="overflow-y-auto flex-1 p-5 space-y-4 text-sm">
-        <div className="text-center pb-3 border-b border-dashed border-gray-300">
-          <p className="text-xs text-gray-500">{new Date(invoice.saleDate).toLocaleString()}</p>
-          {invoice.customerName && <p className="text-gray-600 text-xs mt-1">Customer: <span className="font-medium">{invoice.customerName}</span></p>}
-          {invoice.warehouseName && <p className="text-gray-600 text-xs">Warehouse: <span className="font-medium">{invoice.warehouseName}</span></p>}
-        </div>
-
-        <table className="w-full text-xs">
-          <tbody className="divide-y divide-gray-100">
-            {invoice.items.map((item) => (
-              <tr key={item.id}>
-                <td className="py-2 pr-2">
-                  <p className="font-medium text-gray-800">{item.productName}</p>
-                  {item.variantName && <p className="text-gray-400">{item.variantName}</p>}
-                  <p className="text-gray-400">{item.unitName}</p>
-                </td>
-                <td className="py-2 text-right text-gray-600 whitespace-nowrap">{item.quantity} × {fmt(item.unitPrice)}</td>
-                <td className="py-2 pl-2 text-right font-semibold text-gray-800 whitespace-nowrap">{fmt(item.lineTotal)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        <div className="border-t border-dashed border-gray-300 pt-3 space-y-1.5">
-          <div className="flex justify-between text-gray-600"><span>Subtotal</span><span>{fmt(invoice.subTotal)}</span></div>
-          {invoice.discountAmount > 0 && <div className="flex justify-between text-red-500"><span>Discount</span><span>−{fmt(invoice.discountAmount)}</span></div>}
-          {invoice.taxAmount > 0 && <div className="flex justify-between text-gray-600"><span>Tax</span><span>+{fmt(invoice.taxAmount)}</span></div>}
-          <div className="flex justify-between font-bold text-gray-900 text-base border-t border-gray-200 pt-2 mt-2">
-            <span>Total</span><span>{fmt(invoice.grandTotal)}</span>
+const ReceiptModal: React.FC<ReceiptModalProps> = ({
+  invoice, onClose, onNewSale, onVoid, voidLoading
+}) => {
+  const isVoided = invoice.status === 'Voided';
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden border border-gray-200 max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-bold text-gray-800">Receipt</h2>
+              {isVoided && (
+                <span className="text-xs font-bold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">
+                  VOIDED
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-gray-500">{invoice.invoiceNo}</p>
           </div>
-          <div className="flex justify-between text-gray-600"><span>Paid ({invoice.paymentMethod})</span><span>{fmt(invoice.paidAmount)}</span></div>
-          {invoice.returnAmount > 0 && (
-            <div className="flex justify-between font-semibold text-green-600"><span>Change</span><span>{fmt(invoice.returnAmount)}</span></div>
-          )}
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 text-xl transition">×</button>
         </div>
 
-        <p className="text-center text-gray-400 text-xs pt-2 border-t border-dashed border-gray-300">Thank you for your purchase!</p>
-      </div>
+        <div className="overflow-y-auto flex-1 p-5 space-y-4 text-sm">
+          <div className="text-center pb-3 border-b border-dashed border-gray-300">
+            <p className="text-xs text-gray-500">{new Date(invoice.saleDate).toLocaleString()}</p>
+            {invoice.customerName && <p className="text-gray-600 text-xs mt-1">Customer: <span className="font-medium">{invoice.customerName}</span></p>}
+            {invoice.warehouseName && <p className="text-gray-600 text-xs">Warehouse: <span className="font-medium">{invoice.warehouseName}</span></p>}
+            {isVoided && invoice.voidedAt && (
+              <p className="text-red-500 text-xs mt-1">
+                Voided: {new Date(invoice.voidedAt).toLocaleString()}
+                {invoice.voidedByName ? ` by ${invoice.voidedByName}` : ''}
+              </p>
+            )}
+          </div>
 
-      <div className="px-5 pb-5 flex gap-3 border-t border-gray-100 pt-4">
-        <button onClick={() => window.print()} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 font-semibold hover:bg-gray-50 transition text-sm">
-          🖨️ Print
-        </button>
-        <button onClick={onNewSale} className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold transition text-sm">
-          + New Sale
-        </button>
+          <table className="w-full text-xs">
+            <tbody className="divide-y divide-gray-100">
+              {invoice.items.map((item) => (
+                <tr key={item.id} className={isVoided ? 'opacity-50' : ''}>
+                  <td className="py-2 pr-2">
+                    <p className="font-medium text-gray-800">{item.productName}</p>
+                    {item.variantName && <p className="text-gray-400">{item.variantName}</p>}
+                    <p className="text-gray-400">{item.unitName}</p>
+                  </td>
+                  <td className="py-2 text-right text-gray-600 whitespace-nowrap">{item.quantity} × {fmt(item.unitPrice)}</td>
+                  <td className="py-2 pl-2 text-right font-semibold text-gray-800 whitespace-nowrap">{fmt(item.lineTotal)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <div className="border-t border-dashed border-gray-300 pt-3 space-y-1.5">
+            <div className="flex justify-between text-gray-600"><span>Subtotal</span><span>{fmt(invoice.subTotal)}</span></div>
+            {invoice.discountAmount > 0 && <div className="flex justify-between text-red-500"><span>Discount</span><span>−{fmt(invoice.discountAmount)}</span></div>}
+            {invoice.taxAmount > 0 && <div className="flex justify-between text-gray-600"><span>Tax</span><span>+{fmt(invoice.taxAmount)}</span></div>}
+            <div className="flex justify-between font-bold text-gray-900 text-base border-t border-gray-200 pt-2 mt-2">
+              <span>Total</span><span>{fmt(invoice.grandTotal)}</span>
+            </div>
+            <div className="flex justify-between text-gray-600"><span>Paid ({invoice.paymentMethod})</span><span>{fmt(invoice.paidAmount)}</span></div>
+            {invoice.returnAmount > 0 && (
+              <div className="flex justify-between font-semibold text-green-600"><span>Change</span><span>{fmt(invoice.returnAmount)}</span></div>
+            )}
+          </div>
+
+          <p className="text-center text-gray-400 text-xs pt-2 border-t border-dashed border-gray-300">
+            {isVoided ? 'This invoice has been voided. Stock has been restored.' : 'Thank you for your purchase!'}
+          </p>
+        </div>
+
+        <div className="px-5 pb-5 border-t border-gray-100 pt-4 space-y-2">
+          {!isVoided && onVoid && (
+            <button
+              onClick={onVoid}
+              disabled={voidLoading}
+              className="w-full py-2.5 rounded-xl border border-red-200 text-red-600 font-semibold hover:bg-red-50 transition text-sm disabled:opacity-50"
+            >
+              {voidLoading ? 'Voiding…' : '⚠ Void Invoice (Stock will be recalculated)'}
+            </button>
+          )}
+          <div className="flex gap-3">
+            <button onClick={() => window.print()} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 font-semibold hover:bg-gray-50 transition text-sm">
+              🖨️ Print
+            </button>
+            <button onClick={onNewSale} className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold transition text-sm">
+              + New Sale
+            </button>
+          </div>
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 // ─── Main POS Billing Page ────────────────────────────────────────────────────
 
@@ -329,6 +362,7 @@ const POSBillingPage: React.FC = () => {
   const [showHeld, setShowHeld] = useState(false);
   const [heldBills, setHeldBills] = useState<SaleInvoiceDto[]>([]);
   const [completedInvoice, setCompletedInvoice] = useState<SaleInvoiceDto | null>(null);
+  const [voidLoading, setVoidLoading] = useState(false);
   const [error, setError] = useState('');
 
   const barcodeRef = useRef<HTMLInputElement>(null);
@@ -487,6 +521,29 @@ const POSBillingPage: React.FC = () => {
       setError('Failed to save invoice. Please try again.');
     } finally {
       setPaymentLoading(false);
+    }
+  };
+
+  // ── Void Invoice ──
+  const handleVoidInvoice = async () => {
+    if (!completedInvoice) return;
+    const confirmed = window.confirm(
+      `⚠ Void invoice ${completedInvoice.invoiceNo}?\n\nStock will be recalculated — all stock deducted by this invoice will be returned to the warehouse.\n\nThis action cannot be undone.`
+    );
+    if (!confirmed) return;
+    setVoidLoading(true);
+    try {
+      const res = await posService.voidInvoice(completedInvoice.id, {
+        businessId,
+        branchId,
+        voidedByName: user?.fullName ?? user?.username ?? undefined,
+        reason: 'Voided from POS',
+      });
+      setCompletedInvoice(res.data);
+    } catch {
+      setError('Failed to void invoice. Please try again.');
+    } finally {
+      setVoidLoading(false);
     }
   };
 
@@ -995,7 +1052,13 @@ const POSBillingPage: React.FC = () => {
         <HeldBillsModal bills={heldBills} onResume={handleResumeBill} onCancel={cancelHeldBill} onClose={() => setShowHeld(false)} />
       )}
       {completedInvoice && (
-        <ReceiptModal invoice={completedInvoice} onClose={() => setCompletedInvoice(null)} onNewSale={() => { setCompletedInvoice(null); barcodeRef.current?.focus(); }} />
+        <ReceiptModal
+          invoice={completedInvoice}
+          onClose={() => setCompletedInvoice(null)}
+          onNewSale={() => { setCompletedInvoice(null); barcodeRef.current?.focus(); }}
+          onVoid={completedInvoice.status === 'Completed' ? handleVoidInvoice : undefined}
+          voidLoading={voidLoading}
+        />
       )}
       {showQuickAdd && (
         <QuickAddCustomerModal

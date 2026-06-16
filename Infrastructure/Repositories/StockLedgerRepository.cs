@@ -160,5 +160,20 @@ public class StockLedgerRepository : IStockLedgerRepository
             r => r.Total);
     }
 
+    public async Task<List<StockLedger>> GetByReferenceAsync(
+        int referenceId, int businessId, int branchId, params StockLedgerType[] types)
+    {
+        var query = _context.StockLedgerEntries
+            .IgnoreQueryFilters()
+            .Where(e => e.ReferenceId == referenceId
+                        && e.BusinessId == businessId
+                        && e.BranchId == branchId);
+
+        if (types.Length > 0)
+            query = query.Where(e => types.Contains(e.Type));
+
+        return await query.ToListAsync();
+    }
+
     public Task SaveChangesAsync() => _context.SaveChangesAsync();
 }

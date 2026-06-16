@@ -13,4 +13,9 @@ public interface ISalesService
     Task<List<SaleInvoiceDto>> GetHeldBillsAsync(int businessId, int branchId);
     Task<SaleInvoiceDto?> GetInvoiceByIdAsync(int id, int businessId, int branchId);
     Task CancelHeldBillAsync(int id, int businessId, int branchId);
+
+    // ─── Transaction correction ───────────────────────────────────────────────
+    Task<SaleInvoiceDto> UpdateSaleInvoiceAsync(int id, UpdateSaleInvoiceDto dto);
+    Task<SaleInvoiceDto> VoidSaleInvoiceAsync(int id, VoidSaleInvoiceDto dto);
+    Task<List<SaleLedgerEntryDto>> GetSaleLedgerHistoryAsync(int invoiceId, int businessId, int branchId);
 }

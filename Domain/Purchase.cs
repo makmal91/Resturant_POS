@@ -9,6 +9,8 @@ public class Purchase : BaseEntity
     public decimal TotalAmount { get; set; }
     public PurchaseStatus Status { get; set; } = PurchaseStatus.Draft;
     public string Notes { get; set; } = string.Empty;
+    public DateTime? VoidedAt    { get; set; }
+    public string?  VoidedByName { get; set; }
 
     public virtual Supplier Supplier { get; set; } = null!;
     public virtual Warehouse Warehouse { get; set; } = null!;

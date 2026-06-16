@@ -112,7 +112,7 @@ const PurchasePage: React.FC = () => {
   };
 
   const handleEdit = async (item: PurchaseDto) => {
-    if (item.status === 'Posted') { showNotification('error', 'Cannot edit a posted purchase.'); return; }
+    if (item.status === 'Cancelled') { showNotification('error', 'Cannot edit a voided/cancelled purchase.'); return; }
     const msg = getWriteBlockMessage();
     if (!canModify || msg) { showNotification('error', msg ?? 'No permission to edit purchases.'); return; }
     try {
@@ -150,6 +150,28 @@ const PurchasePage: React.FC = () => {
           await fetchPurchases();
           showNotification('success', `Purchase "${item.invoiceNo}" posted successfully.`);
         } catch (err) { showNotification('error', getApiErrorMessage(err, 'Failed to post purchase.')); }
+      },
+    });
+  };
+
+  const handleVoid = (item: PurchaseDto) => {
+    if (item.status !== 'Posted') { showNotification('error', 'Only posted purchases can be voided.'); return; }
+    const msg = getWriteBlockMessage();
+    if (!canModify || msg) { showNotification('error', msg ?? 'No permission to void purchases.'); return; }
+    const branchId = resolveEntityBranchId(item.branchId);
+    showConfirm({
+      title: 'Void Purchase?',
+      message: '⚠ This will create reversal entries in the Stock Ledger and remove all stock added by this purchase. The invoice will be marked as Cancelled.',
+      highlightText: item.invoiceNo,
+      variant: 'danger',
+      confirmLabel: 'Yes, Void Purchase',
+      cancelLabel: 'Keep',
+      onConfirm: async () => {
+        try {
+          await purchaseService.void(item.id, { businessId: 0, branchId, reason: 'Voided from Purchase Page' });
+          await fetchPurchases();
+          showNotification('success', `Purchase "${item.invoiceNo}" voided. Stock reversed.`);
+        } catch (err) { showNotification('error', getApiErrorMessage(err, 'Failed to void purchase.')); }
       },
     });
   };
@@ -195,15 +217,24 @@ const PurchasePage: React.FC = () => {
   if (canModify) {
     actions.push({
       label: '',
+      title: 'Edit',
       onClick: (item) => { void handleEdit(item); },
       icon: <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>,
       variant: 'secondary',
     });
     actions.push({
       label: '',
+      title: 'Post',
       onClick: handlePost,
       icon: <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
       variant: 'primary',
+    });
+    actions.push({
+      label: '',
+      title: 'Void (reverse stock)',
+      onClick: handleVoid,
+      icon: <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>,
+      variant: 'danger',
     });
   }
   if (canRemove) {

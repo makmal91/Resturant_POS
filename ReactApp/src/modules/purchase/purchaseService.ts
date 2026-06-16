@@ -51,7 +51,32 @@ export interface PurchaseDto {
   notes: string;
   itemCount: number;
   createdDate: string;
+  voidedAt?: string | null;
+  voidedByName?: string | null;
   items?: PurchaseItemDto[];
+}
+
+export interface VoidPurchasePayload {
+  businessId: number;
+  branchId: number;
+  voidedByName?: string;
+  reason?: string;
+}
+
+export interface PurchaseLedgerEntry {
+  id: number;
+  type: string;
+  productId: number;
+  productName: string;
+  variantId: number | null;
+  variantName: string | null;
+  warehouseId: number;
+  warehouseName: string;
+  quantityInBaseUnit: number;
+  unitPrice: number;
+  totalAmount: number;
+  date: string;
+  remarks: string;
 }
 
 const branchHeader = (branchId: number) => ({ headers: { 'X-Branch-Id': String(branchId) } });
@@ -86,4 +111,13 @@ export const purchaseService = {
 
   delete: (id: number, branchId: number) =>
     apiClient.delete(`/purchase/${id}`, { params: { branchId }, ...branchHeader(branchId) }),
+
+  void: (id: number, payload: VoidPurchasePayload) =>
+    apiClient.post<PurchaseDto>(`/purchase/${id}/void`, payload, branchHeader(payload.branchId)),
+
+  getLedgerHistory: (id: number, branchId: number) =>
+    apiClient.get<PurchaseLedgerEntry[]>(`/purchase/${id}/ledger`, {
+      params: { branchId },
+      ...branchHeader(branchId),
+    }),
 };
