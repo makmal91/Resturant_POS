@@ -26,6 +26,7 @@ export interface CustomerDetail extends CustomerListItem {
 
 export interface CreateCustomerPayload {
   name: string;
+  customerCode?: string;
   phone?: string | null;
   email?: string | null;
   address?: string | null;

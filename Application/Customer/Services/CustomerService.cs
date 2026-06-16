@@ -1,4 +1,6 @@
+using POSSystem.Application.Common.Constants;
 using POSSystem.Application.Common.DTOs;
+using POSSystem.Application.Common.Interfaces;
 using POSSystem.Application.Customer.DTOs;
 using POSSystem.Application.Customer.Interfaces;
 using CustomerEntity = POSSystem.Domain.Customer;
@@ -8,8 +10,13 @@ namespace POSSystem.Application.Customer.Services;
 public class CustomerService : ICustomerService
 {
     private readonly ICustomerRepository _repo;
+    private readonly ICodeGeneratorService _codeGenerator;
 
-    public CustomerService(ICustomerRepository repo) => _repo = repo;
+    public CustomerService(ICustomerRepository repo, ICodeGeneratorService codeGenerator)
+    {
+        _repo = repo;
+        _codeGenerator = codeGenerator;
+    }
 
     public async Task<PagedResultDto<CustomerListDto>> GetCustomersPagedAsync(CustomerFilterDto filter)
     {
@@ -51,8 +58,7 @@ public class CustomerService : ICustomerService
                 throw new InvalidOperationException($"Phone number '{dto.Phone}' is already registered.");
         }
 
-        var seq  = await _repo.GetNextCodeSequenceAsync(dto.BusinessId, dto.BranchId);
-        var code = $"CUST-{seq:D5}";
+        var code = await ResolveCustomerCodeAsync(dto.CustomerCode, dto.BusinessId, dto.BranchId);
 
         var entity = new CustomerEntity
         {
@@ -125,10 +131,10 @@ public class CustomerService : ICustomerService
                 throw new InvalidOperationException($"Phone '{dto.Phone}' is already registered.");
         }
 
-        var seq  = await _repo.GetNextCodeSequenceAsync(dto.BusinessId, dto.BranchId);
+        var code = await _codeGenerator.GenerateAsync(CodeModuleNames.Customer, dto.BranchId);
         var entity = new CustomerEntity
         {
-            CustomerCode = $"CUST-{seq:D5}",
+            CustomerCode = code,
             Name         = dto.Name.Trim(),
             Phone        = dto.Phone?.Trim(),
             CustomerType = Domain.CustomerType.Retail,
@@ -140,6 +146,18 @@ public class CustomerService : ICustomerService
         await _repo.AddAsync(entity);
         await _repo.SaveChangesAsync();
         return MapDetail(entity);
+    }
+
+    private async Task<string> ResolveCustomerCodeAsync(string? requestedCode, int businessId, int branchId)
+    {
+        var code = string.IsNullOrWhiteSpace(requestedCode)
+            ? await _codeGenerator.GenerateAsync(CodeModuleNames.Customer, branchId)
+            : requestedCode.Trim();
+
+        if (await _repo.CustomerCodeExistsAsync(code, businessId, branchId))
+            throw new InvalidOperationException($"Customer code '{code}' already exists in this branch.");
+
+        return code;
     }
 
     // ─── Helpers ──────────────────────────────────────────────────────────────

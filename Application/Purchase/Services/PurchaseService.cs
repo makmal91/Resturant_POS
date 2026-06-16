@@ -1,4 +1,6 @@
+using POSSystem.Application.Common.Constants;
 using POSSystem.Application.Common.DTOs;
+using POSSystem.Application.Common.Interfaces;
 using POSSystem.Application.Purchase.DTOs;
 using POSSystem.Application.Purchase.Interfaces;
 using POSSystem.Application.Sales.DTOs;
@@ -11,11 +13,16 @@ public class PurchaseService : IPurchaseService
 {
     private readonly IPurchaseRepository _purchaseRepository;
     private readonly IStockLedgerRepository _stockLedgerRepository;
+    private readonly ICodeGeneratorService _codeGenerator;
 
-    public PurchaseService(IPurchaseRepository purchaseRepository, IStockLedgerRepository stockLedgerRepository)
+    public PurchaseService(
+        IPurchaseRepository purchaseRepository,
+        IStockLedgerRepository stockLedgerRepository,
+        ICodeGeneratorService codeGenerator)
     {
         _purchaseRepository = purchaseRepository;
         _stockLedgerRepository = stockLedgerRepository;
+        _codeGenerator = codeGenerator;
     }
 
     public async Task<PagedResultDto<PurchaseDto>> GetPurchasesPagedAsync(
@@ -41,12 +48,16 @@ public class PurchaseService : IPurchaseService
     {
         ValidatePurchaseDto(dto.BranchId, dto.SupplierId, dto.WarehouseId, dto.Items);
 
-        if (await _purchaseRepository.InvoiceExistsAsync(dto.InvoiceNo, dto.BusinessId, dto.BranchId))
-            throw new InvalidOperationException($"Invoice number '{dto.InvoiceNo}' already exists.");
+        var invoiceNo = string.IsNullOrWhiteSpace(dto.InvoiceNo)
+            ? await _codeGenerator.GenerateAsync(CodeModuleNames.Purchase, dto.BranchId)
+            : dto.InvoiceNo.Trim();
+
+        if (await _purchaseRepository.InvoiceExistsAsync(invoiceNo, dto.BusinessId, dto.BranchId))
+            throw new InvalidOperationException($"Invoice number '{invoiceNo}' already exists.");
 
         var purchase = new Domain.Purchase
         {
-            InvoiceNo = dto.InvoiceNo.Trim(),
+            InvoiceNo = invoiceNo,
             SupplierId = dto.SupplierId,
             WarehouseId = dto.WarehouseId,
             PurchaseDate = dto.PurchaseDate,

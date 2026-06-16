@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FormButton, FormInput, FormSelect, FormTextarea } from './index';
+import CodeFieldWithGenerate from './CodeFieldWithGenerate';
+import { CODE_MODULES } from '../../services/codeGeneratorService';
 import { safeString } from '../../utils/safeValues';
 import apiClient from '../../services/api';
 import { useBranchStore } from '../../stores/useBranchStore';
@@ -356,7 +358,6 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
 
   const validateForm = () => {
     const nextErrors: Record<string, string> = {};
-    if (!invoiceNo.trim()) nextErrors.invoiceNo = 'Invoice number is required';
     if (supplierId <= 0) nextErrors.supplierId = 'Supplier is required';
     if (warehouseId <= 0) nextErrors.warehouseId = 'Warehouse is required';
     if (branchId <= 0) nextErrors.branchId = 'Branch selection is required';
@@ -435,16 +436,17 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
             </div>
           )}
 
-          <FormInput
+          <CodeFieldWithGenerate
             label="Invoice No"
             name="invoiceNo"
             value={invoiceNo}
-            onChange={(e) => {
-              setInvoiceNo(e.target.value);
+            onChange={(value) => {
+              setInvoiceNo(value);
               setErrors((prev) => ({ ...prev, invoiceNo: '' }));
             }}
-            placeholder="e.g. INV-2026-001"
-            required
+            module={CODE_MODULES.Purchase}
+            branchId={branchId}
+            placeholder="Auto-generated if empty"
             error={errors.invoiceNo}
           />
 

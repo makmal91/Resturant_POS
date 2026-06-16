@@ -39,6 +39,8 @@ public interface IMenuRepository
 {
     Task<MenuCategory?> GetCategoryAsync(int id, int businessId, int branchId, bool includeItems = false);
     Task<MenuCategory?> GetCategoryByNameAsync(string name, int businessId, int branchId, int? excludeCategoryId = null);
+    Task<bool> CategoryCodeExistsAsync(string code, int businessId, int branchId, int? excludeCategoryId = null);
+    Task<bool> SubCategoryCodeExistsAsync(string code, int businessId, int branchId, int? excludeSubCategoryId = null);
     Task<bool> BranchExistsAsync(int businessId, int branchId);
     Task<SubCategory?> GetSubCategoryAsync(int id, int businessId, int branchId);
     Task<SubCategory?> GetSubCategoryByNameAsync(string name, int categoryId, int businessId, int branchId, int? excludeSubCategoryId = null);

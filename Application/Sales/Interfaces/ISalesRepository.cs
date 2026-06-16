@@ -15,7 +15,6 @@ public interface ISalesRepository
         int businessId, int branchId, int page, int pageSize,
         string? search, SaleInvoiceStatus? status, DateTime? dateFrom, DateTime? dateTo);
     Task<List<SaleInvoice>> GetHeldBillsAsync(int businessId, int branchId);
-    Task<int> GetNextInvoiceNumberAsync(int businessId, int branchId);
     Task AddAsync(SaleInvoice invoice);
     Task SaveChangesAsync();
 }

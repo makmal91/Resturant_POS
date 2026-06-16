@@ -3,6 +3,7 @@ namespace POSSystem.Application.Supplier.DTOs;
 public class SupplierDto
 {
     public int Id { get; set; }
+    public string SupplierCode { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string ContactPerson { get; set; } = string.Empty;
     public string Phone { get; set; } = string.Empty;
@@ -18,6 +19,7 @@ public class SupplierDto
 
 public class CreateSupplierDto
 {
+    public string? SupplierCode { get; set; }
     public string Name { get; set; } = string.Empty;
     public string ContactPerson { get; set; } = string.Empty;
     public string Phone { get; set; } = string.Empty;

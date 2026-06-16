@@ -67,6 +67,19 @@ public class SupplierRepository : ISupplierRepository
             .FirstOrDefaultAsync();
     }
 
+    public Task<bool> SupplierCodeExistsAsync(string supplierCode, int businessId, int branchId, int? excludeId = null)
+    {
+        var normalized = supplierCode.Trim().ToLower();
+        return _context.Suppliers
+            .IgnoreQueryFilters()
+            .AnyAsync(s =>
+                !s.IsDeleted &&
+                s.BusinessId == businessId &&
+                s.BranchId == branchId &&
+                s.SupplierCode.ToLower() == normalized &&
+                (!excludeId.HasValue || s.Id != excludeId.Value));
+    }
+
     public async Task<List<Supplier>> GetAllActiveAsync(int businessId, int branchId)
     {
         var query = _context.Suppliers

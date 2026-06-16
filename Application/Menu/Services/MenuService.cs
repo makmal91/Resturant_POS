@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Caching.Memory;
+using POSSystem.Application.Common.Constants;
 using POSSystem.Application.Common.DTOs;
+using POSSystem.Application.Common.Interfaces;
 using POSSystem.Application.Menu.DTOs;
 using POSSystem.Application.Menu.Interfaces;
 using POSSystem.Domain;
@@ -10,6 +12,7 @@ public class MenuService : IMenuService
 {
     private readonly IMenuRepository _repository;
     private readonly IMemoryCache _cache;
+    private readonly ICodeGeneratorService _codeGenerator;
 
     private static readonly TimeSpan PosCacheDuration = TimeSpan.FromMinutes(2);
 
@@ -167,10 +170,11 @@ public class MenuService : IMenuService
         };
     }
 
-    public MenuService(IMenuRepository repository, IMemoryCache cache)
+    public MenuService(IMenuRepository repository, IMemoryCache cache, ICodeGeneratorService codeGenerator)
     {
         _repository = repository;
         _cache = cache;
+        _codeGenerator = codeGenerator;
     }
 
     private static string GetPosMenuCacheKey(int businessId, int branchId) => $"pos-menu-{businessId}-{branchId}";
@@ -206,7 +210,7 @@ public class MenuService : IMenuService
             throw new InvalidOperationException("Selected branch does not exist.");
     }
 
-    private async Task ValidateCategoryInputAsync(string categoryName, string categoryCode, int businessId, int branchId, int? excludeCategoryId = null)
+    private async Task ValidateCategoryInputAsync(string categoryName, string? categoryCode, int businessId, int branchId, int? excludeCategoryId = null)
     {
         if (string.IsNullOrWhiteSpace(categoryName))
             throw new InvalidOperationException("Category name is required.");
@@ -216,12 +220,34 @@ public class MenuService : IMenuService
         var duplicateCategory = await _repository.GetCategoryByNameAsync(categoryName, businessId, branchId, excludeCategoryId);
         if (duplicateCategory != null && !duplicateCategory.IsDeleted)
             throw new InvalidOperationException("Category name must be unique per branch.");
+
+        if (!string.IsNullOrWhiteSpace(categoryCode))
+        {
+            if (await _repository.CategoryCodeExistsAsync(categoryCode, businessId, branchId, excludeCategoryId))
+                throw new InvalidOperationException("Category code must be unique per branch.");
+        }
     }
 
-    private static void ApplyCreateDtoToCategory(MenuCategory category, CreateMenuCategoryDto dto)
+    private async Task<string> ResolveCategoryCodeAsync(string? requestedCode, int branchId)
+    {
+        if (string.IsNullOrWhiteSpace(requestedCode))
+            return await _codeGenerator.GenerateAsync(CodeModuleNames.Category, branchId);
+
+        return requestedCode.Trim();
+    }
+
+    private async Task<string> ResolveSubCategoryCodeAsync(string? requestedCode, int branchId)
+    {
+        if (string.IsNullOrWhiteSpace(requestedCode))
+            return await _codeGenerator.GenerateAsync(CodeModuleNames.SubCategory, branchId);
+
+        return requestedCode.Trim();
+    }
+
+    private static void ApplyCreateDtoToCategory(MenuCategory category, CreateMenuCategoryDto dto, string resolvedCode)
     {
         category.Name = dto.Name.Trim();
-        category.Code = string.IsNullOrWhiteSpace(dto.Code) ? string.Empty : dto.Code.Trim();
+        category.Code = resolvedCode;
         category.Description = dto.Description;
         category.DisplayOrder = dto.DisplayOrder;
         category.ImageUrl = dto.ImageUrl;
@@ -357,12 +383,13 @@ public class MenuService : IMenuService
     {
         await ValidateCategoryInputAsync(dto.Name, dto.Code, dto.BusinessId, dto.BranchId);
 
+        var resolvedCode = await ResolveCategoryCodeAsync(dto.Code, dto.BranchId);
         var hasUploadedImage = imageBytes != null && imageBytes.Length > 0;
 
         var archivedCategory = await _repository.GetCategoryByNameAsync(dto.Name, dto.BusinessId, dto.BranchId);
         if (archivedCategory != null && archivedCategory.IsDeleted)
         {
-            ApplyCreateDtoToCategory(archivedCategory, dto);
+            ApplyCreateDtoToCategory(archivedCategory, dto, resolvedCode);
             ApplyCategoryImage(archivedCategory, imageBytes, imageFileName, imageContentType, hasUploadedImage, false);
             archivedCategory.IsDeleted = false;
 
@@ -381,7 +408,7 @@ public class MenuService : IMenuService
         }
 
         var category = new MenuCategory();
-        ApplyCreateDtoToCategory(category, dto);
+        ApplyCreateDtoToCategory(category, dto, resolvedCode);
         ApplyCategoryImage(category, imageBytes, imageFileName, imageContentType, hasUploadedImage, false);
 
         try
@@ -426,7 +453,8 @@ public class MenuService : IMenuService
         }
 
         category.Name = dto.Name.Trim();
-        category.Code = string.IsNullOrWhiteSpace(dto.Code) ? string.Empty : dto.Code.Trim();
+        if (!string.IsNullOrWhiteSpace(dto.Code))
+            category.Code = dto.Code.Trim();
         category.Description = dto.Description;
         category.DisplayOrder = dto.DisplayOrder;
         category.ImageUrl = dto.ImageUrl;
@@ -556,10 +584,16 @@ public class MenuService : IMenuService
         if (duplicate != null)
             throw new InvalidOperationException("SubCategory name must be unique within the selected category.");
 
+        if (!string.IsNullOrWhiteSpace(dto.Code) &&
+            await _repository.SubCategoryCodeExistsAsync(dto.Code, dto.BusinessId, dto.BranchId))
+            throw new InvalidOperationException("SubCategory code must be unique per branch.");
+
+        var resolvedCode = await ResolveSubCategoryCodeAsync(dto.Code, dto.BranchId);
+
         var subCategory = new SubCategory
         {
             Name = dto.Name.Trim(),
-            Code = dto.Code?.Trim() ?? string.Empty,
+            Code = resolvedCode,
             Description = dto.Description,
             DisplayOrder = dto.DisplayOrder,
             Status = dto.Status,
@@ -600,8 +634,13 @@ public class MenuService : IMenuService
         if (duplicate != null)
             throw new InvalidOperationException("SubCategory name must be unique within the selected category.");
 
+        if (!string.IsNullOrWhiteSpace(dto.Code) &&
+            await _repository.SubCategoryCodeExistsAsync(dto.Code, dto.BusinessId, dto.BranchId, id))
+            throw new InvalidOperationException("SubCategory code must be unique per branch.");
+
         subCategory.Name = dto.Name.Trim();
-        subCategory.Code = dto.Code?.Trim() ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(dto.Code))
+            subCategory.Code = dto.Code.Trim();
         subCategory.Description = dto.Description;
         subCategory.DisplayOrder = dto.DisplayOrder;
         subCategory.Status = dto.Status;

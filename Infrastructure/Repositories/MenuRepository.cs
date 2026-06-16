@@ -42,6 +42,32 @@ public class MenuRepository : IMenuRepository
             .FirstOrDefaultAsync();
     }
 
+    public Task<bool> CategoryCodeExistsAsync(string code, int businessId, int branchId, int? excludeCategoryId = null)
+    {
+        var normalized = code.Trim().ToLower();
+        return _context.MenuCategories
+            .IgnoreQueryFilters()
+            .AnyAsync(c =>
+                !c.IsDeleted &&
+                c.BusinessId == businessId &&
+                c.BranchId == branchId &&
+                c.Code.ToLower() == normalized &&
+                (!excludeCategoryId.HasValue || c.Id != excludeCategoryId.Value));
+    }
+
+    public Task<bool> SubCategoryCodeExistsAsync(string code, int businessId, int branchId, int? excludeSubCategoryId = null)
+    {
+        var normalized = code.Trim().ToLower();
+        return _context.SubCategories
+            .IgnoreQueryFilters()
+            .AnyAsync(sc =>
+                !sc.IsDeleted &&
+                sc.BusinessId == businessId &&
+                sc.BranchId == branchId &&
+                sc.Code.ToLower() == normalized &&
+                (!excludeSubCategoryId.HasValue || sc.Id != excludeSubCategoryId.Value));
+    }
+
     public async Task<bool> BranchExistsAsync(int businessId, int branchId)
     {
         return await _context.Branches.AnyAsync(b => b.Id == branchId && b.BusinessId == businessId);

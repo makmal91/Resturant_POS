@@ -84,12 +84,17 @@ public class CustomerRepository : ICustomerRepository
             !c.IsDeleted &&
             (excludeId == null || c.Id != excludeId));
 
-    public async Task<int> GetNextCodeSequenceAsync(int businessId, int branchId)
+    public Task<bool> CustomerCodeExistsAsync(string customerCode, int businessId, int branchId, int? excludeId = null)
     {
-        var count = await _db.Customers
+        var normalized = customerCode.Trim().ToLower();
+        return _db.Customers
             .IgnoreQueryFilters()
-            .CountAsync(c => c.BusinessId == businessId && (branchId == 0 || c.BranchId == branchId));
-        return count + 1;
+            .AnyAsync(c =>
+                !c.IsDeleted &&
+                c.BusinessId == businessId &&
+                c.BranchId == branchId &&
+                c.CustomerCode.ToLower() == normalized &&
+                (excludeId == null || c.Id != excludeId));
     }
 
     public async Task AddAsync(CustomerEntity customer) =>

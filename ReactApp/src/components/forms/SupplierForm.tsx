@@ -1,9 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { FormButton, FormInput, FormSelect, FormTextarea } from './index';
+import CodeFieldWithGenerate from './CodeFieldWithGenerate';
+import { CODE_MODULES } from '../../services/codeGeneratorService';
 import { safeString } from '../../utils/safeValues';
 import { useBranchStore } from '../../stores/useBranchStore';
 
 export interface SupplierFormData {
+  supplierCode: string;
   name: string;
   contactPerson: string;
   phone: string;
@@ -23,6 +26,7 @@ interface SupplierFormProps {
 }
 
 const DEFAULT_SUPPLIER_FORM_DATA: SupplierFormData = {
+  supplierCode: '',
   name: '',
   contactPerson: '',
   phone: '',
@@ -40,6 +44,7 @@ const buildSupplierFormData = (
     typeof source?.isActive === 'boolean' ? (source.isActive ? 'Active' : 'Inactive') : null;
 
   return {
+    supplierCode: safeString(source?.supplierCode),
     name: safeString(source?.name),
     contactPerson: safeString(source?.contactPerson),
     phone: safeString(source?.phone),
@@ -148,6 +153,18 @@ const SupplierForm: React.FC<SupplierFormProps> = ({
                   `Branch #${formData.branchId}`}
               </div>
             </div>
+          )}
+
+          {!initialData?.id && (
+            <CodeFieldWithGenerate
+              label="Supplier Code"
+              name="supplierCode"
+              value={formData.supplierCode}
+              onChange={(supplierCode) => setFormData((prev) => ({ ...prev, supplierCode }))}
+              module={CODE_MODULES.Supplier}
+              branchId={formData.branchId}
+              placeholder="Auto-generated if empty"
+            />
           )}
 
           <FormInput

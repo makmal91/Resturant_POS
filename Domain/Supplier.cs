@@ -2,6 +2,7 @@ namespace POSSystem.Domain;
 
 public class Supplier : BaseEntity
 {
+    public string SupplierCode { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string ContactPerson { get; set; } = string.Empty;
     public string Phone { get; set; } = string.Empty;

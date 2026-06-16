@@ -1,4 +1,6 @@
 using POSSystem.Application.Common.DTOs;
+using POSSystem.Application.Common.Constants;
+using POSSystem.Application.Common.Interfaces;
 using POSSystem.Application.Product.DTOs;
 using POSSystem.Application.Product.Interfaces;
 using POSSystem.Domain;
@@ -9,10 +11,12 @@ namespace POSSystem.Application.Product.Services;
 public class ProductService : IProductService
 {
     private readonly IProductRepository _repository;
+    private readonly ICodeGeneratorService _codeGenerator;
 
-    public ProductService(IProductRepository repository)
+    public ProductService(IProductRepository repository, ICodeGeneratorService codeGenerator)
     {
         _repository = repository;
+        _codeGenerator = codeGenerator;
     }
 
     public async Task<PagedResultDto<ProductListDto>> SearchProductsAsync(ProductSearchRequestDto request)
@@ -63,6 +67,7 @@ public class ProductService : IProductService
         ReplaceUnits(product, dto.Units, dto.BusinessId, dto.BranchId);
         ReplaceVariants(product, dto.IsVariantEnabled ? dto.Variants : new List<ProductVariantWriteDto>(), dto.BusinessId, dto.BranchId);
         await ReplaceBarcodesAsync(product, dto.Barcodes, dto.BusinessId, dto.BranchId);
+        await EnsurePrimaryBarcodeAsync(product, dto.BusinessId, dto.BranchId);
 
         await _repository.AddAsync(product);
         await _repository.SaveChangesAsync();
@@ -234,7 +239,7 @@ public class ProductService : IProductService
     private async Task<string> ResolveProductCodeAsync(string? requestedCode, int businessId, int branchId)
     {
         var productCode = string.IsNullOrWhiteSpace(requestedCode)
-            ? $"PRD-{branchId:D2}-{await _repository.GetNextProductNumberAsync(businessId, branchId):D5}"
+            ? await _codeGenerator.GenerateAsync(CodeModuleNames.Product, branchId)
             : requestedCode.Trim();
 
         if (await _repository.ProductCodeExistsAsync(productCode, businessId, branchId))
@@ -313,6 +318,21 @@ public class ProductService : IProductService
                 Status = variant.Status
             });
         }
+    }
+
+    private async Task EnsurePrimaryBarcodeAsync(ProductEntity product, int businessId, int branchId)
+    {
+        if (product.Barcodes.Any(b => !b.IsDeleted && !string.IsNullOrWhiteSpace(b.BarcodeValue)))
+            return;
+
+        var barcode = await _codeGenerator.GenerateBarcodeAsync(businessId, branchId);
+        product.Barcodes.Add(new ProductBarcode
+        {
+            BusinessId = businessId,
+            BranchId = branchId,
+            BarcodeValue = barcode,
+            IsPrimary = true
+        });
     }
 
     private async Task ReplaceBarcodesAsync(ProductEntity product, List<ProductBarcodeWriteDto> barcodes, int businessId, int branchId)

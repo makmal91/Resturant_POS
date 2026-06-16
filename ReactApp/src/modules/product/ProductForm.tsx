@@ -7,6 +7,7 @@ import {
   ProductVariantPayload,
 } from './productService';
 import { getApiErrorMessage } from '../../services/api';
+import { CODE_MODULES, codeGeneratorService } from '../../services/codeGeneratorService';
 
 export interface ProductOption {
   id: number;
@@ -77,6 +78,8 @@ const ProductForm: React.FC<ProductFormProps> = ({
   onSubmit,
 }) => {
   const [error, setError] = useState('');
+  const [isGeneratingCode, setIsGeneratingCode] = useState(false);
+  const [isGeneratingBarcode, setIsGeneratingBarcode] = useState(false);
   const [activeTab, setActiveTab] = useState<ProductFormTab>('basic');
   const [primaryImageFile, setPrimaryImageFile] = useState<File | null>(null);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
@@ -311,13 +314,33 @@ const ProductForm: React.FC<ProductFormProps> = ({
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">Product Code</label>
-              <input
-                type="text"
-                value={formData.productCode ?? ''}
-                placeholder="Auto-generated if empty"
-                onChange={(event) => setFormData((prev) => ({ ...prev, productCode: event.target.value }))}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
-              />
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={formData.productCode ?? ''}
+                  placeholder="Auto-generated if empty"
+                  onChange={(event) => setFormData((prev) => ({ ...prev, productCode: event.target.value }))}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  disabled={isGeneratingCode}
+                  onClick={async () => {
+                    setIsGeneratingCode(true);
+                    try {
+                      const code = await codeGeneratorService.generate(CODE_MODULES.Product, branchId);
+                      setFormData((prev) => ({ ...prev, productCode: code }));
+                    } catch (err) {
+                      setError(getApiErrorMessage(err, 'Unable to generate product code.'));
+                    } finally {
+                      setIsGeneratingCode(false);
+                    }
+                  }}
+                  className="shrink-0 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                >
+                  {isGeneratingCode ? '…' : 'Auto Generate'}
+                </button>
+              </div>
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">SKU</label>
@@ -548,6 +571,29 @@ const ProductForm: React.FC<ProductFormProps> = ({
             </p>
           </div>
         <DynamicSection title="Barcodes" onAdd={() => setFormData((prev) => ({ ...prev, barcodes: [...prev.barcodes, emptyBarcode()] }))}>
+          <div className="mb-3">
+            <button
+              type="button"
+              disabled={isGeneratingBarcode}
+              onClick={async () => {
+                setIsGeneratingBarcode(true);
+                try {
+                  const barcode = await codeGeneratorService.generateBarcode(branchId);
+                  setFormData((prev) => ({
+                    ...prev,
+                    barcodes: [...prev.barcodes, { ...emptyBarcode(), barcodeValue: barcode, isPrimary: prev.barcodes.length === 0 }],
+                  }));
+                } catch (err) {
+                  setError(getApiErrorMessage(err, 'Unable to generate barcode.'));
+                } finally {
+                  setIsGeneratingBarcode(false);
+                }
+              }}
+              className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+            >
+              {isGeneratingBarcode ? 'Generating…' : 'Generate Barcode'}
+            </button>
+          </div>
           {formData.barcodes.length > 0 && (
             <div className="overflow-x-auto rounded-lg border border-gray-200">
               <table className="w-full table-fixed divide-y divide-gray-200" style={{ minWidth: formData.isVariantEnabled ? 780 : 580 }}>

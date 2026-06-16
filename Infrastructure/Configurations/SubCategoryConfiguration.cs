@@ -42,6 +42,11 @@ public class SubCategoryConfiguration : IEntityTypeConfiguration<SubCategory>
             .IsUnique()
             .HasDatabaseName("idx_subcategory_category_name");
 
+        builder.HasIndex(sc => new { sc.BranchId, sc.Code })
+            .IsUnique()
+            .HasFilter("[Code] IS NOT NULL AND [Code] <> '' AND [IsDeleted] = 0")
+            .HasDatabaseName("idx_subcategory_branch_code");
+
         builder.HasOne(sc => sc.Branch)
             .WithMany(b => b.SubCategories)
             .HasForeignKey(sc => sc.BranchId)

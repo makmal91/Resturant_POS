@@ -64,7 +64,7 @@ public static class CustomerInitializer
                  [OpeningBalance], [CreditLimit], [LoyaltyPoints],
                  [BusinessId], [BranchId], [CreatedDate], [IsDeleted])
             SELECT
-                N'WALK-IN', N'Walk-in Customer', NULL, N'', N'', 1, 1, 1,
+                N'CUS-00000', N'Walk-In Customer', NULL, N'', N'', 1, 1, 1,
                 0, 0, 0,
                 b.[BusinessId], b.[Id], GETUTCDATE(), 0
             FROM [dbo].[Branches] b
@@ -76,6 +76,14 @@ public static class CustomerInitializer
                     AND c.[BranchId]  = b.[Id]
                     AND c.[IsDeleted] = 0
               );
+            """,
+
+            // Migrate legacy walk-in codes
+            """
+            UPDATE [dbo].[Customers]
+            SET [CustomerCode] = N'CUS-00000', [Name] = N'Walk-In Customer'
+            WHERE [IsWalkIn] = 1 AND [IsDeleted] = 0
+              AND ([CustomerCode] = N'WALK-IN' OR [CustomerCode] = N'' OR [Name] = N'Walk-in Customer');
             """,
 
             // ── Ensure Customers permission module exists ──

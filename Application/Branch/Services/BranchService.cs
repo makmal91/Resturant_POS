@@ -1,5 +1,7 @@
 using POSSystem.Application.Branch.DTOs;
 using POSSystem.Application.Branch.Interfaces;
+using POSSystem.Application.Common.Constants;
+using POSSystem.Application.Common.Interfaces;
 using BranchEntity = POSSystem.Domain.Branch;
 
 namespace POSSystem.Application.Branch.Services;
@@ -7,12 +9,13 @@ namespace POSSystem.Application.Branch.Services;
 public class BranchService : IBranchService
 {
     private readonly IBranchRepository _repository;
+    private readonly ICodeGeneratorService _codeGenerator;
 
-    public BranchService(IBranchRepository repository)
+    public BranchService(IBranchRepository repository, ICodeGeneratorService codeGenerator)
     {
         _repository = repository;
+        _codeGenerator = codeGenerator;
     }
-
     public Task<IReadOnlyList<BranchListItemDto>> GetBranchesAsync(int businessId)
     {
         return _repository.GetByBusinessIdAsync(businessId);
@@ -27,9 +30,6 @@ public class BranchService : IBranchService
     {
         if (string.IsNullOrWhiteSpace(dto.Name))
             throw new InvalidOperationException("Branch name is required.");
-
-        if (string.IsNullOrWhiteSpace(dto.Code))
-            throw new InvalidOperationException("Branch code is required.");
 
         var businessId = ResolveBusinessId(dto, resolvedBusinessId);
         if (businessId <= 0)
@@ -50,7 +50,10 @@ public class BranchService : IBranchService
         if (!await _repository.CityBelongsToCountryAsync(dto.CityId, dto.CountryId))
             throw new InvalidOperationException("Invalid CityId. City does not belong to the selected country.");
 
-        var normalizedCode = dto.Code.Trim().ToUpperInvariant();
+        var normalizedCode = string.IsNullOrWhiteSpace(dto.Code)
+            ? await _codeGenerator.GenerateAsync(CodeModuleNames.Branch)
+            : dto.Code.Trim().ToUpperInvariant();
+
         if (await _repository.CodeExistsAsync(normalizedCode))
             throw new InvalidOperationException("Branch code already exists.");
 

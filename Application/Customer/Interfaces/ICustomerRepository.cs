@@ -11,7 +11,7 @@ public interface ICustomerRepository
     Task<CustomerEntity?> GetWalkInAsync(int businessId, int branchId);
     Task<List<CustomerEntity>> SearchAsync(string query, int businessId, int branchId, int take = 10);
     Task<bool> PhoneExistsAsync(string phone, int businessId, int branchId, int? excludeId = null);
-    Task<int> GetNextCodeSequenceAsync(int businessId, int branchId);
+    Task<bool> CustomerCodeExistsAsync(string customerCode, int businessId, int branchId, int? excludeId = null);
     Task AddAsync(CustomerEntity customer);
     Task SaveChangesAsync();
 }

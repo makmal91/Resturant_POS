@@ -32,6 +32,11 @@ public class CustomerConfiguration : IEntityTypeConfiguration<Customer>
         builder.HasIndex(c => new { c.BusinessId, c.BranchId, c.IsWalkIn })
             .HasDatabaseName("idx_customer_walkin");
 
+        builder.HasIndex(c => new { c.BusinessId, c.BranchId, c.CustomerCode })
+            .IsUnique()
+            .HasFilter("[CustomerCode] <> '' AND [IsDeleted] = 0")
+            .HasDatabaseName("idx_customer_branch_code");
+
         builder.HasMany(c => c.Orders)
             .WithOne(o => o.Customer)
             .HasForeignKey(o => o.CustomerId)

@@ -154,16 +154,6 @@ public class SalesRepository : ISalesRepository
             .ToListAsync();
     }
 
-    public async Task<int> GetNextInvoiceNumberAsync(int businessId, int branchId)
-    {
-        var today = DateTime.UtcNow.Date;
-        var count = await _db.SaleInvoices
-            .CountAsync(s => s.BusinessId == businessId
-                && s.BranchId == branchId
-                && s.SaleDate.Date == today);
-        return count + 1;
-    }
-
     public async Task AddAsync(SaleInvoice invoice)
     {
         await _db.SaleInvoices.AddAsync(invoice);

@@ -1,4 +1,6 @@
+using POSSystem.Application.Common.Constants;
 using POSSystem.Application.Common.DTOs;
+using POSSystem.Application.Common.Interfaces;
 using POSSystem.Application.Supplier.DTOs;
 using POSSystem.Application.Supplier.Interfaces;
 using SupplierEntity = POSSystem.Domain.Supplier;
@@ -8,10 +10,12 @@ namespace POSSystem.Application.Supplier.Services;
 public class SupplierService : ISupplierService
 {
     private readonly ISupplierRepository _repository;
+    private readonly ICodeGeneratorService _codeGenerator;
 
-    public SupplierService(ISupplierRepository repository)
+    public SupplierService(ISupplierRepository repository, ICodeGeneratorService codeGenerator)
     {
         _repository = repository;
+        _codeGenerator = codeGenerator;
     }
 
     public async Task<PagedResultDto<SupplierDto>> GetSuppliersPagedAsync(
@@ -51,8 +55,11 @@ public class SupplierService : ISupplierService
         if (duplicate != null)
             throw new InvalidOperationException("A supplier with this name already exists in the selected branch.");
 
+        var supplierCode = await ResolveSupplierCodeAsync(dto.SupplierCode, dto.BusinessId, dto.BranchId);
+
         var entity = new SupplierEntity
         {
+            SupplierCode = supplierCode,
             Name = dto.Name.Trim(),
             ContactPerson = dto.ContactPerson?.Trim() ?? string.Empty,
             Phone = dto.Phone?.Trim() ?? string.Empty,
@@ -104,9 +111,22 @@ public class SupplierService : ISupplierService
         await _repository.SaveChangesAsync();
     }
 
+    private async Task<string> ResolveSupplierCodeAsync(string? requestedCode, int businessId, int branchId)
+    {
+        var code = string.IsNullOrWhiteSpace(requestedCode)
+            ? await _codeGenerator.GenerateAsync(CodeModuleNames.Supplier, branchId)
+            : requestedCode.Trim();
+
+        if (await _repository.SupplierCodeExistsAsync(code, businessId, branchId))
+            throw new InvalidOperationException($"Supplier code '{code}' already exists in this branch.");
+
+        return code;
+    }
+
     private static SupplierDto MapDto(SupplierEntity s) => new()
     {
         Id = s.Id,
+        SupplierCode = s.SupplierCode,
         Name = s.Name,
         ContactPerson = s.ContactPerson,
         Phone = s.Phone,

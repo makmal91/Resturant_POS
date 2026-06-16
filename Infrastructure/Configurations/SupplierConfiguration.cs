@@ -11,6 +11,7 @@ public class SupplierConfiguration : IEntityTypeConfiguration<Supplier>
         builder.ToTable("Suppliers");
         builder.HasKey(s => s.Id);
 
+        builder.Property(s => s.SupplierCode).HasMaxLength(50);
         builder.Property(s => s.Name).IsRequired().HasMaxLength(200);
         builder.Property(s => s.ContactPerson).HasMaxLength(150);
         builder.Property(s => s.Phone).HasMaxLength(30);
@@ -21,6 +22,11 @@ public class SupplierConfiguration : IEntityTypeConfiguration<Supplier>
 
         builder.HasIndex(s => new { s.BusinessId, s.BranchId, s.Name })
             .HasDatabaseName("idx_supplier_business_branch_name");
+
+        builder.HasIndex(s => new { s.BusinessId, s.BranchId, s.SupplierCode })
+            .IsUnique()
+            .HasFilter("[SupplierCode] <> '' AND [IsDeleted] = 0")
+            .HasDatabaseName("idx_supplier_branch_code");
 
         builder.HasOne(s => s.Branch)
             .WithMany()

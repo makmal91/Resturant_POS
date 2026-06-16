@@ -64,6 +64,9 @@ public class POSDbContext : DbContext
 
     // Expenses module
     public DbSet<Expense> Expenses { get; set; } = null!;
+
+    // Code generation
+    public DbSet<CodeSequence> CodeSequences { get; set; } = null!;
     #endregion
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -111,6 +114,7 @@ public class POSDbContext : DbContext
         modelBuilder.ApplyConfiguration(new CashFlowTransactionConfiguration());
         modelBuilder.ApplyConfiguration(new CashRegisterConfiguration());
         modelBuilder.ApplyConfiguration(new ExpenseConfiguration());
+        modelBuilder.ApplyConfiguration(new CodeSequenceConfiguration());
 
         // Configure BaseEntity default values
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())

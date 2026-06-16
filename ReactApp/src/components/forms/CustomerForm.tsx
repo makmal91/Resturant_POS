@@ -1,9 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { FormButton, FormInput, FormSelect, FormTextarea } from './index';
+import CodeFieldWithGenerate from './CodeFieldWithGenerate';
+import { CODE_MODULES } from '../../services/codeGeneratorService';
 import { safeString } from '../../utils/safeValues';
 import { useBranchStore } from '../../stores/useBranchStore';
 
 export interface CustomerFormData {
+  customerCode: string;
   name: string;
   phone: string;
   email: string;
@@ -26,6 +29,7 @@ interface CustomerFormProps {
 }
 
 const DEFAULT_CUSTOMER_FORM_DATA: CustomerFormData = {
+  customerCode: '',
   name: '',
   phone: '',
   email: '',
@@ -46,6 +50,7 @@ const buildCustomerFormData = (
     typeof source?.isActive === 'boolean' ? (source.isActive ? 'Active' : 'Inactive') : null;
 
   return {
+    customerCode:  safeString(source?.customerCode),
     name:            safeString(source?.name),
     phone:           safeString(source?.phone),
     email:           safeString(source?.email),
@@ -137,6 +142,18 @@ const CustomerForm: React.FC<CustomerFormProps> = ({
                 {branches.find((b) => b.id === formData.branchId)?.name ?? `Branch #${formData.branchId}`}
               </div>
             </div>
+          )}
+
+          {!initialData?.id && (
+            <CodeFieldWithGenerate
+              label="Customer Code"
+              name="customerCode"
+              value={formData.customerCode}
+              onChange={(customerCode) => setFormData((prev) => ({ ...prev, customerCode }))}
+              module={CODE_MODULES.Customer}
+              branchId={formData.branchId}
+              placeholder="Auto-generated if empty"
+            />
           )}
 
           <FormInput

@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { FormButton, FormInput, FormSelect, FormTextarea } from './index';
+import CodeFieldWithGenerate from './CodeFieldWithGenerate';
+import { CODE_MODULES } from '../../services/codeGeneratorService';
 import AuthenticatedImage from '../AuthenticatedImage';
 import { categoryService } from '../../modules/category/categoryService';
 import { subCategoryService } from '../../modules/subcategory/subcategoryService';
@@ -321,12 +323,14 @@ const SubCategoryForm: React.FC<SubCategoryFormProps> = ({
             error={errors.name}
           />
 
-          <FormInput
+          <CodeFieldWithGenerate
             label="Code"
             name="code"
             value={formData.code}
-            onChange={handleChange}
-            placeholder="Optional code"
+            onChange={(code) => setFormData((prev) => ({ ...prev, code }))}
+            module={CODE_MODULES.SubCategory}
+            branchId={formData.branchId}
+            placeholder="Auto-generated if empty"
           />
 
           <FormInput

@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { FormInput, FormSelect, FormButton } from './index';
+import CodeFieldWithGenerate from './CodeFieldWithGenerate';
+import { CODE_MODULES } from '../../services/codeGeneratorService';
 import { safeString } from '../../utils/safeValues';
 import { BusinessService, CountryService } from '../../services/apiService';
 
@@ -209,7 +211,6 @@ const BranchForm: React.FC<BranchFormProps> = ({
     const newErrors: Partial<Record<keyof BranchFormData, string>> = {};
 
     if (!formData.name.trim()) newErrors.name = 'Branch name is required';
-    if (!formData.code.trim()) newErrors.code = 'Branch code is required';
     if (!formData.address.trim()) newErrors.address = 'Address is required';
     if (!formData.phone.trim()) newErrors.phone = 'Phone is required';
     if (formData.businessId <= 0) newErrors.businessId = 'Business is required';
@@ -260,13 +261,16 @@ const BranchForm: React.FC<BranchFormProps> = ({
             error={errors.name}
           />
 
-          <FormInput
+          <CodeFieldWithGenerate
             label="Branch Code"
             name="code"
             value={formData.code}
-            onChange={handleChange}
-            placeholder="Enter unique branch code"
-            required
+            onChange={(code) => {
+              setFormData((prev) => ({ ...prev, code }));
+              if (errors.code) setErrors((prev) => ({ ...prev, code: '' }));
+            }}
+            module={CODE_MODULES.Branch}
+            placeholder="Auto-generated if empty"
             error={errors.code}
           />
 

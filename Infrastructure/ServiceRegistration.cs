@@ -21,9 +21,11 @@ using POSSystem.Application.Stock.Interfaces;
 using POSSystem.Application.Sales.Interfaces;
 using POSSystem.Application.Customer.Interfaces;
 using POSSystem.Application.CashFlow.Interfaces;
+using POSSystem.Application.Common.Interfaces;
 using POSSystem.Infrastructure.Data;
 using POSSystem.Infrastructure.Repositories;
 using POSSystem.Infrastructure.Security;
+using POSSystem.Infrastructure.Services;
 
 namespace POSSystem.Infrastructure;
 
@@ -64,6 +66,9 @@ public static class ServiceRegistration
 
         // Register cash flow repository
         services.AddScoped<ICashFlowRepository, CashFlowRepository>();
+
+        // Centralized code generation
+        services.AddScoped<ICodeGeneratorService, CodeGeneratorService>();
 
         // Add other infrastructure services here
 

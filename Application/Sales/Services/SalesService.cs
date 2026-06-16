@@ -1,4 +1,6 @@
+using POSSystem.Application.Common.Constants;
 using POSSystem.Application.Common.DTOs;
+using POSSystem.Application.Common.Interfaces;
 using POSSystem.Application.Sales.DTOs;
 using POSSystem.Application.Sales.Interfaces;
 using POSSystem.Application.Stock.Interfaces;
@@ -11,11 +13,16 @@ public class SalesService : ISalesService
 {
     private readonly ISalesRepository _salesRepository;
     private readonly IStockLedgerRepository _stockLedgerRepository;
+    private readonly ICodeGeneratorService _codeGenerator;
 
-    public SalesService(ISalesRepository salesRepository, IStockLedgerRepository stockLedgerRepository)
+    public SalesService(
+        ISalesRepository salesRepository,
+        IStockLedgerRepository stockLedgerRepository,
+        ICodeGeneratorService codeGenerator)
     {
         _salesRepository = salesRepository;
         _stockLedgerRepository = stockLedgerRepository;
+        _codeGenerator = codeGenerator;
     }
 
     public async Task<PosProductLookupDto?> GetProductByBarcodeAsync(string barcode, int businessId, int branchId)
@@ -166,7 +173,7 @@ public class SalesService : ISalesService
     {
         ValidateInvoiceDto(dto.BranchId, dto.WarehouseId, dto.Items);
 
-        var invoiceNo = await GenerateInvoiceNoAsync(dto.BusinessId, dto.BranchId);
+        var invoiceNo = await GenerateInvoiceNoAsync(dto.BranchId);
         var invoice = BuildInvoice(invoiceNo, dto);
         invoice.Status = SaleInvoiceStatus.Completed;
 
@@ -203,7 +210,7 @@ public class SalesService : ISalesService
         if (dto.BranchId <= 0) throw new InvalidOperationException("BranchId is required.");
         if (dto.Items == null || dto.Items.Count == 0) throw new InvalidOperationException("At least one item is required.");
 
-        var invoiceNo = await GenerateInvoiceNoAsync(dto.BusinessId, dto.BranchId);
+        var invoiceNo = await GenerateInvoiceNoAsync(dto.BranchId);
         var createDto = new CreateSaleInvoiceDto
         {
             CustomerId = dto.CustomerId,
@@ -252,11 +259,8 @@ public class SalesService : ISalesService
 
     // ─── Helpers ──────────────────────────────────────────────────────────────
 
-    private async Task<string> GenerateInvoiceNoAsync(int businessId, int branchId)
-    {
-        var seq = await _salesRepository.GetNextInvoiceNumberAsync(businessId, branchId);
-        return $"SI-{DateTime.UtcNow:yyyyMMdd}-{seq:D5}";
-    }
+    private Task<string> GenerateInvoiceNoAsync(int branchId)
+        => _codeGenerator.GenerateAsync(CodeModuleNames.SalesInvoice, branchId);
 
     private static SaleInvoice BuildInvoice(string invoiceNo, CreateSaleInvoiceDto dto)
     {

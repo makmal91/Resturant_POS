@@ -792,6 +792,7 @@ const FormModal: React.FC = () => {
     }
 
     const payload = {
+      supplierCode: String(data?.supplierCode ?? '').trim() || undefined,
       name,
       contactPerson: String(data?.contactPerson ?? '').trim(),
       phone: String(data?.phone ?? '').trim(),
@@ -831,6 +832,7 @@ const FormModal: React.FC = () => {
     const typeMap: Record<string, number> = { Retail: 1, Wholesale: 2, VIP: 3 };
 
     const payload = {
+      customerCode: String(data?.customerCode ?? '').trim() || undefined,
       name,
       phone:           String(data?.phone ?? '').trim() || undefined,
       email:           String(data?.email ?? '').trim() || undefined,
@@ -868,12 +870,6 @@ const FormModal: React.FC = () => {
     const invoiceNo = String(data?.invoiceNo ?? '').trim();
     const supplierId = Number(data?.supplierId ?? 0);
     const warehouseId = Number(data?.warehouseId ?? 0);
-
-    if (!invoiceNo) {
-      setError('Invoice number is required.');
-      setIsSubmitting(false);
-      return;
-    }
 
     if (branchId <= 0 || supplierId <= 0 || warehouseId <= 0) {
       setError('Branch, supplier, and warehouse are required.');

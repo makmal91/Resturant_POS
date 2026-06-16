@@ -1,6 +1,7 @@
 import apiClient from '../../services/api';
 
 export interface SupplierPayload {
+  supplierCode?: string;
   name: string;
   contactPerson?: string;
   phone?: string;
@@ -13,6 +14,7 @@ export interface SupplierPayload {
 
 export interface SupplierItem {
   id: number;
+  supplierCode: string;
   name: string;
   contactPerson: string;
   phone: string;

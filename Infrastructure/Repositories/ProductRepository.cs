@@ -98,13 +98,6 @@ public class ProductRepository : IProductRepository
         return query.FirstOrDefaultAsync();
     }
 
-    public async Task<int> GetNextProductNumberAsync(int businessId, int branchId)
-    {
-        return await _context.Products
-            .IgnoreQueryFilters()
-            .CountAsync(p => !p.IsDeleted && p.BusinessId == businessId && p.BranchId == branchId) + 1;
-    }
-
     public Task<bool> ProductCodeExistsAsync(string productCode, int businessId, int branchId, int? excludeProductId = null)
     {
         var normalized = productCode.Trim().ToLower();
