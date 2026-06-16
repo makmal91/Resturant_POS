@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Badge from '../../components/Badge';
+import MenuIcon, { type MenuIconKey } from '../../components/MenuIcon';
 import { useBranchWriteAccess } from '../../hooks/useBranchWriteAccess';
 import { useHasPermission } from '../../hooks/usePermission';
 import { getApiErrorMessage } from '../../services/api';
@@ -35,19 +36,19 @@ function KpiCard({
   label,
   value,
   sub,
-  icon,
+  iconKey,
   accent = 'text-gray-800',
 }: {
   label: string;
   value: string;
   sub?: string;
-  icon: string;
+  iconKey: MenuIconKey;
   accent?: string;
 }) {
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex items-start gap-4">
-      <div className="flex-shrink-0 w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-50 to-teal-50 flex items-center justify-center text-xl">
-        {icon}
+      <div className="flex-shrink-0 w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-50 to-teal-50 flex items-center justify-center text-emerald-600">
+        <MenuIcon iconKey={iconKey} className="w-5 h-5" />
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">{label}</p>
@@ -239,27 +240,27 @@ export default function SalesPersonDashboardPage() {
               label="Today's Sales"
               value={fmt(kpis.todaySales)}
               sub={`${kpis.todayInvoices} invoice${kpis.todayInvoices === 1 ? '' : 's'}`}
-              icon="📈"
+              iconKey="sales"
               accent="text-emerald-700"
             />
             <KpiCard
               label="This Month"
               value={fmt(kpis.monthlySales)}
               sub={`${kpis.monthlyInvoices} invoice${kpis.monthlyInvoices === 1 ? '' : 's'}`}
-              icon="📊"
+              iconKey="reports"
               accent="text-blue-700"
             />
             <KpiCard
               label="Average Sale"
               value={fmt(kpis.averageSale)}
               sub="This month"
-              icon="🧾"
+              iconKey="invoices"
             />
             <KpiCard
               label="Today's Collection"
               value={fmt(kpis.todayCash + kpis.todayCard)}
               sub={`Cash ${fmt(kpis.todayCash)} · Card ${fmt(kpis.todayCard)}`}
-              icon="💳"
+              iconKey="cashflow"
             />
           </div>
 

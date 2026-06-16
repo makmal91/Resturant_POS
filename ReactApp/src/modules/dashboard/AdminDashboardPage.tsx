@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Badge from '../../components/Badge';
+import MenuIcon, { type MenuIconKey } from '../../components/MenuIcon';
 import { useBranchWriteAccess } from '../../hooks/useBranchWriteAccess';
 import { usePermission } from '../../hooks/usePermission';
 import { getApiErrorMessage } from '../../services/api';
@@ -43,19 +44,19 @@ function KpiCard({
   label,
   value,
   sub,
-  icon,
+  iconKey,
   accent = 'text-gray-800',
 }: {
   label: string;
   value: string;
   sub?: string;
-  icon: string;
+  iconKey: MenuIconKey;
   accent?: string;
 }) {
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex items-start gap-4 hover:shadow-md transition-shadow">
-      <div className="flex-shrink-0 w-11 h-11 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center text-xl">
-        {icon}
+      <div className="flex-shrink-0 w-11 h-11 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center text-indigo-600">
+        <MenuIcon iconKey={iconKey} className="w-5 h-5" />
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-xs text-gray-500 font-medium uppercase tracking-wide truncate">{label}</p>
@@ -171,12 +172,12 @@ function HorizontalBarList({
 
 function QuickAction({
   label,
-  icon,
+  iconKey,
   onClick,
   disabled,
 }: {
   label: string;
-  icon: string;
+  iconKey: MenuIconKey;
   onClick: () => void;
   disabled?: boolean;
 }) {
@@ -187,7 +188,7 @@ function QuickAction({
       disabled={disabled}
       className="flex flex-col items-center gap-2 p-4 rounded-xl border border-gray-100 bg-gray-50 hover:bg-white hover:border-blue-200 hover:shadow-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed"
     >
-      <span className="text-2xl">{icon}</span>
+      <MenuIcon iconKey={iconKey} className="w-6 h-6 text-gray-600" />
       <span className="text-xs font-medium text-gray-700 text-center">{label}</span>
     </button>
   );
@@ -300,29 +301,29 @@ export default function AdminDashboardPage() {
           </div>
         ) : kpis ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-            <KpiCard label="Total Branches" value={fmtInt(kpis.totalBranches)} icon="🏬" />
-            <KpiCard label="Total Users" value={fmtInt(kpis.totalUsers)} icon="👤" />
+            <KpiCard label="Total Branches" value={fmtInt(kpis.totalBranches)} iconKey="branches" />
+            <KpiCard label="Total Users" value={fmtInt(kpis.totalUsers)} iconKey="users" />
             <KpiCard
               label="Today's Sales"
               value={fmt(kpis.todaySales)}
               sub={`${kpis.todayInvoices} invoices`}
-              icon="📈"
+              iconKey="sales"
               accent="text-emerald-700"
             />
             <KpiCard
               label="Monthly Sales"
               value={fmt(kpis.monthlySales)}
               sub={`${kpis.monthlyInvoices} invoices`}
-              icon="📊"
+              iconKey="reports"
               accent="text-blue-700"
             />
-            <KpiCard label="Gross Profit" value={fmt(kpis.grossProfit)} icon="💹" accent="text-emerald-600" />
-            <KpiCard label="Net Profit" value={fmt(kpis.netProfit)} icon="💰" accent="text-indigo-700" />
-            <KpiCard label="Stock Value" value={fmt(kpis.stockValue)} icon="📦" />
+            <KpiCard label="Gross Profit" value={fmt(kpis.grossProfit)} iconKey="cashflow" accent="text-emerald-600" />
+            <KpiCard label="Net Profit" value={fmt(kpis.netProfit)} iconKey="expenses" accent="text-indigo-700" />
+            <KpiCard label="Stock Value" value={fmt(kpis.stockValue)} iconKey="stock" />
             <KpiCard
               label="Stock Alerts"
               value={`${kpis.lowStockCount} low / ${kpis.outOfStockCount} out`}
-              icon="⚠️"
+              iconKey="alert"
               accent={kpis.outOfStockCount > 0 ? 'text-red-600' : 'text-amber-600'}
             />
           </div>
@@ -606,12 +607,12 @@ export default function AdminDashboardPage() {
       {/* Quick Actions */}
       <SectionCard title="Quick Actions">
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
-          <QuickAction label="Add Branch" icon="🏬" onClick={() => navigate('/branches')} disabled={!permBranches.canCreate} />
-          <QuickAction label="Add User" icon="👤" onClick={() => navigate('/users')} disabled={!permUsers.canCreate} />
-          <QuickAction label="Add Product" icon="📦" onClick={() => navigate('/products')} disabled={!permProducts.canCreate} />
-          <QuickAction label="Manage Roles" icon="🔐" onClick={() => navigate('/roles')} disabled={!permRoles.canView} />
-          <QuickAction label="Add Purchase" icon="🛒" onClick={() => navigate('/purchase')} disabled={!permPurchase.canCreate} />
-          <QuickAction label="Add Expense" icon="💸" onClick={() => navigate('/expenses')} disabled={!permExpenses.canCreate} />
+          <QuickAction label="Add Branch" iconKey="branches" onClick={() => navigate('/branches')} disabled={!permBranches.canCreate} />
+          <QuickAction label="Add User" iconKey="users" onClick={() => navigate('/users')} disabled={!permUsers.canCreate} />
+          <QuickAction label="Add Product" iconKey="products" onClick={() => navigate('/products')} disabled={!permProducts.canCreate} />
+          <QuickAction label="Manage Roles" iconKey="roles" onClick={() => navigate('/roles')} disabled={!permRoles.canView} />
+          <QuickAction label="Add Purchase" iconKey="purchase" onClick={() => navigate('/purchase')} disabled={!permPurchase.canCreate} />
+          <QuickAction label="Add Expense" iconKey="expenses" onClick={() => navigate('/expenses')} disabled={!permExpenses.canCreate} />
         </div>
       </SectionCard>
     </div>

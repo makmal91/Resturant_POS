@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import MenuIcon, { type MenuIconKey } from '../../components/MenuIcon';
 import { useFormModal } from '../../contexts/FormModalContext';
 import { getApiErrorMessage } from '../../services/api';
 import { useBranchStore } from '../../stores/useBranchStore';
@@ -24,18 +25,18 @@ function StatCard({
   value,
   color = 'text-gray-800',
   bg = 'bg-white',
-  icon,
+  iconKey,
 }: {
   label: string;
   value: string;
   color?: string;
   bg?: string;
-  icon: React.ReactNode;
+  iconKey: MenuIconKey;
 }) {
   return (
     <div className={`${bg} rounded-xl shadow-sm border border-gray-100 p-5 flex items-center gap-4`}>
-      <div className="flex-shrink-0 w-12 h-12 rounded-full bg-gray-50 flex items-center justify-center text-2xl">
-        {icon}
+      <div className="flex-shrink-0 w-12 h-12 rounded-full bg-gray-50 flex items-center justify-center text-gray-600">
+        <MenuIcon iconKey={iconKey} className="w-6 h-6" />
       </div>
       <div>
         <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">{label}</p>
@@ -195,24 +196,24 @@ export default function CashFlowDashboardPage() {
       ) : summary ? (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-            <StatCard label="Opening Cash" value={fmt(summary.openingCash)} icon="💼" />
+            <StatCard label="Opening Cash" value={fmt(summary.openingCash)} iconKey="cashflow" />
             <StatCard
               label="Total Cash Sales"
               value={fmt(summary.totalCashSales)}
               color="text-emerald-700"
-              icon="💰"
+              iconKey="sales"
             />
             <StatCard
               label="Total Expenses"
               value={fmt(summary.totalExpensesCash)}
               color="text-red-600"
-              icon="💸"
+              iconKey="expenses"
             />
             <StatCard
               label="Expected Closing"
               value={fmt(summary.expectedClosingCash)}
               color="text-blue-700"
-              icon="🏦"
+              iconKey="cashflow"
             />
           </div>
 

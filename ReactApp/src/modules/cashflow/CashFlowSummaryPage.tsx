@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import MenuIcon, { type MenuIconKey } from '../../components/MenuIcon';
 import { getApiErrorMessage } from '../../services/api';
 import { useBranchWriteAccess } from '../../hooks/useBranchWriteAccess';
 import { hasBranchContext } from '../../types/permissions';
@@ -172,14 +173,16 @@ export default function CashFlowSummaryPage() {
         <>
           {/* KPI cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {[
-              { label: 'Total Cash In',  value: summary.totalCashIn,   color: 'text-emerald-700', bg: 'bg-emerald-50', icon: '📈' },
-              { label: 'Total Cash Out', value: summary.totalCashOut,  color: 'text-red-600',     bg: 'bg-red-50',     icon: '📉' },
-              { label: 'Total Sales',    value: summary.totalSales,    color: 'text-blue-700',    bg: 'bg-blue-50',    icon: '🛒' },
-              { label: 'Total Expenses', value: summary.totalExpenses, color: 'text-orange-700',  bg: 'bg-orange-50',  icon: '💸' },
-            ].map(({ label, value, color, bg, icon }) => (
-              <div key={label} className={`${bg} rounded-xl p-5 border border-white shadow-sm`}>
-                <div className="text-2xl mb-2">{icon}</div>
+            {([
+              { label: 'Total Cash In',  value: summary.totalCashIn,   color: 'text-emerald-700', bg: 'bg-emerald-50', iconKey: 'cashflow' as MenuIconKey },
+              { label: 'Total Cash Out', value: summary.totalCashOut,  color: 'text-red-600',     bg: 'bg-red-50',     iconKey: 'purchase' as MenuIconKey },
+              { label: 'Total Sales',    value: summary.totalSales,    color: 'text-blue-700',    bg: 'bg-blue-50',    iconKey: 'sales' as MenuIconKey },
+              { label: 'Total Expenses', value: summary.totalExpenses, color: 'text-orange-700',  bg: 'bg-orange-50',  iconKey: 'expenses' as MenuIconKey },
+            ]).map(({ label, value, color, bg, iconKey }) => (
+              <div key={label} className={`${bg} rounded-xl p-5 border border-white shadow-sm text-center`}>
+                <div className={`mb-2 flex justify-center ${color}`}>
+                  <MenuIcon iconKey={iconKey} className="w-6 h-6" />
+                </div>
                 <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">{label}</p>
                 <p className={`text-xl font-bold mt-1 ${color}`}>{fmt(value)}</p>
               </div>
@@ -201,7 +204,10 @@ export default function CashFlowSummaryPage() {
                   {summary.netCashFlow >= 0 ? '+' : ''}{fmt(summary.netCashFlow)}
                 </p>
               </div>
-              <span className="text-5xl">{summary.netCashFlow >= 0 ? '✅' : '⚠️'}</span>
+              <MenuIcon
+                iconKey={summary.netCashFlow >= 0 ? 'cashflow' : 'alert'}
+                className={`w-10 h-10 ${summary.netCashFlow >= 0 ? 'text-emerald-600' : 'text-red-500'}`}
+              />
             </div>
           </div>
 
@@ -272,7 +278,7 @@ export default function CashFlowSummaryPage() {
 
           {summary.dailyTrend.length === 0 && (
             <div className="text-center text-gray-400 py-12">
-              <div className="text-4xl mb-3">📊</div>
+              <MenuIcon iconKey="reports" className="w-10 h-10 mx-auto mb-3 text-gray-300" />
               <p className="font-medium">No transactions this month.</p>
             </div>
           )}
