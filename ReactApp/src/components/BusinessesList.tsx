@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import DataTable, { Action, Column } from './DataTable';
 import Badge from './Badge';
+import AuthenticatedImage from './AuthenticatedImage';
 import { useFormModal } from '../contexts/FormModalContext';
 import { useConfirmDialog } from '../contexts/ConfirmDialogContext';
 import { BusinessService } from '../services/apiService';
@@ -184,19 +185,26 @@ const BusinessesList: React.FC = () => {
     {
       key: 'hasLogo',
       header: 'Logo',
-      render: (_value, item) => (
-        item.hasLogo ? (
-          <img
-            src={BusinessService.getLogoUrl(item.id)}
-            alt={`${item.name} logo`}
-            className="h-10 w-10 rounded-md border border-gray-200 object-contain bg-white"
-          />
-        ) : (
+      render: (_value, item) => {
+        const fallback = (
           <div className="h-10 w-10 rounded-md border border-gray-200 bg-gray-100 flex items-center justify-center text-xs font-semibold text-gray-600">
             {item.name.slice(0, 1).toUpperCase()}
           </div>
-        )
-      ),
+        );
+
+        if (!item.hasLogo) {
+          return fallback;
+        }
+
+        return (
+          <AuthenticatedImage
+            endpoint={`/businesses/${item.id}/logo`}
+            alt={`${item.name} logo`}
+            className="h-10 w-10 rounded-md border border-gray-200 object-contain bg-white"
+            fallback={fallback}
+          />
+        );
+      },
     },
     {
       key: 'name',

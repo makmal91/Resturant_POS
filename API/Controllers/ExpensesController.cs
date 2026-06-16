@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using POSSystem.API.Extensions;
+using POSSystem.Application.CashFlow.Interfaces;
 using POSSystem.Application.Common.Constants;
 using POSSystem.API.Authorization;
 using POSSystem.Domain;
@@ -15,8 +16,13 @@ namespace POSSystem.API.Controllers;
 public class ExpensesController : ControllerBase
 {
     private readonly POSDbContext _db;
+    private readonly ICashFlowService _cashFlow;
 
-    public ExpensesController(POSDbContext db) => _db = db;
+    public ExpensesController(POSDbContext db, ICashFlowService cashFlow)
+    {
+        _db = db;
+        _cashFlow = cashFlow;
+    }
 
     [HttpGet]
     [RequirePermission(PermissionModules.Expenses, PermissionActions.View)]
@@ -34,6 +40,7 @@ public class ExpensesController : ControllerBase
 
         var query = _db.Expenses
             .Include(e => e.Branch)
+            .Include(e => e.ExpenseCategory)
             .AsNoTracking()
             .Where(e => e.BusinessId == biz);
 
@@ -68,16 +75,17 @@ public class ExpensesController : ControllerBase
             {
                 e.Id,
                 e.BranchId,
-                BranchName      = e.Branch.Name,
-                e.CategoryName,
+                BranchName         = e.Branch.Name,
+                e.ExpenseCategoryId,
+                CategoryName       = e.ExpenseCategory.Name,
                 e.Description,
                 e.Amount,
-                PaymentMethod   = e.PaymentMethod.ToString(),
-                ExpenseDate     = e.ExpenseDate,
+                PaymentMethod      = e.PaymentMethod.ToString(),
+                ExpenseDate        = e.ExpenseDate,
                 e.ReferenceNo,
                 e.Notes,
                 e.CreatedBy,
-                CreatedAt       = e.CreatedAt,
+                CreatedAt          = e.CreatedAt,
             })
             .ToListAsync();
 
@@ -111,27 +119,51 @@ public class ExpensesController : ControllerBase
         if (branch <= 0)
             return BadRequest(new { message = "BranchId is required." });
 
+        if (dto.ExpenseCategoryId <= 0)
+            return BadRequest(new { message = "ExpenseCategoryId is required." });
+
+        var categoryExists = await _db.ExpenseCategories.AnyAsync(c =>
+            c.Id == dto.ExpenseCategoryId && c.BusinessId == biz && c.BranchId == branch && !c.IsDeleted);
+
+        if (!categoryExists)
+            return BadRequest(new { message = "Invalid expense category." });
+
         var expense = new Expense
         {
-            BusinessId    = biz,
-            BranchId      = branch,
-            CategoryName  = dto.CategoryName.Trim(),
-            Description   = dto.Description.Trim(),
-            Amount        = dto.Amount,
-            PaymentMethod = dto.PaymentMethod,
-            ExpenseDate   = (dto.ExpenseDate ?? DateTime.UtcNow).Date,
-            ReferenceNo   = dto.ReferenceNo?.Trim(),
-            Notes         = dto.Notes?.Trim(),
+            BusinessId         = biz,
+            BranchId           = branch,
+            ExpenseCategoryId  = dto.ExpenseCategoryId,
+            Description        = dto.Description.Trim(),
+            Amount             = dto.Amount,
+            PaymentMethod      = dto.PaymentMethod,
+            ExpenseDate        = (dto.ExpenseDate ?? DateTime.UtcNow).Date,
+            ReferenceNo        = dto.ReferenceNo?.Trim(),
+            Notes              = dto.Notes?.Trim(),
         };
 
         _db.Expenses.Add(expense);
         await _db.SaveChangesAsync();
 
+        var categoryName = await _db.ExpenseCategories
+            .Where(c => c.Id == expense.ExpenseCategoryId)
+            .Select(c => c.Name)
+            .FirstAsync();
+
+        await _cashFlow.RecordExpenseAsync(
+            biz,
+            branch,
+            expense.Id,
+            $"{categoryName}: {expense.Description}",
+            expense.Amount,
+            MapPaymentMethod(expense.PaymentMethod),
+            expense.ExpenseDate);
+
         return Ok(new
         {
             expense.Id,
             expense.BranchId,
-            expense.CategoryName,
+            expense.ExpenseCategoryId,
+            CategoryName = categoryName,
             expense.Description,
             expense.Amount,
             PaymentMethod = expense.PaymentMethod.ToString(),
@@ -156,22 +188,69 @@ public class ExpensesController : ControllerBase
         if (expense == null)
             return NotFound(new { message = "Expense not found." });
 
-        expense.CategoryName  = dto.CategoryName.Trim();
-        expense.Description   = dto.Description.Trim();
-        expense.Amount        = dto.Amount;
-        expense.PaymentMethod = dto.PaymentMethod;
-        expense.ExpenseDate   = (dto.ExpenseDate ?? DateTime.UtcNow).Date;
-        expense.ReferenceNo   = dto.ReferenceNo?.Trim();
-        expense.Notes         = dto.Notes?.Trim();
-        expense.ModifiedAt    = DateTime.UtcNow;
+        if (dto.ExpenseCategoryId <= 0)
+            return BadRequest(new { message = "ExpenseCategoryId is required." });
+
+        var categoryExists = await _db.ExpenseCategories.AnyAsync(c =>
+            c.Id == dto.ExpenseCategoryId &&
+            c.BusinessId == biz &&
+            c.BranchId == expense.BranchId &&
+            !c.IsDeleted);
+
+        if (!categoryExists)
+            return BadRequest(new { message = "Invalid expense category." });
+
+        var oldCategoryName = await _db.ExpenseCategories
+            .Where(c => c.Id == expense.ExpenseCategoryId)
+            .Select(c => c.Name)
+            .FirstOrDefaultAsync() ?? "Expense";
+
+        var oldAmount         = expense.Amount;
+        var oldPaymentMethod  = expense.PaymentMethod;
+        var oldDescription    = $"{oldCategoryName}: {expense.Description}";
+        var oldExpenseDate    = expense.ExpenseDate;
+
+        expense.ExpenseCategoryId = dto.ExpenseCategoryId;
+        expense.Description       = dto.Description.Trim();
+        expense.Amount            = dto.Amount;
+        expense.PaymentMethod     = dto.PaymentMethod;
+        expense.ExpenseDate       = (dto.ExpenseDate ?? DateTime.UtcNow).Date;
+        expense.ReferenceNo       = dto.ReferenceNo?.Trim();
+        expense.Notes             = dto.Notes?.Trim();
+        expense.ModifiedAt        = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
+
+        var categoryName = await _db.ExpenseCategories
+            .Where(c => c.Id == expense.ExpenseCategoryId)
+            .Select(c => c.Name)
+            .FirstAsync();
+
+        await _cashFlow.ReverseExpenseAsync(
+            biz,
+            expense.BranchId,
+            expense.Id,
+            oldDescription,
+            oldAmount,
+            MapPaymentMethod(oldPaymentMethod),
+            oldExpenseDate,
+            "updated");
+
+        await _cashFlow.RecordExpenseAsync(
+            biz,
+            expense.BranchId,
+            expense.Id,
+            $"{categoryName}: {expense.Description}",
+            expense.Amount,
+            MapPaymentMethod(expense.PaymentMethod),
+            expense.ExpenseDate);
 
         return Ok(new
         {
             expense.Id,
             expense.BranchId,
-            expense.CategoryName,
+            expense.ExpenseCategoryId,
+            CategoryName = categoryName,
             expense.Description,
             expense.Amount,
             PaymentMethod = expense.PaymentMethod.ToString(),
@@ -189,22 +268,44 @@ public class ExpensesController : ControllerBase
     {
         var biz = this.ResolveBusinessId(null);
 
-        var expense = await _db.Expenses.FirstOrDefaultAsync(e => e.Id == id && e.BusinessId == biz);
+        var expense = await _db.Expenses
+            .Include(e => e.ExpenseCategory)
+            .FirstOrDefaultAsync(e => e.Id == id && e.BusinessId == biz);
         if (expense == null)
             return NotFound(new { message = "Expense not found." });
+
+        var description = $"{expense.ExpenseCategory.Name}: {expense.Description}";
 
         expense.IsDeleted  = true;
         expense.ModifiedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
+
+        await _cashFlow.ReverseExpenseAsync(
+            biz,
+            expense.BranchId,
+            expense.Id,
+            description,
+            expense.Amount,
+            MapPaymentMethod(expense.PaymentMethod),
+            expense.ExpenseDate,
+            "deleted");
+
         return NoContent();
     }
+
+    private static CashFlowPaymentMethod MapPaymentMethod(ExpensePaymentMethod method) => method switch
+    {
+        ExpensePaymentMethod.Bank   => CashFlowPaymentMethod.Bank,
+        ExpensePaymentMethod.Wallet => CashFlowPaymentMethod.Wallet,
+        _                           => CashFlowPaymentMethod.Cash,
+    };
 }
 
 public class CreateExpenseRequest
 {
     public int BusinessId { get; set; }
     public int BranchId { get; set; }
-    public string CategoryName { get; set; } = string.Empty;
+    public int ExpenseCategoryId { get; set; }
     public string Description { get; set; } = string.Empty;
     public decimal Amount { get; set; }
     public ExpensePaymentMethod PaymentMethod { get; set; } = ExpensePaymentMethod.Cash;

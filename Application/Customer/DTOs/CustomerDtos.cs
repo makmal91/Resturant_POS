@@ -11,7 +11,9 @@ public class CustomerListDto
     public string Name           { get; set; } = string.Empty;
     public string? Phone         { get; set; }
     public string? Email         { get; set; }
-    public string? City          { get; set; }
+    public int?   CountryId      { get; set; }
+    public int?   CityId         { get; set; }
+    public string? CityName      { get; set; }
     public CustomerType CustomerType { get; set; }
     public bool   Status         { get; set; }
     public decimal CreditLimit   { get; set; }
@@ -39,7 +41,8 @@ public class CreateCustomerDto
     public string? Phone         { get; set; }
     public string? Email         { get; set; }
     public string? Address       { get; set; }
-    public string? City          { get; set; }
+    public int?    CountryId     { get; set; }
+    public int?    CityId        { get; set; }
     public string? CNIC          { get; set; }
     public CustomerType CustomerType { get; set; } = CustomerType.Retail;
     public bool   Status         { get; set; } = true;

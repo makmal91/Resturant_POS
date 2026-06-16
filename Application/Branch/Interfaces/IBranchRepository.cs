@@ -12,6 +12,7 @@ public interface IBranchRepository
     Task<bool> CodeExistsAsync(string code, int? excludeId = null);
     Task<bool> CountryExistsAsync(int countryId);
     Task<bool> CityBelongsToCountryAsync(int cityId, int countryId);
+    Task<string?> GetCityNameByIdAsync(int cityId);
     Task<IReadOnlyList<CountryListItemDto>> GetCountriesAsync();
     Task<IReadOnlyList<CityListItemDto>> GetCitiesByCountryIdAsync(int countryId);
     Task AddAsync(Domain.Branch branch);

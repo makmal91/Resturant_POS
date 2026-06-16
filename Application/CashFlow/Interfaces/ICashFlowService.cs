@@ -21,6 +21,8 @@ public interface ICashFlowService
     Task<List<BranchCashSummaryDto>> GetAllBranchesSummaryAsync(int businessId, DateTime? date = null);
 
     // ─── Integration (called by Sales/Expense services) ────────────────────────
-    Task RecordSaleAsync(int businessId, int branchId, int saleId, string invoiceNo, decimal cashAmount, decimal cardAmount);
-    Task RecordExpenseAsync(int businessId, int branchId, int expenseId, string description, decimal amount, CashFlowPaymentMethod paymentMethod);
+    Task RecordSaleAsync(int businessId, int branchId, int saleId, string invoiceNo, decimal cashAmount, decimal cardAmount, DateTime? transactionDate = null);
+    Task ReverseSaleAsync(int businessId, int branchId, int saleId, string invoiceNo, decimal cashAmount, decimal cardAmount, DateTime? transactionDate = null, string? reason = null);
+    Task RecordExpenseAsync(int businessId, int branchId, int expenseId, string description, decimal amount, CashFlowPaymentMethod paymentMethod, DateTime? transactionDate = null);
+    Task ReverseExpenseAsync(int businessId, int branchId, int expenseId, string description, decimal amount, CashFlowPaymentMethod paymentMethod, DateTime? transactionDate = null, string? reason = null);
 }

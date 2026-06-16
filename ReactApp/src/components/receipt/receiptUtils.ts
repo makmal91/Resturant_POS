@@ -1,5 +1,7 @@
 import type { SaleInvoiceDto, SaleInvoiceItemResult } from '../../modules/pos/posService';
 
+import { formatCurrency as formatCurrencyValue, getCurrencySymbol } from '../../utils/currencyHelper';
+
 export interface ReceiptBusinessInfo {
   id: number;
   name: string;
@@ -16,21 +18,10 @@ export interface ReceiptBusinessInfo {
 
 export type ReceiptLayout = 'thermal' | 'a4';
 
-export const formatReceiptCurrency = (value: number, currency = 'USD'): string => {
-  try {
-    return new Intl.NumberFormat(undefined, {
-      style: 'currency',
-      currency,
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(value);
-  } catch {
-    return new Intl.NumberFormat(undefined, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(value);
-  }
-};
+export const formatReceiptCurrency = (value: number, currency = 'PKR'): string =>
+  formatCurrencyValue(value, currency);
+
+export { getCurrencySymbol };
 
 export const formatReceiptNumber = (value: number): string =>
   new Intl.NumberFormat(undefined, {

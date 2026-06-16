@@ -1,6 +1,7 @@
 using POSSystem.Application.Business.DTOs;
 using POSSystem.Application.Business.Interfaces;
 using POSSystem.Application.Common.DTOs;
+using POSSystem.Application.Common.Helpers;
 using BusinessEntity = POSSystem.Domain.Business;
 
 namespace POSSystem.Application.Business.Services;
@@ -38,6 +39,8 @@ public class BusinessService : IBusinessService
         if (string.IsNullOrWhiteSpace(dto.Name))
             throw new InvalidOperationException("Business name is required.");
 
+        var (currencyId, currencyCode) = await ResolveCurrencyAsync(dto.CurrencyId, dto.Currency);
+
         var business = new BusinessEntity
         {
             Name = dto.Name.Trim(),
@@ -46,7 +49,8 @@ public class BusinessService : IBusinessService
             Email = dto.Email?.Trim() ?? string.Empty,
             Address = dto.Address?.Trim() ?? string.Empty,
             TaxNumber = dto.TaxNumber?.Trim() ?? string.Empty,
-            Currency = string.IsNullOrWhiteSpace(dto.Currency) ? "USD" : dto.Currency.Trim().ToUpperInvariant(),
+            CurrencyId = currencyId,
+            Currency = currencyCode,
             TimeZone = string.IsNullOrWhiteSpace(dto.TimeZone) ? "UTC" : dto.TimeZone.Trim(),
             IsActive = dto.IsActive,
             Logo = logo,
@@ -95,8 +99,12 @@ public class BusinessService : IBusinessService
         if (dto.TaxNumber != null)
             business.TaxNumber = dto.TaxNumber.Trim();
 
-        if (dto.Currency != null)
-            business.Currency = string.IsNullOrWhiteSpace(dto.Currency) ? "USD" : dto.Currency.Trim().ToUpperInvariant();
+        if (dto.CurrencyId.HasValue || dto.Currency != null)
+        {
+            var (currencyId, currencyCode) = await ResolveCurrencyAsync(dto.CurrencyId, dto.Currency);
+            business.CurrencyId = currencyId;
+            business.Currency = currencyCode;
+        }
 
         if (dto.TimeZone != null)
             business.TimeZone = string.IsNullOrWhiteSpace(dto.TimeZone) ? "UTC" : dto.TimeZone.Trim();
@@ -128,5 +136,28 @@ public class BusinessService : IBusinessService
         _repository.Remove(business);
         await _repository.SaveChangesAsync();
         return true;
+    }
+
+    private async Task<(int CurrencyId, string CurrencyCode)> ResolveCurrencyAsync(int? currencyId, string? currencyCode)
+    {
+        if (currencyId.HasValue && currencyId.Value > 0)
+        {
+            var byId = await _repository.GetCurrencyByIdAsync(currencyId.Value);
+            if (byId == null)
+                throw new InvalidOperationException("Invalid currency selected.");
+
+            return (byId.Value.Id, byId.Value.Code);
+        }
+
+        if (!string.IsNullOrWhiteSpace(currencyCode))
+        {
+            var byCode = await _repository.GetCurrencyByCodeAsync(currencyCode.Trim().ToUpperInvariant());
+            if (byCode == null)
+                throw new InvalidOperationException("Invalid currency code.");
+
+            return (byCode.Value.Id, byCode.Value.Code);
+        }
+
+        return (1, CurrencyHelper.BaseCurrencyCode);
     }
 }

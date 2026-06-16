@@ -8,7 +8,9 @@ export interface CustomerListItem {
   name: string;
   phone: string | null;
   email: string | null;
-  city: string | null;
+  cityName: string | null;
+  countryId?: number | null;
+  cityId?: number | null;
   customerType: CustomerType;
   status: boolean;
   creditLimit: number;
@@ -30,7 +32,8 @@ export interface CreateCustomerPayload {
   phone?: string | null;
   email?: string | null;
   address?: string | null;
-  city?: string | null;
+  countryId?: number | null;
+  cityId?: number | null;
   cnic?: string | null;
   customerType: number;
   status: boolean;

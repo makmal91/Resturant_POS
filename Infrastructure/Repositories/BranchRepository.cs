@@ -148,6 +148,15 @@ public class BranchRepository : IBranchRepository
             .ToListAsync();
     }
 
+    public Task<string?> GetCityNameByIdAsync(int cityId)
+    {
+        return _context.Cities
+            .AsNoTracking()
+            .Where(c => c.Id == cityId && c.IsActive)
+            .Select(c => c.Name)
+            .FirstOrDefaultAsync();
+    }
+
     public async Task AddAsync(BranchEntity branch)
     {
         await _context.Branches.AddAsync(branch);

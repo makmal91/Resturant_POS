@@ -74,34 +74,33 @@ public static class CashFlowDatabaseInitializer
             END
             """,
 
-            // Expenses table
+            // Expenses table (ExpenseCategoryId populated by MasterDataDatabaseInitializer)
             """
             IF OBJECT_ID(N'[dbo].[Expenses]', N'U') IS NULL
             BEGIN
                 CREATE TABLE [dbo].[Expenses] (
-                    [Id]            INT           IDENTITY(1,1) NOT NULL,
-                    [BusinessId]    INT           NOT NULL DEFAULT 1,
-                    [BranchId]      INT           NOT NULL DEFAULT 1,
-                    [CategoryName]  NVARCHAR(100) NOT NULL,
-                    [Description]   NVARCHAR(500) NOT NULL,
-                    [Amount]        DECIMAL(18,2) NOT NULL DEFAULT 0,
-                    [PaymentMethod] INT           NOT NULL DEFAULT 1,
-                    [ExpenseDate]   DATE          NOT NULL DEFAULT GETUTCDATE(),
-                    [ReferenceNo]   NVARCHAR(100) NULL,
-                    [Notes]         NVARCHAR(500) NULL,
-                    [CreatedDate]   DATETIME2     NOT NULL DEFAULT GETUTCDATE(),
-                    [CreatedById]   INT           NULL,
-                    [UpdatedDate]   DATETIME2     NULL,
-                    [ModifiedById]  INT           NULL,
-                    [IsDeleted]     BIT           NOT NULL DEFAULT 0,
+                    [Id]                INT           IDENTITY(1,1) NOT NULL,
+                    [BusinessId]        INT           NOT NULL DEFAULT 1,
+                    [BranchId]          INT           NOT NULL DEFAULT 1,
+                    [ExpenseCategoryId] INT           NULL,
+                    [Description]       NVARCHAR(500) NOT NULL,
+                    [Amount]            DECIMAL(18,2) NOT NULL DEFAULT 0,
+                    [PaymentMethod]     INT           NOT NULL DEFAULT 1,
+                    [ExpenseDate]       DATE          NOT NULL DEFAULT GETUTCDATE(),
+                    [ReferenceNo]       NVARCHAR(100) NULL,
+                    [Notes]             NVARCHAR(500) NULL,
+                    [CreatedDate]       DATETIME2     NOT NULL DEFAULT GETUTCDATE(),
+                    [CreatedById]       INT           NULL,
+                    [UpdatedDate]       DATETIME2     NULL,
+                    [ModifiedById]      INT           NULL,
+                    [IsDeleted]         BIT           NOT NULL DEFAULT 0,
                     CONSTRAINT [PK_Expenses] PRIMARY KEY ([Id]),
                     CONSTRAINT [FK_Expenses_Branches] FOREIGN KEY ([BranchId]) REFERENCES [Branches]([Id])
                 );
                 CREATE INDEX [idx_expenses_businessid] ON [Expenses]([BusinessId]);
                 CREATE INDEX [idx_expenses_branchid]   ON [Expenses]([BranchId]);
                 CREATE INDEX [idx_expenses_business_branch] ON [Expenses]([BusinessId],[BranchId]);
-                CREATE INDEX [idx_expenses_date]     ON [Expenses]([BusinessId],[BranchId],[ExpenseDate]);
-                CREATE INDEX [idx_expenses_category] ON [Expenses]([BusinessId],[BranchId],[CategoryName]);
+                CREATE INDEX [idx_expenses_date] ON [Expenses]([BusinessId],[BranchId],[ExpenseDate]);
             END
             """
         };

@@ -1,3 +1,4 @@
+using POSSystem.Application.Branch.Interfaces;
 using POSSystem.Application.Common.Constants;
 using POSSystem.Application.Common.DTOs;
 using POSSystem.Application.Common.Interfaces;
@@ -10,20 +11,29 @@ namespace POSSystem.Application.Customer.Services;
 public class CustomerService : ICustomerService
 {
     private readonly ICustomerRepository _repo;
+    private readonly IBranchRepository _branchRepo;
     private readonly ICodeGeneratorService _codeGenerator;
 
-    public CustomerService(ICustomerRepository repo, ICodeGeneratorService codeGenerator)
+    public CustomerService(
+        ICustomerRepository repo,
+        IBranchRepository branchRepo,
+        ICodeGeneratorService codeGenerator)
     {
         _repo = repo;
+        _branchRepo = branchRepo;
         _codeGenerator = codeGenerator;
     }
 
     public async Task<PagedResultDto<CustomerListDto>> GetCustomersPagedAsync(CustomerFilterDto filter)
     {
         var paged = await _repo.GetPagedAsync(filter);
+        var items = new List<CustomerListDto>();
+        foreach (var customer in paged.Data)
+            items.Add(await MapListAsync(customer));
+
         return new PagedResultDto<CustomerListDto>
         {
-            Data       = paged.Data.Select(MapList).ToList(),
+            Data       = items,
             TotalRecords = paged.TotalRecords,
             TotalPages = paged.TotalPages,
             CurrentPage = paged.CurrentPage
@@ -33,24 +43,28 @@ public class CustomerService : ICustomerService
     public async Task<CustomerDetailDto?> GetByIdAsync(int id, int businessId, int branchId)
     {
         var c = await _repo.GetByIdAsync(id, businessId, branchId);
-        return c == null ? null : MapDetail(c);
+        return c == null ? null : await MapDetailAsync(c);
     }
 
     public async Task<CustomerDetailDto?> GetWalkInCustomerAsync(int businessId, int branchId)
     {
         var c = await _repo.GetWalkInAsync(businessId, branchId);
-        return c == null ? null : MapDetail(c);
+        return c == null ? null : await MapDetailAsync(c);
     }
 
     public async Task<List<CustomerListDto>> SearchCustomersAsync(string query, int businessId, int branchId)
     {
         var list = await _repo.SearchAsync(query, businessId, branchId, 10);
-        return list.Select(MapList).ToList();
+        var results = new List<CustomerListDto>();
+        foreach (var customer in list)
+            results.Add(await MapListAsync(customer));
+        return results;
     }
 
     public async Task<CustomerDetailDto> CreateAsync(CreateCustomerDto dto)
     {
         Validate(dto.Name, dto.CreditLimit);
+        await ValidateLocationAsync(dto.CountryId, dto.CityId);
 
         if (!string.IsNullOrWhiteSpace(dto.Phone))
         {
@@ -67,7 +81,8 @@ public class CustomerService : ICustomerService
             Phone         = dto.Phone?.Trim(),
             Email         = dto.Email?.Trim(),
             Address       = dto.Address?.Trim(),
-            City          = dto.City?.Trim(),
+            CountryId     = dto.CountryId,
+            CityId        = dto.CityId,
             CNIC          = dto.CNIC?.Trim(),
             CustomerType  = dto.CustomerType,
             Status        = dto.Status,
@@ -79,7 +94,7 @@ public class CustomerService : ICustomerService
 
         await _repo.AddAsync(entity);
         await _repo.SaveChangesAsync();
-        return MapDetail(entity);
+        return await MapDetailAsync(entity);
     }
 
     public async Task<CustomerDetailDto?> UpdateAsync(int id, UpdateCustomerDto dto)
@@ -88,6 +103,7 @@ public class CustomerService : ICustomerService
         if (entity == null) return null;
 
         Validate(dto.Name, dto.CreditLimit);
+        await ValidateLocationAsync(dto.CountryId, dto.CityId);
 
         if (!string.IsNullOrWhiteSpace(dto.Phone))
         {
@@ -99,7 +115,8 @@ public class CustomerService : ICustomerService
         entity.Phone         = dto.Phone?.Trim();
         entity.Email         = dto.Email?.Trim();
         entity.Address       = dto.Address?.Trim();
-        entity.City          = dto.City?.Trim();
+        entity.CountryId     = dto.CountryId;
+        entity.CityId        = dto.CityId;
         entity.CNIC          = dto.CNIC?.Trim();
         entity.CustomerType  = dto.CustomerType;
         entity.Status        = dto.Status;
@@ -107,7 +124,7 @@ public class CustomerService : ICustomerService
         entity.CreditLimit   = dto.CreditLimit;
 
         await _repo.SaveChangesAsync();
-        return MapDetail(entity);
+        return await MapDetailAsync(entity);
     }
 
     public async Task DeleteAsync(int id, int businessId, int branchId)
@@ -145,7 +162,7 @@ public class CustomerService : ICustomerService
 
         await _repo.AddAsync(entity);
         await _repo.SaveChangesAsync();
-        return MapDetail(entity);
+        return await MapDetailAsync(entity);
     }
 
     private async Task<string> ResolveCustomerCodeAsync(string? requestedCode, int businessId, int branchId)
@@ -160,7 +177,25 @@ public class CustomerService : ICustomerService
         return code;
     }
 
-    // ─── Helpers ──────────────────────────────────────────────────────────────
+    private async Task ValidateLocationAsync(int? countryId, int? cityId)
+    {
+        if (cityId.HasValue && cityId.Value > 0)
+        {
+            if (!countryId.HasValue || countryId.Value <= 0)
+                throw new InvalidOperationException("Country is required when city is selected.");
+
+            if (!await _branchRepo.CountryExistsAsync(countryId.Value))
+                throw new InvalidOperationException("Invalid country selected.");
+
+            if (!await _branchRepo.CityBelongsToCountryAsync(cityId.Value, countryId.Value))
+                throw new InvalidOperationException("Invalid city for the selected country.");
+        }
+        else if (countryId.HasValue && countryId.Value > 0)
+        {
+            if (!await _branchRepo.CountryExistsAsync(countryId.Value))
+                throw new InvalidOperationException("Invalid country selected.");
+        }
+    }
 
     private static void Validate(string name, decimal creditLimit)
     {
@@ -170,14 +205,16 @@ public class CustomerService : ICustomerService
             throw new InvalidOperationException("Credit limit cannot be negative.");
     }
 
-    private static CustomerListDto MapList(CustomerEntity c) => new()
+    private async Task<CustomerListDto> MapListAsync(CustomerEntity c) => new()
     {
         Id           = c.Id,
         CustomerCode = c.CustomerCode,
         Name         = c.Name,
         Phone        = c.Phone,
         Email        = c.Email,
-        City         = c.City,
+        CountryId    = c.CountryId,
+        CityId       = c.CityId,
+        CityName     = c.CityId.HasValue ? await _branchRepo.GetCityNameByIdAsync(c.CityId.Value) : null,
         CustomerType = c.CustomerType,
         Status       = c.Status,
         CreditLimit  = c.CreditLimit,
@@ -185,7 +222,7 @@ public class CustomerService : ICustomerService
         CreatedAt  = c.CreatedAt
     };
 
-    private static CustomerDetailDto MapDetail(CustomerEntity c) => new()
+    private async Task<CustomerDetailDto> MapDetailAsync(CustomerEntity c) => new()
     {
         Id             = c.Id,
         CustomerCode   = c.CustomerCode,
@@ -193,7 +230,9 @@ public class CustomerService : ICustomerService
         Phone          = c.Phone,
         Email          = c.Email,
         Address        = c.Address,
-        City           = c.City,
+        CountryId      = c.CountryId,
+        CityId         = c.CityId,
+        CityName       = c.CityId.HasValue ? await _branchRepo.GetCityNameByIdAsync(c.CityId.Value) : null,
         CNIC           = c.CNIC,
         CustomerType   = c.CustomerType,
         Status         = c.Status,

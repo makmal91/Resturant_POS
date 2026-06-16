@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using POSSystem.API.Extensions;
 using POSSystem.Application.Business.DTOs;
 using POSSystem.Application.Business.Interfaces;
 
@@ -29,8 +30,8 @@ public class BusinessesController : ControllerBase
     [HttpGet("my")]
     public async Task<IActionResult> GetMyBusiness()
     {
-        var businessIdHeader = Request.Headers["X-Business-Id"].FirstOrDefault();
-        if (!int.TryParse(businessIdHeader, out var businessId) || businessId <= 0)
+        var businessId = this.ResolveBusinessId(null);
+        if (businessId <= 0)
             return NotFound(new { message = "Business context not found." });
 
         var business = await _businessService.GetBusinessByIdAsync(businessId);
@@ -46,6 +47,7 @@ public class BusinessesController : ControllerBase
             phone = business.Phone,
             email = business.Email,
             currency = business.Currency,
+            currencyId = business.CurrencyId,
             taxNumber = business.TaxNumber,
             hasLogo = business.HasLogo
         });
@@ -54,8 +56,8 @@ public class BusinessesController : ControllerBase
     [HttpGet("my/logo")]
     public async Task<IActionResult> GetMyBusinessLogo()
     {
-        var businessIdHeader = Request.Headers["X-Business-Id"].FirstOrDefault();
-        if (!int.TryParse(businessIdHeader, out var businessId) || businessId <= 0)
+        var businessId = this.ResolveBusinessId(null);
+        if (businessId <= 0)
             return NotFound(new { message = "Logo not found." });
 
         var logo = await _businessService.GetBusinessLogoAsync(businessId);
@@ -223,6 +225,7 @@ public class BusinessesController : ControllerBase
             Email = form.Email,
             Address = form.Address,
             TaxNumber = form.TaxNumber,
+            CurrencyId = form.CurrencyId,
             Currency = form.Currency,
             TimeZone = form.TimeZone,
             IsActive = !string.Equals(form.IsActive, "false", StringComparison.OrdinalIgnoreCase)
@@ -239,6 +242,7 @@ public class BusinessesController : ControllerBase
             Email = form.Email,
             Address = form.Address,
             TaxNumber = form.TaxNumber,
+            CurrencyId = form.CurrencyId,
             Currency = form.Currency,
             TimeZone = form.TimeZone,
             IsActive = !string.Equals(form.IsActive, "false", StringComparison.OrdinalIgnoreCase)

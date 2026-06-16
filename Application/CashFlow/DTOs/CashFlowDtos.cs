@@ -120,6 +120,31 @@ public class BranchCashSummaryDto
     public bool IsOpenForDay { get; set; }
 }
 
+/// <summary>Completed sale invoice that has not yet been posted to the cash flow ledger.</summary>
+public class SaleInvoiceCashFlowDto
+{
+    public int Id { get; set; }
+    public int BranchId { get; set; }
+    public string InvoiceNo { get; set; } = string.Empty;
+    public decimal CashAmount { get; set; }
+    public decimal CardAmount { get; set; }
+    public decimal PaidAmount { get; set; }
+    public SalePaymentMethod PaymentMethod { get; set; }
+    public DateTime SaleDate { get; set; }
+}
+
+/// <summary>Expense that has not yet been posted to the cash flow ledger.</summary>
+public class ExpenseCashFlowDto
+{
+    public int Id { get; set; }
+    public int BranchId { get; set; }
+    public string Description { get; set; } = string.Empty;
+    public string CategoryName { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
+    public ExpensePaymentMethod PaymentMethod { get; set; }
+    public DateTime ExpenseDate { get; set; }
+}
+
 public class CashRegisterDto
 {
     public int Id { get; set; }

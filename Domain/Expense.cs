@@ -9,7 +9,7 @@ public enum ExpensePaymentMethod
 
 public class Expense : BaseEntity
 {
-    public string CategoryName { get; set; } = string.Empty;
+    public int ExpenseCategoryId { get; set; }
     public string Description { get; set; } = string.Empty;
     public decimal Amount { get; set; }
     public ExpensePaymentMethod PaymentMethod { get; set; } = ExpensePaymentMethod.Cash;
@@ -17,5 +17,6 @@ public class Expense : BaseEntity
     public string? ReferenceNo { get; set; }
     public string? Notes { get; set; }
 
+    public virtual ExpenseCategory ExpenseCategory { get; set; } = null!;
     public virtual Branch Branch { get; set; } = null!;
 }

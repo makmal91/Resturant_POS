@@ -8,6 +8,7 @@ public class BusinessFormDto
     public string? Email { get; set; }
     public string? Address { get; set; }
     public string? TaxNumber { get; set; }
+    public int? CurrencyId { get; set; }
     public string? Currency { get; set; }
     public string? TimeZone { get; set; }
     public string? IsActive { get; set; }

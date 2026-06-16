@@ -407,7 +407,8 @@ const FormModal: React.FC = () => {
     formData.append('email', String(data?.email ?? '').trim());
     formData.append('address', String(data?.address ?? '').trim());
     formData.append('taxNumber', String(data?.taxNumber ?? '').trim());
-    formData.append('currency', String(data?.currency ?? 'USD').trim().toUpperCase());
+    formData.append('currencyId', String(Number(data?.currencyId ?? 0) || 1));
+    formData.append('currency', String(data?.currency ?? 'PKR').trim().toUpperCase());
     formData.append('timeZone', String(data?.timeZone ?? 'UTC').trim());
     formData.append(
       'isActive',
@@ -837,7 +838,8 @@ const FormModal: React.FC = () => {
       phone:           String(data?.phone ?? '').trim() || undefined,
       email:           String(data?.email ?? '').trim() || undefined,
       address:         String(data?.address ?? '').trim() || undefined,
-      city:            String(data?.city ?? '').trim() || undefined,
+      countryId:       Number(data?.countryId ?? 0) > 0 ? Number(data.countryId) : undefined,
+      cityId:          Number(data?.cityId ?? 0) > 0 ? Number(data.cityId) : undefined,
       cnic:            String(data?.cnic ?? '').trim() || undefined,
       customerType:    typeMap[String(data?.customerType ?? 'Retail')] ?? 1,
       creditLimit:     parseFloat(String(data?.creditLimit ?? '0')) || 0,

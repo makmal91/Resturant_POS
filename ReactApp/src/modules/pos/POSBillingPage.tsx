@@ -21,11 +21,9 @@ import {
   groupRowToLookup,
 } from './posService';
 import { ReceiptPrintModal } from '../../components/receipt';
+import { useBusinessCurrency } from '../../hooks/useBusinessCurrency';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
-
-const fmt = (n: number) =>
-  n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 function useDebounce<T>(value: T, delay: number): T {
   const [dv, setDv] = useState(value);
@@ -46,6 +44,7 @@ interface PaymentModalProps {
 }
 
 const PaymentModal: React.FC<PaymentModalProps> = ({ grandTotal, onClose, onConfirm, loading }) => {
+  const { fmt } = useBusinessCurrency();
   const [method, setMethod] = useState<'Cash' | 'Card' | 'Mixed'>('Cash');
   const [cash, setCash] = useState(grandTotal);
   const [card, setCard] = useState(0);
@@ -194,7 +193,9 @@ interface HeldBillsModalProps {
   onClose: () => void;
 }
 
-const HeldBillsModal: React.FC<HeldBillsModalProps> = ({ bills, onResume, onCancel, onClose }) => (
+const HeldBillsModal: React.FC<HeldBillsModalProps> = ({ bills, onResume, onCancel, onClose }) => {
+  const { fmt } = useBusinessCurrency();
+  return (
   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden border border-gray-200 max-h-[80vh] flex flex-col">
       <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
@@ -227,11 +228,13 @@ const HeldBillsModal: React.FC<HeldBillsModalProps> = ({ bills, onResume, onCanc
       </div>
     </div>
   </div>
-);
+  );
+};
 
 // ─── Main POS Billing Page ────────────────────────────────────────────────────
 
 const POSBillingPage: React.FC = () => {
+  const { fmt } = useBusinessCurrency();
   const { user, selectedBranchId } = useAuth();
   const branchId: number = selectedBranchId ?? (user as { branchId?: number })?.branchId ?? 1;
   const businessId: number = (user as { businessId?: number })?.businessId ?? 1;
@@ -994,6 +997,7 @@ interface CartRowProps {
 }
 
 const CartRow: React.FC<CartRowProps> = React.memo(({ item, idx, onUpdateQty, onUpdateDiscount, onRemove }) => {
+  const { fmt } = useBusinessCurrency();
   const [editingQty, setEditingQty] = useState(false);
   const [editingDisc, setEditingDisc] = useState(false);
   const [qtyInput, setQtyInput] = useState(String(item.quantity));

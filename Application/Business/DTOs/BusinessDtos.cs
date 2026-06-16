@@ -21,7 +21,8 @@ public class BusinessDetailDto
     public string Email { get; set; } = string.Empty;
     public string Address { get; set; } = string.Empty;
     public string TaxNumber { get; set; } = string.Empty;
-    public string Currency { get; set; } = "USD";
+    public int CurrencyId { get; set; } = 1;
+    public string Currency { get; set; } = "PKR";
     public string TimeZone { get; set; } = "UTC";
     public bool IsActive { get; set; }
     public bool HasLogo { get; set; }
@@ -39,6 +40,7 @@ public class CreateBusinessDto
     public string? Email { get; set; }
     public string? Address { get; set; }
     public string? TaxNumber { get; set; }
+    public int? CurrencyId { get; set; }
     public string? Currency { get; set; }
     public string? TimeZone { get; set; }
     public bool IsActive { get; set; } = true;
@@ -52,6 +54,7 @@ public class UpdateBusinessDto
     public string? Email { get; set; }
     public string? Address { get; set; }
     public string? TaxNumber { get; set; }
+    public int? CurrencyId { get; set; }
     public string? Currency { get; set; }
     public string? TimeZone { get; set; }
     public bool? IsActive { get; set; }

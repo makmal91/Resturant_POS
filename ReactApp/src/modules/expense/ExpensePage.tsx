@@ -1,19 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import DataTable, { type Action, type Column } from '../../components/DataTable';
 import Badge from '../../components/Badge';
+import SearchableSelect from '../../components/forms/SearchableSelect';
 import PermissionGate from '../../components/PermissionGate';
 import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
 import { usePermission } from '../../hooks/usePermission';
 import { useBranchWriteAccess } from '../../hooks/useBranchWriteAccess';
+import { useBusinessCurrency } from '../../hooks/useBusinessCurrency';
 import { hasBranchContext } from '../../types/permissions';
 import { getApiErrorMessage } from '../../services/api';
+import { masterDataService } from '../../services/masterDataService';
 import { safeString } from '../../utils/safeValues';
 import { expenseService, type ExpenseDto, type ExpensePaymentMethod } from './expenseService';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-const fmt = (n: number) =>
-  new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 
 const formatDate = (value: string) => {
   if (!value) return '—';
@@ -35,6 +35,7 @@ const METHOD_VARIANT: Record<ExpensePaymentMethod, 'success' | 'info' | 'warning
 
 interface ExpenseFormData {
   id?: number;
+  expenseCategoryId: number;
   categoryName: string;
   description: string;
   amount: string;
@@ -45,6 +46,7 @@ interface ExpenseFormData {
 }
 
 const emptyForm = (): ExpenseFormData => ({
+  expenseCategoryId: 0,
   categoryName: '',
   description: '',
   amount: '',
@@ -62,17 +64,52 @@ interface ExpenseFormPanelProps {
   isEdit: boolean;
   submitting: boolean;
   error: string | null;
+  branchId: number;
+  currencySymbol: string;
   onChange: (data: ExpenseFormData) => void;
   onSubmit: (e: React.FormEvent) => void;
   onClose: () => void;
 }
 
 const ExpenseFormPanel: React.FC<ExpenseFormPanelProps> = ({
-  open, formData, isEdit, submitting, error, onChange, onSubmit, onClose,
+  open, formData, isEdit, submitting, error, branchId, currencySymbol, onChange, onSubmit, onClose,
 }) => {
+  const [categories, setCategories] = useState<{ label: string; value: number }[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open || branchId <= 0) return;
+    let cancelled = false;
+    const load = async () => {
+      setCategoriesLoading(true);
+      try {
+        const rows = await masterDataService.getExpenseCategories(branchId);
+        if (!cancelled) {
+          setCategories(rows.map((c) => ({ label: c.name, value: c.id })));
+        }
+      } catch {
+        if (!cancelled) setCategories([]);
+      } finally {
+        if (!cancelled) setCategoriesLoading(false);
+      }
+    };
+    void load();
+    return () => { cancelled = true; };
+  }, [open, branchId]);
+
   const set = (field: keyof ExpenseFormData) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
       onChange({ ...formData, [field]: e.target.value });
+
+  const handleCategoryChange = (_name: string, value: string | number) => {
+    const expenseCategoryId = Number(value);
+    const selected = categories.find((c) => c.value === expenseCategoryId);
+    onChange({
+      ...formData,
+      expenseCategoryId,
+      categoryName: selected?.label ?? '',
+    });
+  };
 
   return (
     <>
@@ -116,19 +153,17 @@ const ExpenseFormPanel: React.FC<ExpenseFormPanelProps> = ({
           <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
 
             {/* Category */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Category <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={formData.categoryName}
-                onChange={set('categoryName')}
-                placeholder="e.g. Utilities, Rent, Salary"
-                required
-                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
+            <SearchableSelect
+              label="Category"
+              name="expenseCategoryId"
+              value={formData.expenseCategoryId || ''}
+              onChange={handleCategoryChange}
+              placeholder={categoriesLoading ? 'Loading categories…' : 'Select category'}
+              options={categories}
+              required
+              loading={categoriesLoading}
+              disabled={categoriesLoading}
+            />
 
             {/* Description */}
             <div>
@@ -152,7 +187,7 @@ const ExpenseFormPanel: React.FC<ExpenseFormPanelProps> = ({
                   Amount <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium">$</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium">{currencySymbol}</span>
                   <input
                     type="number"
                     min="0.01"
@@ -251,6 +286,7 @@ const ExpenseFormPanel: React.FC<ExpenseFormPanelProps> = ({
 
 const ExpensePage: React.FC = () => {
   const { showConfirm } = useConfirmDialog();
+  const { fmt, symbol: currencySymbol } = useBusinessCurrency();
   const { canCreate, canEdit, canDelete } = usePermission('Expenses');
   const {
     selectedBranchId,
@@ -321,6 +357,7 @@ const ExpensePage: React.FC = () => {
         id: Number(r.id ?? 0),
         branchId: Number(r.branchId ?? 0),
         branchName: safeString(r.branchName),
+        expenseCategoryId: Number(r.expenseCategoryId ?? 0),
         categoryName: safeString(r.categoryName),
         description: safeString(r.description),
         amount: Number(r.amount ?? 0),
@@ -376,6 +413,7 @@ const ExpensePage: React.FC = () => {
     }
     setFormData({
       id: item.id,
+      expenseCategoryId: item.expenseCategoryId,
       categoryName: item.categoryName,
       description: item.description,
       amount: String(item.amount),
@@ -402,7 +440,7 @@ const ExpensePage: React.FC = () => {
       setFormError('Amount must be greater than zero.');
       return;
     }
-    if (!formData.categoryName.trim()) {
+    if (formData.expenseCategoryId <= 0) {
       setFormError('Category is required.');
       return;
     }
@@ -419,7 +457,7 @@ const ExpensePage: React.FC = () => {
     try {
       const payload = {
         branchId,
-        categoryName: formData.categoryName.trim(),
+        expenseCategoryId: formData.expenseCategoryId,
         description: formData.description.trim(),
         amount: parsed,
         paymentMethod: formData.paymentMethod,
@@ -588,6 +626,8 @@ const ExpensePage: React.FC = () => {
         isEdit={isEdit}
         submitting={submitting}
         error={formError}
+        branchId={selectedBranchId ?? 0}
+        currencySymbol={currencySymbol}
         onChange={setFormData}
         onSubmit={handleSubmit}
         onClose={closePanel}

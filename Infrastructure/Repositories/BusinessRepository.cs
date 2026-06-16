@@ -92,6 +92,7 @@ public class BusinessRepository : IBusinessRepository
                 Email = b.Email,
                 Address = b.Address,
                 TaxNumber = b.TaxNumber,
+                CurrencyId = 1,
                 Currency = b.Currency,
                 TimeZone = b.TimeZone,
                 IsActive = b.IsActive,
@@ -157,5 +158,28 @@ public class BusinessRepository : IBusinessRepository
     public void Remove(BusinessEntity business)
     {
         _context.Businesses.Remove(business);
+    }
+
+    public async Task<(int Id, string Code)?> GetCurrencyByIdAsync(int id)
+    {
+        var currency = await _context.Currencies
+            .AsNoTracking()
+            .Where(c => c.Id == id && c.IsActive)
+            .Select(c => new { c.Id, c.Code })
+            .FirstOrDefaultAsync();
+
+        return currency == null ? null : (currency.Id, currency.Code);
+    }
+
+    public async Task<(int Id, string Code)?> GetCurrencyByCodeAsync(string code)
+    {
+        var normalized = code.Trim().ToUpperInvariant();
+        var currency = await _context.Currencies
+            .AsNoTracking()
+            .Where(c => c.Code == normalized && c.IsActive)
+            .Select(c => new { c.Id, c.Code })
+            .FirstOrDefaultAsync();
+
+        return currency == null ? null : (currency.Id, currency.Code);
     }
 }

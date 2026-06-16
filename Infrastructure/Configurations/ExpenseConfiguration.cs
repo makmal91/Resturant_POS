@@ -11,7 +11,6 @@ public class ExpenseConfiguration : IEntityTypeConfiguration<Expense>
         builder.ToTable("Expenses");
         builder.HasKey(x => x.Id);
 
-        builder.Property(x => x.CategoryName).IsRequired().HasMaxLength(100);
         builder.Property(x => x.Description).IsRequired().HasMaxLength(500);
         builder.Property(x => x.Amount).HasColumnType("decimal(18,2)").IsRequired();
         builder.Property(x => x.PaymentMethod).HasConversion<int>().IsRequired();
@@ -24,7 +23,13 @@ public class ExpenseConfiguration : IEntityTypeConfiguration<Expense>
             .IsRequired()
             .OnDelete(DeleteBehavior.Restrict);
 
+        builder.HasOne(x => x.ExpenseCategory)
+            .WithMany()
+            .HasForeignKey(x => x.ExpenseCategoryId)
+            .IsRequired()
+            .OnDelete(DeleteBehavior.Restrict);
+
         builder.HasIndex(x => new { x.BusinessId, x.BranchId, x.ExpenseDate });
-        builder.HasIndex(x => new { x.BusinessId, x.BranchId, x.CategoryName });
+        builder.HasIndex(x => new { x.BusinessId, x.BranchId, x.ExpenseCategoryId });
     }
 }

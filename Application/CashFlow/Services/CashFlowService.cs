@@ -143,8 +143,13 @@ public class CashFlowService : ICashFlowService
 
     // ─── Summaries ─────────────────────────────────────────────────────────────
 
-    public Task<DailyCashSummaryDto> GetDailySummaryAsync(int businessId, int branchId, DateTime? date = null)
-        => _repo.GetDailySummaryAsync(businessId, branchId, (date ?? DateTime.UtcNow).Date);
+    public async Task<DailyCashSummaryDto> GetDailySummaryAsync(int businessId, int branchId, DateTime? date = null)
+    {
+        var targetDate = (date ?? DateTime.UtcNow).Date;
+        await SyncMissingSalesAsync(businessId, branchId, targetDate);
+        await SyncMissingExpensesAsync(businessId, branchId, targetDate);
+        return await _repo.GetDailySummaryAsync(businessId, branchId, targetDate);
+    }
 
     public Task<MonthlyCashSummaryDto> GetMonthlySummaryAsync(int businessId, int branchId, int? year = null, int? month = null)
     {
@@ -152,13 +157,20 @@ public class CashFlowService : ICashFlowService
         return _repo.GetMonthlySummaryAsync(businessId, branchId, year ?? now.Year, month ?? now.Month);
     }
 
-    public Task<List<BranchCashSummaryDto>> GetAllBranchesSummaryAsync(int businessId, DateTime? date = null)
-        => _repo.GetBranchSummariesAsync(businessId, (date ?? DateTime.UtcNow).Date);
+    public async Task<List<BranchCashSummaryDto>> GetAllBranchesSummaryAsync(int businessId, DateTime? date = null)
+    {
+        var targetDate = (date ?? DateTime.UtcNow).Date;
+        await SyncMissingSalesAsync(businessId, 0, targetDate);
+        await SyncMissingExpensesAsync(businessId, 0, targetDate);
+        return await _repo.GetBranchSummariesAsync(businessId, targetDate);
+    }
 
     // ─── Integration ───────────────────────────────────────────────────────────
 
-    public async Task RecordSaleAsync(int businessId, int branchId, int saleId, string invoiceNo, decimal cashAmount, decimal cardAmount)
+    public async Task RecordSaleAsync(int businessId, int branchId, int saleId, string invoiceNo, decimal cashAmount, decimal cardAmount, DateTime? transactionDate = null)
     {
+        var txDate = transactionDate ?? DateTime.UtcNow;
+
         if (cashAmount > 0)
         {
             await _repo.AddTransactionAsync(new CashFlowTransaction
@@ -171,7 +183,7 @@ public class CashFlowService : ICashFlowService
                 ReferenceId     = saleId,
                 ReferenceNo     = invoiceNo,
                 Description     = $"Cash sale — {invoiceNo}",
-                TransactionDate = DateTime.UtcNow,
+                TransactionDate = txDate,
             });
         }
 
@@ -187,12 +199,50 @@ public class CashFlowService : ICashFlowService
                 ReferenceId     = saleId,
                 ReferenceNo     = invoiceNo,
                 Description     = $"Card sale — {invoiceNo}",
-                TransactionDate = DateTime.UtcNow,
+                TransactionDate = txDate,
             });
         }
     }
 
-    public async Task RecordExpenseAsync(int businessId, int branchId, int expenseId, string description, decimal amount, CashFlowPaymentMethod paymentMethod)
+    public async Task ReverseSaleAsync(int businessId, int branchId, int saleId, string invoiceNo, decimal cashAmount, decimal cardAmount, DateTime? transactionDate = null, string? reason = null)
+    {
+        var txDate = transactionDate ?? DateTime.UtcNow;
+        var suffix = string.IsNullOrWhiteSpace(reason) ? string.Empty : $" | {reason}";
+
+        if (cashAmount > 0)
+        {
+            await _repo.AddTransactionAsync(new CashFlowTransaction
+            {
+                BusinessId      = businessId,
+                BranchId        = branchId,
+                TransactionType = CashFlowTransactionType.Sale,
+                PaymentMethod   = CashFlowPaymentMethod.Cash,
+                Amount          = -cashAmount,
+                ReferenceId     = saleId,
+                ReferenceNo     = invoiceNo,
+                Description     = $"Sale reversal (cash) — {invoiceNo}{suffix}",
+                TransactionDate = txDate,
+            });
+        }
+
+        if (cardAmount > 0)
+        {
+            await _repo.AddTransactionAsync(new CashFlowTransaction
+            {
+                BusinessId      = businessId,
+                BranchId        = branchId,
+                TransactionType = CashFlowTransactionType.Sale,
+                PaymentMethod   = CashFlowPaymentMethod.Bank,
+                Amount          = -cardAmount,
+                ReferenceId     = saleId,
+                ReferenceNo     = invoiceNo,
+                Description     = $"Sale reversal (card) — {invoiceNo}{suffix}",
+                TransactionDate = txDate,
+            });
+        }
+    }
+
+    public async Task RecordExpenseAsync(int businessId, int branchId, int expenseId, string description, decimal amount, CashFlowPaymentMethod paymentMethod, DateTime? transactionDate = null)
     {
         if (amount <= 0) return;
 
@@ -205,11 +255,96 @@ public class CashFlowService : ICashFlowService
             Amount          = amount,
             ReferenceId     = expenseId,
             Description     = description,
-            TransactionDate = DateTime.UtcNow,
+            TransactionDate = transactionDate ?? DateTime.UtcNow,
+        });
+    }
+
+    public async Task ReverseExpenseAsync(int businessId, int branchId, int expenseId, string description, decimal amount, CashFlowPaymentMethod paymentMethod, DateTime? transactionDate = null, string? reason = null)
+    {
+        if (amount <= 0) return;
+
+        var suffix = string.IsNullOrWhiteSpace(reason) ? string.Empty : $" | {reason}";
+
+        await _repo.AddTransactionAsync(new CashFlowTransaction
+        {
+            BusinessId      = businessId,
+            BranchId        = branchId,
+            TransactionType = CashFlowTransactionType.Expense,
+            PaymentMethod   = paymentMethod,
+            Amount          = -amount,
+            ReferenceId     = expenseId,
+            Description     = $"Expense reversal — {description}{suffix}",
+            TransactionDate = transactionDate ?? DateTime.UtcNow,
         });
     }
 
     // ─── Mapping helpers ───────────────────────────────────────────────────────
+
+    private async Task SyncMissingSalesAsync(int businessId, int branchId, DateTime date)
+    {
+        var missing = await _repo.GetCompletedInvoicesMissingCashFlowAsync(businessId, branchId, date);
+        foreach (var inv in missing)
+        {
+            var (cash, card) = ResolvePaymentAmounts(inv);
+            if (cash <= 0 && card <= 0) continue;
+            await RecordSaleAsync(businessId, inv.BranchId, inv.Id, inv.InvoiceNo, cash, card, inv.SaleDate);
+        }
+    }
+
+    private async Task SyncMissingExpensesAsync(int businessId, int branchId, DateTime date)
+    {
+        var missing = await _repo.GetExpensesMissingCashFlowAsync(businessId, branchId, date);
+        foreach (var exp in missing)
+        {
+            if (exp.Amount <= 0) continue;
+            var description = string.IsNullOrWhiteSpace(exp.CategoryName)
+                ? exp.Description
+                : $"{exp.CategoryName}: {exp.Description}";
+            await RecordExpenseAsync(
+                businessId,
+                exp.BranchId,
+                exp.Id,
+                description,
+                exp.Amount,
+                MapExpensePaymentMethod(exp.PaymentMethod),
+                exp.ExpenseDate);
+        }
+    }
+
+    private static CashFlowPaymentMethod MapExpensePaymentMethod(ExpensePaymentMethod method) => method switch
+    {
+        ExpensePaymentMethod.Bank   => CashFlowPaymentMethod.Bank,
+        ExpensePaymentMethod.Wallet => CashFlowPaymentMethod.Wallet,
+        _                           => CashFlowPaymentMethod.Cash,
+    };
+
+    private static (decimal Cash, decimal Card) ResolvePaymentAmounts(SaleInvoiceCashFlowDto inv)
+    {
+        var cash = inv.CashAmount;
+        var card = inv.CardAmount;
+
+        if (cash <= 0 && card <= 0 && inv.PaidAmount > 0)
+        {
+            switch (inv.PaymentMethod)
+            {
+                case SalePaymentMethod.Cash:
+                    cash = inv.PaidAmount;
+                    break;
+                case SalePaymentMethod.Card:
+                    card = inv.PaidAmount;
+                    break;
+                case SalePaymentMethod.Mixed when inv.CashAmount > 0 || inv.CardAmount > 0:
+                    cash = inv.CashAmount;
+                    card = inv.CardAmount;
+                    break;
+                case SalePaymentMethod.Mixed:
+                    cash = inv.PaidAmount;
+                    break;
+            }
+        }
+
+        return (cash, card);
+    }
 
     private static CashRegisterDto MapRegister(CashRegister r, string branchName) => new()
     {

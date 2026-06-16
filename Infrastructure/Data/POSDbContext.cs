@@ -19,6 +19,7 @@ public class POSDbContext : DbContext
     public DbSet<Business> Businesses { get; set; } = null!;
     public DbSet<Country> Countries { get; set; } = null!;
     public DbSet<City> Cities { get; set; } = null!;
+    public DbSet<Currency> Currencies { get; set; } = null!;
     public DbSet<Branch> Branches { get; set; } = null!;
     public DbSet<Role> Roles { get; set; } = null!;
     public DbSet<User> Users { get; set; } = null!;
@@ -66,6 +67,7 @@ public class POSDbContext : DbContext
 
     // Expenses module
     public DbSet<Expense> Expenses { get; set; } = null!;
+    public DbSet<ExpenseCategory> ExpenseCategories { get; set; } = null!;
 
     // Code generation
     public DbSet<CodeSequence> CodeSequences { get; set; } = null!;
@@ -79,6 +81,7 @@ public class POSDbContext : DbContext
         modelBuilder.ApplyConfiguration(new BusinessConfiguration());
         modelBuilder.ApplyConfiguration(new CountryConfiguration());
         modelBuilder.ApplyConfiguration(new CityConfiguration());
+        modelBuilder.ApplyConfiguration(new CurrencyConfiguration());
         modelBuilder.ApplyConfiguration(new BranchConfiguration());
         modelBuilder.ApplyConfiguration(new RoleConfiguration());
         modelBuilder.ApplyConfiguration(new UserConfiguration());
@@ -117,6 +120,7 @@ public class POSDbContext : DbContext
         modelBuilder.ApplyConfiguration(new SaleInvoiceItemConfiguration());
         modelBuilder.ApplyConfiguration(new CashFlowTransactionConfiguration());
         modelBuilder.ApplyConfiguration(new CashRegisterConfiguration());
+        modelBuilder.ApplyConfiguration(new ExpenseCategoryConfiguration());
         modelBuilder.ApplyConfiguration(new ExpenseConfiguration());
         modelBuilder.ApplyConfiguration(new CodeSequenceConfiguration());
 
@@ -172,7 +176,8 @@ public class POSDbContext : DbContext
             Email = "owner@restaurant.com",
             Address = "123 Main Street",
             TaxNumber = "NTN-0001",
-            Currency = "USD",
+            CurrencyId = 1,
+            Currency = "PKR",
             TimeZone = "UTC",
             IsActive = true,
             CreatedAt = DateTime.UtcNow
@@ -204,6 +209,17 @@ public class POSDbContext : DbContext
         };
 
         modelBuilder.Entity<City>().HasData(cities);
+
+        var currencies = new[]
+        {
+            new Currency { Id = 1, Code = "PKR", Name = "Pakistani Rupee", Symbol = "₨", ExchangeRateToPKR = 1m, IsBase = true, IsActive = true },
+            new Currency { Id = 2, Code = "USD", Name = "US Dollar", Symbol = "$", ExchangeRateToPKR = 278m, IsBase = false, IsActive = true },
+            new Currency { Id = 3, Code = "GBP", Name = "British Pound", Symbol = "£", ExchangeRateToPKR = 350m, IsBase = false, IsActive = true },
+            new Currency { Id = 4, Code = "AED", Name = "UAE Dirham", Symbol = "د.إ", ExchangeRateToPKR = 75.7m, IsBase = false, IsActive = true },
+            new Currency { Id = 5, Code = "EUR", Name = "Euro", Symbol = "€", ExchangeRateToPKR = 300m, IsBase = false, IsActive = true },
+        };
+
+        modelBuilder.Entity<Currency>().HasData(currencies);
 
         // Seed Default Branch
         var defaultBranch = new Branch

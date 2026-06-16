@@ -86,6 +86,7 @@ using (var scope = app.Services.CreateScope())
     await CustomerInitializer.EnsureSchemaAsync(db, logger);
     await CodeSequenceDatabaseInitializer.EnsureSchemaAsync(db, logger);
     await CashFlowDatabaseInitializer.EnsureSchemaAsync(db, logger);
+    await MasterDataDatabaseInitializer.EnsureSchemaAsync(db, logger);
     await RolePermissionSeeder.SeedDefaultPermissionsAsync(db, logger);
     // Sidebar now uses Modules table as single source of truth (NavigationMenuSeeder deprecated).
 }

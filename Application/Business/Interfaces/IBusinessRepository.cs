@@ -11,6 +11,8 @@ public interface IBusinessRepository
     Task<BusinessLogoDto?> GetLogoByIdAsync(int id);
     Task<BusinessEntity?> GetTrackedByIdAsync(int id);
     Task<BusinessEntity?> GetTrackedWithBranchesAsync(int id);
+    Task<(int Id, string Code)?> GetCurrencyByIdAsync(int id);
+    Task<(int Id, string Code)?> GetCurrencyByCodeAsync(string code);
     Task AddAsync(BusinessEntity business);
     Task SaveChangesAsync();
     void Remove(BusinessEntity business);

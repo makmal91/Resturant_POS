@@ -1,3 +1,4 @@
+using POSSystem.Application.CashFlow.Interfaces;
 using POSSystem.Application.Common.Constants;
 using POSSystem.Application.Common.DTOs;
 using POSSystem.Application.Common.Interfaces;
@@ -13,15 +14,18 @@ public class SalesService : ISalesService
 {
     private readonly ISalesRepository _salesRepository;
     private readonly IStockLedgerRepository _stockLedgerRepository;
+    private readonly ICashFlowService _cashFlowService;
     private readonly ICodeGeneratorService _codeGenerator;
 
     public SalesService(
         ISalesRepository salesRepository,
         IStockLedgerRepository stockLedgerRepository,
+        ICashFlowService cashFlowService,
         ICodeGeneratorService codeGenerator)
     {
         _salesRepository = salesRepository;
         _stockLedgerRepository = stockLedgerRepository;
+        _cashFlowService = cashFlowService;
         _codeGenerator = codeGenerator;
     }
 
@@ -201,6 +205,10 @@ public class SalesService : ISalesService
         }
         await _stockLedgerRepository.SaveChangesAsync();
 
+        var (cash, card) = ResolvePaymentAmounts(invoice);
+        await _cashFlowService.RecordSaleAsync(
+            dto.BusinessId, dto.BranchId, invoice.Id, invoice.InvoiceNo, cash, card, invoice.SaleDate);
+
         var created = await _salesRepository.GetByIdAsync(invoice.Id, dto.BusinessId, dto.BranchId);
         return MapInvoiceDto(created!);
     }
@@ -348,6 +356,34 @@ public class SalesService : ISalesService
         }
     }
 
+    private static (decimal Cash, decimal Card) ResolvePaymentAmounts(SaleInvoice inv)
+    {
+        var cash = inv.CashAmount;
+        var card = inv.CardAmount;
+
+        if (cash <= 0 && card <= 0 && inv.PaidAmount > 0)
+        {
+            switch (inv.PaymentMethod)
+            {
+                case SalePaymentMethod.Cash:
+                    cash = inv.PaidAmount;
+                    break;
+                case SalePaymentMethod.Card:
+                    card = inv.PaidAmount;
+                    break;
+                case SalePaymentMethod.Mixed when inv.CashAmount > 0 || inv.CardAmount > 0:
+                    cash = inv.CashAmount;
+                    card = inv.CardAmount;
+                    break;
+                case SalePaymentMethod.Mixed:
+                    cash = inv.PaidAmount;
+                    break;
+            }
+        }
+
+        return (cash, card);
+    }
+
     // ─── Mapping ──────────────────────────────────────────────────────────────
 
     private static PosProductLookupDto MapProductToLookup(ProductEntity product, ProductBarcode? matchedBarcode, string barcodeValue)
@@ -483,6 +519,8 @@ public class SalesService : ISalesService
             throw new InvalidOperationException(
                 $"Only completed invoices can be voided. Current status: {invoice.Status}.");
 
+        var (prevCash, prevCard) = ResolvePaymentAmounts(invoice);
+
         // Load the original SaleEntry ledger records for this invoice
         var originalEntries = await _stockLedgerRepository.GetByReferenceAsync(
             id, dto.BusinessId, dto.BranchId, StockLedgerType.SaleEntry);
@@ -514,6 +552,10 @@ public class SalesService : ISalesService
         await _salesRepository.SaveChangesAsync();
         await _stockLedgerRepository.SaveChangesAsync();
 
+        await _cashFlowService.ReverseSaleAsync(
+            dto.BusinessId, dto.BranchId, invoice.Id, invoice.InvoiceNo,
+            prevCash, prevCard, DateTime.UtcNow, dto.Reason);
+
         var result = await _salesRepository.GetByIdAsync(id, dto.BusinessId, dto.BranchId);
         return MapInvoiceDto(result!);
     }
@@ -528,6 +570,8 @@ public class SalesService : ISalesService
         if (invoice.Status != SaleInvoiceStatus.Completed)
             throw new InvalidOperationException(
                 $"Only completed invoices can be edited. Current status: {invoice.Status}.");
+
+        var (prevCash, prevCard) = ResolvePaymentAmounts(invoice);
 
         // STEP 1: Reverse the existing stock ledger entries
         var originalEntries = await _stockLedgerRepository.GetByReferenceAsync(
@@ -635,6 +679,15 @@ public class SalesService : ISalesService
         }
 
         await _stockLedgerRepository.SaveChangesAsync();
+
+        await _cashFlowService.ReverseSaleAsync(
+            dto.BusinessId, dto.BranchId, invoice.Id, invoice.InvoiceNo,
+            prevCash, prevCard, DateTime.UtcNow, "Invoice correction");
+
+        var (newCash, newCard) = ResolvePaymentAmounts(invoice);
+        await _cashFlowService.RecordSaleAsync(
+            dto.BusinessId, dto.BranchId, invoice.Id, invoice.InvoiceNo,
+            newCash, newCard, invoice.SaleDate);
 
         var result = await _salesRepository.GetByIdAsync(id, dto.BusinessId, dto.BranchId);
         return MapInvoiceDto(result!);

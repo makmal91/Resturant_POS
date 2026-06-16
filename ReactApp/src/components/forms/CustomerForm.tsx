@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { FormButton, FormInput, FormSelect, FormTextarea } from './index';
+import { FormButton, FormInput, FormSelect, FormTextarea, SearchableSelect } from './index';
 import CodeFieldWithGenerate from './CodeFieldWithGenerate';
 import { CODE_MODULES } from '../../services/codeGeneratorService';
 import { safeString } from '../../utils/safeValues';
 import { useBranchStore } from '../../stores/useBranchStore';
+import { CountryService } from '../../services/apiService';
 
 export interface CustomerFormData {
   customerCode: string;
@@ -11,7 +12,8 @@ export interface CustomerFormData {
   phone: string;
   email: string;
   address: string;
-  city: string;
+  countryId: number;
+  cityId: number;
   cnic: string;
   customerType: string;
   creditLimit: string;
@@ -21,11 +23,16 @@ export interface CustomerFormData {
 }
 
 interface CustomerFormProps {
-  initialData?: Partial<CustomerFormData & { id?: number; isActive?: boolean; status?: string }> | null;
+  initialData?: Partial<CustomerFormData & { id?: number; isActive?: boolean; status?: string; cityName?: string }> | null;
   onSubmit: (data: CustomerFormData) => void;
   isLoading?: boolean;
   submitLabel?: string;
   lockBranch?: boolean;
+}
+
+interface SelectOption {
+  label: string;
+  value: number;
 }
 
 const DEFAULT_CUSTOMER_FORM_DATA: CustomerFormData = {
@@ -34,7 +41,8 @@ const DEFAULT_CUSTOMER_FORM_DATA: CustomerFormData = {
   phone: '',
   email: '',
   address: '',
-  city: '',
+  countryId: 0,
+  cityId: 0,
   cnic: '',
   customerType: 'Retail',
   creditLimit: '0',
@@ -55,7 +63,8 @@ const buildCustomerFormData = (
     phone:           safeString(source?.phone),
     email:           safeString(source?.email),
     address:         safeString(source?.address),
-    city:            safeString(source?.city),
+    countryId:       Number(source?.countryId ?? 0),
+    cityId:          Number(source?.cityId ?? 0),
     cnic:            safeString(source?.cnic),
     customerType:    safeString(source?.customerType, 'Retail') || 'Retail',
     creditLimit:     String(source?.creditLimit ?? '0'),
@@ -85,9 +94,73 @@ const CustomerForm: React.FC<CustomerFormProps> = ({
 
   const [formData, setFormData] = useState<CustomerFormData>(() => buildCustomerFormData(safeInitialData));
   const [errors, setErrors] = useState<Partial<Record<keyof CustomerFormData, string>>>({});
+  const [countries, setCountries] = useState<SelectOption[]>([]);
+  const [cities, setCities] = useState<SelectOption[]>([]);
+  const [isCountriesLoading, setIsCountriesLoading] = useState(false);
+  const [isCitiesLoading, setIsCitiesLoading] = useState(false);
 
   useEffect(() => { void fetchBranches(); }, [fetchBranches]);
   useEffect(() => { setFormData(buildCustomerFormData(safeInitialData)); setErrors({}); }, [safeInitialData]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadCountries = async () => {
+      setIsCountriesLoading(true);
+      try {
+        const response = await CountryService.getAll();
+        const rows = Array.isArray(response?.data) ? response.data : [];
+        const options = rows
+          .map((item: { id?: unknown; name?: unknown }) => ({
+            value: Number(item?.id ?? 0),
+            label: String(item?.name ?? ''),
+          }))
+          .filter((item: SelectOption) => item.value > 0 && item.label);
+        if (!cancelled) setCountries(options);
+      } catch {
+        if (!cancelled) setCountries([]);
+      } finally {
+        if (!cancelled) setIsCountriesLoading(false);
+      }
+    };
+    void loadCountries();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadCities = async () => {
+      if (formData.countryId <= 0) {
+        setCities([]);
+        return;
+      }
+      setIsCitiesLoading(true);
+      try {
+        const response = await CountryService.getCitiesByCountry(formData.countryId);
+        const rows = Array.isArray(response?.data) ? response.data : [];
+        const options = rows
+          .map((item: { id?: unknown; name?: unknown }) => ({
+            value: Number(item?.id ?? 0),
+            label: String(item?.name ?? ''),
+          }))
+          .filter((item: SelectOption) => item.value > 0 && item.label);
+        if (!cancelled) {
+          setCities(options);
+          setFormData((prev) => {
+            if (prev.cityId > 0 && options.some((option) => option.value === prev.cityId)) {
+              return prev;
+            }
+            return { ...prev, cityId: 0 };
+          });
+        }
+      } catch {
+        if (!cancelled) setCities([]);
+      } finally {
+        if (!cancelled) setIsCitiesLoading(false);
+      }
+    };
+    void loadCities();
+    return () => { cancelled = true; };
+  }, [formData.countryId]);
 
   const validateForm = (): boolean => {
     const errs: Partial<Record<keyof CustomerFormData, string>> = {};
@@ -95,6 +168,8 @@ const CustomerForm: React.FC<CustomerFormProps> = ({
     if (formData.branchId <= 0) errs.branchId = 'Branch selection is required';
     if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email))
       errs.email = 'Please enter a valid email address';
+    if (formData.cityId > 0 && formData.countryId <= 0)
+      errs.countryId = 'Country is required when city is selected';
     if (isNaN(Number(formData.creditLimit)) || Number(formData.creditLimit) < 0)
       errs.creditLimit = 'Credit limit must be a non-negative number';
     setErrors(errs);
@@ -104,6 +179,16 @@ const CustomerForm: React.FC<CustomerFormProps> = ({
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: name === 'branchId' ? Number(value || 0) : value }));
+    setErrors((prev) => ({ ...prev, [name]: '' }));
+  };
+
+  const handleLookupChange = (name: string, value: string | number) => {
+    const numeric = Number(value);
+    setFormData((prev) => ({
+      ...prev,
+      [name]: numeric,
+      ...(name === 'countryId' ? { cityId: 0 } : {}),
+    }));
     setErrors((prev) => ({ ...prev, [name]: '' }));
   };
 
@@ -121,7 +206,6 @@ const CustomerForm: React.FC<CustomerFormProps> = ({
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-          {/* Branch selector */}
           {!lockBranch ? (
             <FormSelect
               label="Branch"
@@ -193,12 +277,34 @@ const CustomerForm: React.FC<CustomerFormProps> = ({
             placeholder="00000-0000000-0"
           />
 
-          <FormInput
+          <SearchableSelect
+            label="Country"
+            name="countryId"
+            value={formData.countryId || ''}
+            onChange={handleLookupChange}
+            placeholder={isCountriesLoading ? 'Loading countries…' : 'Select country'}
+            options={countries}
+            error={errors.countryId}
+            disabled={isCountriesLoading}
+            loading={isCountriesLoading}
+          />
+
+          <SearchableSelect
             label="City"
-            name="city"
-            value={formData.city}
-            onChange={handleChange}
-            placeholder="e.g. Lahore"
+            name="cityId"
+            value={formData.cityId || ''}
+            onChange={handleLookupChange}
+            placeholder={
+              formData.countryId <= 0
+                ? 'Select country first'
+                : isCitiesLoading
+                  ? 'Loading cities…'
+                  : 'Select city'
+            }
+            options={cities}
+            error={errors.cityId}
+            disabled={formData.countryId <= 0 || isCitiesLoading}
+            loading={isCitiesLoading}
           />
 
           <FormSelect

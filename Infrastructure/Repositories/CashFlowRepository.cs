@@ -302,4 +302,98 @@ public class CashFlowRepository : ICashFlowRepository
 
         return await q.SumAsync(t => (decimal?)t.Amount) ?? 0;
     }
+
+    public async Task<List<SaleInvoiceCashFlowDto>> GetCompletedInvoicesMissingCashFlowAsync(int businessId, int branchId, DateTime date)
+    {
+        var dateOnly  = date.Date;
+        var datePlus1 = dateOnly.AddDays(1);
+
+        var recordedQuery = _db.CashFlowTransactions
+            .AsNoTracking()
+            .Where(t => t.BusinessId == businessId
+                     && t.TransactionType == CashFlowTransactionType.Sale
+                     && t.ReferenceId != null
+                     && t.TransactionDate >= dateOnly
+                     && t.TransactionDate < datePlus1);
+
+        if (branchId > 0)
+            recordedQuery = recordedQuery.Where(t => t.BranchId == branchId);
+
+        var recordedSaleIds = await recordedQuery
+            .Select(t => t.ReferenceId!.Value)
+            .Distinct()
+            .ToListAsync();
+
+        var invoiceQuery = _db.SaleInvoices
+            .AsNoTracking()
+            .Where(i => i.BusinessId == businessId
+                     && i.Status == SaleInvoiceStatus.Completed
+                     && i.SaleDate >= dateOnly
+                     && i.SaleDate < datePlus1
+                     && !recordedSaleIds.Contains(i.Id));
+
+        if (branchId > 0)
+            invoiceQuery = invoiceQuery.Where(i => i.BranchId == branchId);
+
+        return await invoiceQuery
+            .Select(i => new SaleInvoiceCashFlowDto
+            {
+                Id            = i.Id,
+                BranchId      = i.BranchId,
+                InvoiceNo     = i.InvoiceNo,
+                CashAmount    = i.CashAmount,
+                CardAmount    = i.CardAmount,
+                PaidAmount    = i.PaidAmount,
+                PaymentMethod = i.PaymentMethod,
+                SaleDate      = i.SaleDate,
+            })
+            .ToListAsync();
+    }
+
+    public async Task<List<ExpenseCashFlowDto>> GetExpensesMissingCashFlowAsync(int businessId, int branchId, DateTime date)
+    {
+        var dateOnly  = date.Date;
+        var datePlus1 = dateOnly.AddDays(1);
+
+        var recordedQuery = _db.CashFlowTransactions
+            .AsNoTracking()
+            .Where(t => t.BusinessId == businessId
+                     && t.TransactionType == CashFlowTransactionType.Expense
+                     && t.ReferenceId != null
+                     && t.TransactionDate >= dateOnly
+                     && t.TransactionDate < datePlus1);
+
+        if (branchId > 0)
+            recordedQuery = recordedQuery.Where(t => t.BranchId == branchId);
+
+        var recordedExpenseIds = await recordedQuery
+            .Select(t => t.ReferenceId!.Value)
+            .Distinct()
+            .ToListAsync();
+
+        var expenseQuery = _db.Expenses
+            .AsNoTracking()
+            .Include(e => e.ExpenseCategory)
+            .Where(e => e.BusinessId == businessId
+                     && !e.IsDeleted
+                     && e.ExpenseDate >= dateOnly
+                     && e.ExpenseDate < datePlus1
+                     && !recordedExpenseIds.Contains(e.Id));
+
+        if (branchId > 0)
+            expenseQuery = expenseQuery.Where(e => e.BranchId == branchId);
+
+        return await expenseQuery
+            .Select(e => new ExpenseCashFlowDto
+            {
+                Id            = e.Id,
+                BranchId      = e.BranchId,
+                Description   = e.Description,
+                CategoryName  = e.ExpenseCategory.Name,
+                Amount        = e.Amount,
+                PaymentMethod = e.PaymentMethod,
+                ExpenseDate   = e.ExpenseDate,
+            })
+            .ToListAsync();
+    }
 }

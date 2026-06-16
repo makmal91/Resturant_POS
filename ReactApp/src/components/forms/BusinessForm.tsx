@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { FormButton, FormInput, FormSelect, FormTextarea } from './index';
+import { FormButton, FormInput, FormSelect, FormTextarea, SearchableSelect } from './index';
+import AuthenticatedImage from '../AuthenticatedImage';
 import { safeString } from '../../utils/safeValues';
-import { BusinessService } from '../../services/apiService';
+import { masterDataService, type CurrencyDto } from '../../services/masterDataService';
 
 interface BusinessFormData {
   name: string;
@@ -10,6 +11,7 @@ interface BusinessFormData {
   email: string;
   address: string;
   taxNumber: string;
+  currencyId: number;
   currency: string;
   timeZone: string;
   status: string;
@@ -29,7 +31,8 @@ const DEFAULT_BUSINESS_FORM_DATA: BusinessFormData = {
   email: '',
   address: '',
   taxNumber: '',
-  currency: 'USD',
+  currencyId: 1,
+  currency: 'PKR',
   timeZone: 'UTC',
   status: 'Active',
 };
@@ -51,7 +54,8 @@ const buildBusinessFormData = (
     email: safeString(source?.email),
     address: safeString(source?.address),
     taxNumber: safeString(source?.taxNumber),
-    currency: safeString(source?.currency, 'USD') || 'USD',
+    currencyId: Number(source?.currencyId ?? 0) || 1,
+    currency: safeString(source?.currency, 'PKR') || 'PKR',
     timeZone: safeString(source?.timeZone, 'UTC') || 'UTC',
     status: safeString(source?.status, statusFromActive ?? 'Active') || 'Active',
   };
@@ -74,9 +78,27 @@ const BusinessForm: React.FC<BusinessFormProps> = ({
   const [errors, setErrors] = useState<Partial<Record<keyof BusinessFormData | 'logoFile', string>>>({});
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
-  const [existingLogoUrl, setExistingLogoUrl] = useState<string | null>(null);
   const [removeLogo, setRemoveLogo] = useState(false);
+  const [currencies, setCurrencies] = useState<CurrencyDto[]>([]);
+  const [currenciesLoading, setCurrenciesLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadCurrencies = async () => {
+      setCurrenciesLoading(true);
+      try {
+        const rows = await masterDataService.getCurrencies();
+        if (!cancelled) setCurrencies(rows);
+      } catch {
+        if (!cancelled) setCurrencies([]);
+      } finally {
+        if (!cancelled) setCurrenciesLoading(false);
+      }
+    };
+    void loadCurrencies();
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     setFormData(buildBusinessFormData(safeInitialData));
@@ -86,15 +108,6 @@ const BusinessForm: React.FC<BusinessFormProps> = ({
 
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
-    }
-
-    const businessId = Number(safeInitialData?.id ?? 0);
-    const hasLogo = Boolean(safeInitialData?.hasLogo);
-
-    if (businessId > 0 && hasLogo) {
-      setExistingLogoUrl(BusinessService.getLogoUrl(businessId));
-    } else {
-      setExistingLogoUrl(null);
     }
   }, [safeInitialData]);
 
@@ -109,7 +122,10 @@ const BusinessForm: React.FC<BusinessFormProps> = ({
     return undefined;
   }, [logoFile]);
 
-  const previewSource = logoPreviewUrl ?? (removeLogo ? null : existingLogoUrl);
+  const businessId = Number(safeInitialData?.id ?? 0);
+  const hasLogo = Boolean(safeInitialData?.hasLogo);
+  const showStoredLogo = businessId > 0 && hasLogo && !removeLogo && !logoFile;
+  const showPreview = Boolean(logoPreviewUrl || showStoredLogo);
 
   const validateForm = () => {
     const nextErrors: Partial<Record<keyof BusinessFormData | 'logoFile', string>> = {};
@@ -124,6 +140,10 @@ const BusinessForm: React.FC<BusinessFormProps> = ({
 
     if (!formData.timeZone.trim()) {
       nextErrors.timeZone = 'Time zone is required';
+    }
+
+    if (formData.currencyId <= 0) {
+      nextErrors.currencyId = 'Currency is required';
     }
 
     if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
@@ -148,6 +168,22 @@ const BusinessForm: React.FC<BusinessFormProps> = ({
     setErrors((prev) => ({ ...prev, [name]: '' }));
   };
 
+  const handleCurrencyChange = (name: string, value: string | number) => {
+    const currencyId = Number(value);
+    const selected = currencies.find((c) => c.id === currencyId);
+    setFormData((prev) => ({
+      ...prev,
+      currencyId,
+      currency: selected?.code ?? prev.currency,
+    }));
+    setErrors((prev) => ({ ...prev, currencyId: '' }));
+  };
+
+  const currencyOptions = useMemo(
+    () => currencies.map((c) => ({ label: `${c.code} — ${c.name}`, value: c.id })),
+    [currencies],
+  );
+
   const handleLogoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;
     setLogoFile(file);
@@ -171,10 +207,6 @@ const BusinessForm: React.FC<BusinessFormProps> = ({
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
-
-    const businessId = Number(safeInitialData?.id ?? 0);
-    const hasLogo = Boolean(safeInitialData?.hasLogo);
-    setExistingLogoUrl(businessId > 0 && hasLogo ? BusinessService.getLogoUrl(businessId) : null);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -241,12 +273,17 @@ const BusinessForm: React.FC<BusinessFormProps> = ({
               placeholder="Enter tax number"
             />
 
-            <FormInput
+            <SearchableSelect
               label="Currency"
-              name="currency"
-              value={formData.currency}
-              onChange={handleChange}
-              placeholder="USD"
+              name="currencyId"
+              value={formData.currencyId || ''}
+              onChange={handleCurrencyChange}
+              placeholder={currenciesLoading ? 'Loading currencies…' : 'Select currency'}
+              options={currencyOptions}
+              required
+              error={errors.currencyId}
+              disabled={currenciesLoading}
+              loading={currenciesLoading}
             />
 
             <FormInput
@@ -299,15 +336,23 @@ const BusinessForm: React.FC<BusinessFormProps> = ({
               <p className="mt-1 text-xs text-gray-500">JPEG, PNG, GIF, or WebP up to 5 MB.</p>
             </div>
 
-            {previewSource && (
+            {showPreview && (
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-800 mb-2">Logo Preview</label>
                 <div className="flex items-center gap-4">
-                  <img
-                    src={previewSource}
-                    alt="Business logo preview"
-                    className="h-20 w-20 rounded-lg border border-gray-200 object-contain bg-white"
-                  />
+                  {logoPreviewUrl ? (
+                    <img
+                      src={logoPreviewUrl}
+                      alt="Business logo preview"
+                      className="h-20 w-20 rounded-lg border border-gray-200 object-contain bg-white"
+                    />
+                  ) : showStoredLogo ? (
+                    <AuthenticatedImage
+                      endpoint={`/businesses/${businessId}/logo`}
+                      alt="Business logo preview"
+                      className="h-20 w-20 rounded-lg border border-gray-200 object-contain bg-white"
+                    />
+                  ) : null}
                   <button
                     type="button"
                     onClick={handleRemoveLogo}

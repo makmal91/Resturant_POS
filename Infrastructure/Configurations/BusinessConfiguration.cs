@@ -11,6 +11,7 @@ public class BusinessConfiguration : IEntityTypeConfiguration<Business>
         builder.Ignore(b => b.BusinessId);
         builder.Ignore(b => b.BranchId);
         builder.Ignore(b => b.Branches);
+        builder.Ignore(b => b.CurrencyEntity);
 
         builder.HasKey(b => b.Id);
 
@@ -45,6 +46,9 @@ public class BusinessConfiguration : IEntityTypeConfiguration<Business>
         builder.Property(b => b.Currency)
             .IsRequired()
             .HasMaxLength(10);
+
+        // Mapped when DB column exists (see MasterDataDatabaseInitializer); ignored so queries work on older schemas.
+        builder.Ignore(b => b.CurrencyId);
 
         builder.Property(b => b.TimeZone)
             .IsRequired()

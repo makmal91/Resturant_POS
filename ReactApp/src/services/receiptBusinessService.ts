@@ -1,5 +1,6 @@
 import apiClient from './api';
 import { BusinessService } from './apiService';
+import { sidebarService } from './menuService';
 import type { ReceiptBusinessInfo } from '../components/receipt/receiptUtils';
 
 const normalizeBusiness = (raw: Record<string, unknown>): ReceiptBusinessInfo => ({
@@ -26,6 +27,20 @@ export const resolveSessionBusinessId = (userBusinessId?: number | null): number
   return stored > 0 ? stored : 0;
 };
 
+const buildFallbackBusiness = (businessId: number, name = ''): ReceiptBusinessInfo => ({
+  id: businessId,
+  name: name || 'Business',
+  legalName: name || 'Business',
+  address: '',
+  phone: '',
+  email: '',
+  currency: 'USD',
+  taxNumber: '',
+  hasLogo: false,
+  slogan: null,
+  website: null,
+});
+
 export const receiptBusinessService = {
   async getMyBusinessInfo(): Promise<ReceiptBusinessInfo | null> {
     try {
@@ -43,16 +58,35 @@ export const receiptBusinessService = {
     const fromMy = await this.getMyBusinessInfo();
     if (fromMy) return fromMy;
 
-    if (businessId <= 0) return null;
-    try {
-      const response = await BusinessService.getById(businessId);
-      const payload = response.data as Record<string, unknown>;
-      const detail = (payload.data ?? payload) as Record<string, unknown>;
-      const normalized = normalizeBusiness(detail);
-      return normalized.id > 0 ? normalized : null;
-    } catch {
-      return null;
+    if (businessId > 0) {
+      try {
+        const response = await BusinessService.getById(businessId);
+        const payload = response.data as Record<string, unknown>;
+        const detail = (payload.data ?? payload) as Record<string, unknown>;
+        const normalized = normalizeBusiness(detail);
+        if (normalized.id > 0) return normalized;
+      } catch {
+        /* try fallbacks below */
+      }
     }
+
+    try {
+      const sidebarInfo = await sidebarService.getBusinessInfo();
+      if (sidebarInfo.id > 0) {
+        return {
+          ...buildFallbackBusiness(sidebarInfo.id, sidebarInfo.name),
+          hasLogo: sidebarInfo.hasLogo,
+        };
+      }
+    } catch {
+      /* ignore */
+    }
+
+    if (businessId > 0) {
+      return buildFallbackBusiness(businessId);
+    }
+
+    return null;
   },
 
   async getLogoObjectUrl(businessId: number): Promise<string | null> {
@@ -69,7 +103,11 @@ export const receiptBusinessService = {
         });
         return URL.createObjectURL(response.data as Blob);
       } catch {
-        return null;
+        try {
+          return await sidebarService.getBusinessLogoUrl();
+        } catch {
+          return null;
+        }
       }
     }
   },

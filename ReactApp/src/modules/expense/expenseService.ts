@@ -7,6 +7,7 @@ export interface ExpenseDto {
   id: number;
   branchId: number;
   branchName: string;
+  expenseCategoryId: number;
   categoryName: string;
   description: string;
   amount: number;
@@ -21,7 +22,7 @@ export interface ExpenseDto {
 
 export interface CreateExpenseDto {
   branchId: number;
-  categoryName: string;
+  expenseCategoryId: number;
   description: string;
   amount: number;
   paymentMethod: ExpensePaymentMethod;

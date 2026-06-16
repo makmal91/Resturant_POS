@@ -15,7 +15,6 @@ public class CustomerConfiguration : IEntityTypeConfiguration<Customer>
         builder.Property(c => c.Phone).HasMaxLength(20);
         builder.Property(c => c.Email).HasMaxLength(150);
         builder.Property(c => c.Address).HasMaxLength(500);
-        builder.Property(c => c.City).HasMaxLength(100);
         builder.Property(c => c.CNIC).HasMaxLength(20);
         builder.Property(c => c.CustomerType).HasConversion<int>();
         builder.Property(c => c.OpeningBalance).HasColumnType("decimal(18,2)");
@@ -36,6 +35,12 @@ public class CustomerConfiguration : IEntityTypeConfiguration<Customer>
             .IsUnique()
             .HasFilter("[CustomerCode] <> '' AND [IsDeleted] = 0")
             .HasDatabaseName("idx_customer_branch_code");
+
+        builder.Ignore(c => c.Country);
+        builder.Ignore(c => c.City);
+
+        builder.HasIndex(c => c.CountryId).HasDatabaseName("idx_customer_countryid");
+        builder.HasIndex(c => c.CityId).HasDatabaseName("idx_customer_cityid");
 
         builder.HasMany(c => c.Orders)
             .WithOne(o => o.Customer)
