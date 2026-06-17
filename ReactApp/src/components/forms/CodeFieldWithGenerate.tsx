@@ -17,6 +17,8 @@ interface CodeFieldWithGenerateProps {
   required?: boolean;
   /** When true, shows the existing code read-only without fetching a new one. */
   isEditMode?: boolean;
+  /** Increment to request a fresh auto-generated code (create mode only). */
+  resetKey?: number | string;
   /** Match compact inputs (e.g. ProductForm) instead of standard FormInput spacing. */
   variant?: 'default' | 'compact';
 }
@@ -33,6 +35,7 @@ const CodeFieldWithGenerate: React.FC<CodeFieldWithGenerateProps> = ({
   disabled = false,
   required = false,
   isEditMode = false,
+  resetKey,
   variant = 'default',
 }) => {
   const selectedBranchId = useBranchStore((state) => state.selectedBranchId);
@@ -96,7 +99,7 @@ const CodeFieldWithGenerate: React.FC<CodeFieldWithGenerateProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [module, effectiveBranchId, shouldAutoGenerate, branchReady, isEditMode, disabled]);
+  }, [module, effectiveBranchId, shouldAutoGenerate, branchReady, isEditMode, disabled, resetKey]);
 
   const displayPlaceholder = isEditMode
     ? ''

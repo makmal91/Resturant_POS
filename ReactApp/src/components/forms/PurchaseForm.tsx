@@ -41,6 +41,7 @@ interface VariantOption {
   id: number;
   variantName: string;
   sku: string;
+  costPriceOverride?: number | null;
 }
 
 interface UnitOption {
@@ -48,6 +49,7 @@ interface UnitOption {
   unitName: string;
   conversionFactor: number;
   isBaseUnit: boolean;
+  costPrice?: number | null;
 }
 
 interface ItemRow {
@@ -65,7 +67,27 @@ interface ItemRow {
   variants: VariantOption[];
   units: UnitOption[];
   isVariantEnabled: boolean;
+  productCostPrice: number;
 }
+
+const resolvePurchaseCostPrice = (
+  productCostPrice: number,
+  units: UnitOption[],
+  unitId: number,
+  variantId: number | null,
+  variants: VariantOption[]
+): number => {
+  const unit = units.find((u) => u.id === unitId);
+  const variant = variantId != null ? variants.find((v) => v.id === variantId) : undefined;
+
+  if (unit?.costPrice != null && unit.costPrice > 0) {
+    return unit.costPrice;
+  }
+
+  const baseCost = variant?.costPriceOverride ?? productCostPrice;
+  const factor = unit?.conversionFactor ?? 1;
+  return baseCost * factor;
+};
 
 export type PurchaseSubmitMode = 'draft' | 'post';
 
@@ -107,6 +129,7 @@ const emptyRow = (): ItemRow => ({
   variants: [],
   units: [],
   isVariantEnabled: false,
+  productCostPrice: 0,
 });
 
 const buildRowsFromInitial = (
@@ -137,6 +160,7 @@ const buildRowsFromInitial = (
     variants: [],
     units: [],
     isVariantEnabled: Boolean(item.variantId),
+    productCostPrice: Number(item.costPrice ?? 0),
   }));
 };
 
@@ -151,9 +175,11 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
   isLoading = false,
 }) => {
   const isPosted = initialData?.status === 'Posted';
+  const isEditMode = Number(initialData?.id ?? 0) > 0;
   const { branchId, branchError } = useFormBranchId(initialData?.branchId);
 
   const [invoiceNo, setInvoiceNo] = useState(safeString(initialData?.invoiceNo));
+  const [invoiceCodeResetKey, setInvoiceCodeResetKey] = useState(0);
   const [supplierId, setSupplierId] = useState(Number(initialData?.supplierId ?? 0));
   const [warehouseId, setWarehouseId] = useState(Number(initialData?.warehouseId ?? 0));
   const [purchaseDate, setPurchaseDate] = useState(
@@ -258,6 +284,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
 
     let units: UnitOption[] = [];
     let variants: VariantOption[] = [];
+    let productCostPrice = 0;
 
     // isVariantEnabled from the detail call is the source of truth
     let isVariantEnabledFromDetail = false;
@@ -271,17 +298,26 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
 
       // Read isVariantEnabled from the detail response (more reliable than the list response)
       isVariantEnabledFromDetail = Boolean(d.isVariantEnabled ?? d.IsVariantEnabled ?? false);
+      productCostPrice = Number(d.costPrice ?? d.CostPrice ?? 0);
 
       units = ((d.units ?? d.Units) as Record<string, unknown>[] | undefined ?? []).map((u) => ({
         id: Number(u.id ?? u.Id ?? 0),
         unitName: String(u.unitName ?? u.UnitName ?? ''),
         conversionFactor: Number(u.conversionFactor ?? u.ConversionFactor ?? 1),
         isBaseUnit: Boolean(u.isBaseUnit ?? u.IsBaseUnit ?? false),
+        costPrice:
+          u.costPrice != null || u.CostPrice != null
+            ? Number(u.costPrice ?? u.CostPrice ?? 0)
+            : null,
       }));
       variants = ((d.variants ?? d.Variants) as Record<string, unknown>[] | undefined ?? []).map((v) => ({
         id: Number(v.id ?? v.Id ?? 0),
         variantName: String(v.variantName ?? v.VariantName ?? ''),
         sku: String(v.sku ?? v.SKU ?? ''),
+        costPriceOverride:
+          v.costPriceOverride != null || v.CostPriceOverride != null
+            ? Number(v.costPriceOverride ?? v.CostPriceOverride ?? 0)
+            : null,
       }));
     } catch {
       /* keep empty */
@@ -290,6 +326,15 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     // Treat the product as variant-enabled if either the flag is set or variants were actually returned
     const hasVariants = isVariantEnabledFromDetail || variants.length > 0;
     const baseUnit = units.find((u) => u.isBaseUnit) ?? units[0];
+    const selectedVariantId = hasVariants && variants.length > 0 ? variants[0].id : null;
+    const selectedUnitId = baseUnit?.id ?? 0;
+    const costPrice = resolvePurchaseCostPrice(
+      productCostPrice,
+      units,
+      selectedUnitId,
+      selectedVariantId,
+      variants
+    );
 
     setRows((prev) =>
       prev.map((r) =>
@@ -301,13 +346,15 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
               productCode: product.productCode,
               isVariantEnabled: hasVariants,
               // Auto-select first variant so the field is never blank
-              variantId: hasVariants && variants.length > 0 ? variants[0].id : null,
-              unitId: baseUnit?.id ?? 0,
+              variantId: selectedVariantId,
+              unitId: selectedUnitId,
               unitName: baseUnit?.unitName ?? '',
               conversionFactor: baseUnit?.conversionFactor ?? 1,
+              costPrice,
               units,
               variants,
-              totalCost: r.quantity * r.costPrice,
+              productCostPrice,
+              totalCost: r.quantity * costPrice,
             }
           : r
       )
@@ -327,14 +374,33 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
             updated.conversionFactor = unit.conversionFactor;
           }
         }
+        if ('unitId' in field || 'variantId' in field) {
+          updated.costPrice = resolvePurchaseCostPrice(
+            updated.productCostPrice,
+            updated.units,
+            updated.unitId,
+            updated.variantId,
+            updated.variants
+          );
+          updated.totalCost = updated.quantity * updated.costPrice;
+        }
         return updated;
       })
     );
   };
 
+  const resetRow = (key: string) => {
+    setRows((prev) =>
+      prev.map((r) => (r.key === key ? { ...emptyRow(), key: r.key } : r))
+    );
+  };
+
   const removeRow = (key: string) => {
-    if (rows.length === 1) return;
-    setRows((prev) => prev.filter((r) => r.key !== key));
+    if (rows.length <= 1) {
+      resetRow(key);
+    } else {
+      setRows((prev) => prev.filter((r) => r.key !== key));
+    }
     if (searchRowKey === key) closeSearch();
   };
 
@@ -364,6 +430,9 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
 
   const handleReset = () => {
     setInvoiceNo(safeString(initialData?.invoiceNo));
+    if (!isEditMode) {
+      setInvoiceCodeResetKey((key) => key + 1);
+    }
     setSupplierId(Number(initialData?.supplierId ?? 0));
     setWarehouseId(Number(initialData?.warehouseId ?? 0));
     setPurchaseDate(
@@ -427,7 +496,8 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
             module={CODE_MODULES.Purchase}
             branchId={branchId}
             error={errors.invoiceNo}
-            isEditMode={Number(initialData?.id ?? 0) > 0}
+            isEditMode={isEditMode}
+            resetKey={invoiceCodeResetKey}
           />
 
           <FormInput
@@ -517,7 +587,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
 
           <div className="rounded-lg border border-gray-200 bg-white shadow-sm">
             {/* Table header */}
-            <div className="grid grid-cols-[2fr_1.5fr_1.2fr_80px_80px_90px_90px_32px] gap-0 border-b border-gray-200 bg-gray-50 px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-gray-500">
+            <div className="grid grid-cols-[2fr_1.5fr_1.2fr_80px_80px_90px_90px_72px] gap-0 border-b border-gray-200 bg-gray-50 px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-gray-500">
               <div>Product</div>
               <div>Variant</div>
               <div>Unit</div>
@@ -525,7 +595,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
               <div className="text-right">Base Qty</div>
               <div className="text-right">Cost</div>
               <div className="text-right">Total</div>
-              <div />
+              <div className="text-center">Actions</div>
             </div>
 
             {/* Rows */}
@@ -533,32 +603,13 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
               {rows.map((row, idx) => (
                 <div
                   key={row.key}
-                  className={`grid grid-cols-[2fr_1.5fr_1.2fr_80px_80px_90px_90px_32px] items-center gap-0 px-3 py-2 transition-colors ${
+                  className={`grid grid-cols-[2fr_1.5fr_1.2fr_80px_80px_90px_90px_72px] items-center gap-0 px-3 py-2 transition-colors ${
                     row.productId > 0 ? 'bg-white' : 'bg-gray-50/50'
                   }`}
                 >
                   {/* Product cell with per-row search */}
                   <div className="pr-2">
-                    {row.productId > 0 ? (
-                      <div className="flex items-start gap-1.5">
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium text-gray-900">{row.productName}</p>
-                          {row.productCode && (
-                            <p className="text-xs text-gray-400">{row.productCode}</p>
-                          )}
-                        </div>
-                        <button
-                          type="button"
-                          title="Change product"
-                          onClick={() => openSearch(row.key)}
-                          className="mt-0.5 shrink-0 rounded p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                        >
-                          <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                          </svg>
-                        </button>
-                      </div>
-                    ) : searchRowKey === row.key ? (
+                    {searchRowKey === row.key ? (
                       <div className="relative" ref={searchDropdownRef}>
                         <div className="flex items-center gap-1 rounded-md border border-blue-400 bg-white px-2 py-1.5 ring-2 ring-blue-100">
                           <svg className="h-3.5 w-3.5 shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -569,7 +620,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                             type="text"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            placeholder="Search product..."
+                            placeholder={row.productId > 0 ? 'Search to change product…' : 'Search product…'}
                             className="min-w-0 flex-1 bg-transparent text-sm text-gray-900 placeholder-gray-400 outline-none"
                             onKeyDown={(e) => e.key === 'Escape' && closeSearch()}
                           />
@@ -579,6 +630,14 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
                             </svg>
                           )}
+                          <button
+                            type="button"
+                            onClick={closeSearch}
+                            title="Cancel"
+                            className="shrink-0 rounded px-1.5 py-0.5 text-xs font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+                          >
+                            Cancel
+                          </button>
                         </div>
                         {searchResults.length > 0 && (
                           <div className="absolute left-0 top-full z-50 mt-1 max-h-56 w-72 overflow-auto rounded-lg border border-gray-200 bg-white shadow-xl">
@@ -608,11 +667,28 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                           </div>
                         )}
                       </div>
+                    ) : row.productId > 0 ? (
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-gray-900">{row.productName}</p>
+                        {row.productCode && (
+                          <p className="text-xs text-gray-400">{row.productCode}</p>
+                        )}
+                        {!isPosted && (
+                          <button
+                            type="button"
+                            onClick={() => openSearch(row.key)}
+                            className="mt-1 text-xs font-medium text-blue-600 hover:text-blue-800 hover:underline"
+                          >
+                            Change
+                          </button>
+                        )}
+                      </div>
                     ) : (
                       <button
                         type="button"
                         onClick={() => openSearch(row.key)}
-                        className="flex items-center gap-1.5 rounded-md border border-dashed border-gray-300 px-2 py-1.5 text-xs text-gray-400 transition-colors hover:border-blue-400 hover:bg-blue-50 hover:text-blue-600"
+                        disabled={isPosted}
+                        className="flex items-center gap-1.5 rounded-md border border-dashed border-gray-300 px-2 py-1.5 text-xs text-gray-400 transition-colors hover:border-blue-400 hover:bg-blue-50 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -632,7 +708,8 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                             variantId: e.target.value ? Number(e.target.value) : null,
                           })
                         }
-                        className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        disabled={isPosted || row.productId <= 0}
+                        className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
                       >
                         <option value="">— Select —</option>
                         {row.variants.map((v) => (
@@ -654,7 +731,8 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                       <select
                         value={row.unitId}
                         onChange={(e) => updateRow(row.key, { unitId: Number(e.target.value) })}
-                        className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        disabled={isPosted || row.productId <= 0}
+                        className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
                       >
                         {row.units.map((u) => (
                           <option key={u.id} value={u.id}>
@@ -677,7 +755,8 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                       onChange={(e) =>
                         updateRow(row.key, { quantity: parseFloat(e.target.value) || 0 })
                       }
-                      className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-right text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      disabled={isPosted || row.productId <= 0}
+                      className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-right text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
                     />
                   </div>
 
@@ -700,7 +779,8 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                       onChange={(e) =>
                         updateRow(row.key, { costPrice: parseFloat(e.target.value) || 0 })
                       }
-                      className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-right text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      disabled={isPosted || row.productId <= 0}
+                      className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-right text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
                     />
                   </div>
 
@@ -711,19 +791,22 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                     </span>
                   </div>
 
-                  {/* Remove */}
-                  <div className="flex justify-center">
-                    <button
-                      type="button"
-                      onClick={() => removeRow(row.key)}
-                      disabled={rows.length === 1}
-                      title="Remove row"
-                      className="rounded p-1 text-gray-300 transition-colors hover:bg-red-50 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-20"
-                    >
-                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
+                  {/* Actions */}
+                  <div className="flex justify-center px-1">
+                    {!isPosted && (row.productId > 0 || rows.length > 1) ? (
+                      <button
+                        type="button"
+                        onClick={() => removeRow(row.key)}
+                        title="Remove line item"
+                        className="rounded p-1 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500"
+                      >
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    ) : (
+                      <span className="text-gray-200">—</span>
+                    )}
                   </div>
                 </div>
               ))}
