@@ -1,12 +1,13 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import DataTable, { type Column } from '../../components/DataTable';
 import Badge from '../../components/Badge';
 import { useBranchWriteAccess } from '../../hooks/useBranchWriteAccess';
 import { hasBranchContext } from '../../types/permissions';
 import { getApiErrorMessage } from '../../services/api';
 import { safeString } from '../../utils/safeValues';
-import { stockService, type StockBalance, type StockLedgerEntry, type StockLedgerType } from './stockService';
+import { stockService, type StockBalance, type StockLedgerEntry, type StockLedgerType, getStockStatus, stockStatusBadgeVariant, stockStatusLabel, stockStatusQtyColor } from './stockService';
 import { warehouseService, type WarehouseItem } from '../warehouse/warehouseService';
+import { productService, type ProductListItem } from '../product/productService';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -92,6 +93,13 @@ const StockLedgerPage: React.FC = () => {
   const [typeFilter, setTypeFilter] = useState<StockLedgerType | null>(null);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [selectedProductId, setSelectedProductId] = useState<number | null>(null);
+  const [selectedProductLabel, setSelectedProductLabel] = useState('');
+  const [productDropdownOpen, setProductDropdownOpen] = useState(false);
+  const [productSearchTerm, setProductSearchTerm] = useState('');
+  const [productSearchResults, setProductSearchResults] = useState<ProductListItem[]>([]);
+  const [productSearchLoading, setProductSearchLoading] = useState(false);
+  const productFilterRef = useRef<HTMLDivElement>(null);
 
   // Balance state
   const [balances, setBalances] = useState<StockBalance[]>([]);
@@ -115,7 +123,50 @@ const StockLedgerPage: React.FC = () => {
   }, [hasBranchSelection, selectedBranchId]);
 
   useEffect(() => { void loadWarehouses(); }, [loadWarehouses]);
-  useEffect(() => { setSelectedWarehouse(null); setWarehouses([]); }, [selectedBranchId]);
+  useEffect(() => {
+    setSelectedWarehouse(null);
+    setWarehouses([]);
+    setSelectedProductId(null);
+    setSelectedProductLabel('');
+    setProductSearchTerm('');
+    setProductSearchResults([]);
+    setProductDropdownOpen(false);
+  }, [selectedBranchId]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (productFilterRef.current && !productFilterRef.current.contains(event.target as Node)) {
+        setProductDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (!productDropdownOpen || !hasBranchSelection || selectedBranchId === null) return;
+
+    const timer = setTimeout(() => {
+      setProductSearchLoading(true);
+      void (async () => {
+        try {
+          const res = await productService.getAll(selectedBranchId, 1, 25, {
+            search: productSearchTerm.trim() || undefined,
+            status: true,
+            sortBy: 'productName',
+            sortDirection: 'asc',
+          });
+          setProductSearchResults(Array.isArray(res.data?.products) ? res.data.products : []);
+        } catch {
+          setProductSearchResults([]);
+        } finally {
+          setProductSearchLoading(false);
+        }
+      })();
+    }, productSearchTerm.trim() ? 250 : 0);
+
+    return () => clearTimeout(timer);
+  }, [productDropdownOpen, productSearchTerm, hasBranchSelection, selectedBranchId]);
 
   // ── Fetch ledger ─────────────────────────────────────────────────────────
   const fetchLedger = useCallback(async () => {
@@ -125,6 +176,7 @@ const StockLedgerPage: React.FC = () => {
       const res = await stockService.getLedger({
         branchId: selectedBranchId,
         warehouseId: selectedWarehouse ?? undefined,
+        productId: selectedProductId ?? undefined,
         type: typeFilter ?? undefined,
         dateFrom: dateFrom || undefined,
         dateTo: dateTo || undefined,
@@ -162,7 +214,7 @@ const StockLedgerPage: React.FC = () => {
     } finally {
       setLedgerLoading(false);
     }
-  }, [hasBranchSelection, selectedBranchId, selectedWarehouse, typeFilter, dateFrom, dateTo, ledgerPage, ledgerPageSize]);
+  }, [hasBranchSelection, selectedBranchId, selectedWarehouse, selectedProductId, typeFilter, dateFrom, dateTo, ledgerPage, ledgerPageSize]);
 
   // ── Fetch balances ───────────────────────────────────────────────────────
   const fetchBalances = useCallback(async () => {
@@ -172,7 +224,7 @@ const StockLedgerPage: React.FC = () => {
       const res = await stockService.getBalances(
         selectedBranchId,
         selectedWarehouse ?? undefined,
-        undefined,
+        selectedProductId ?? undefined,
         undefined,
         variantWise,
       );
@@ -191,6 +243,11 @@ const StockLedgerPage: React.FC = () => {
             quantity: Number(
               r.quantity ?? r.Quantity ?? r.closingBalance ?? r.ClosingBalance ?? 0,
             ),
+            enableLowStockAlert: Boolean(r.enableLowStockAlert ?? r.EnableLowStockAlert ?? false),
+            lowStockAlertLevel:
+              r.lowStockAlertLevel != null || r.LowStockAlertLevel != null
+                ? Number(r.lowStockAlertLevel ?? r.LowStockAlertLevel)
+                : null,
           } as StockBalance;
         }),
       );
@@ -199,7 +256,7 @@ const StockLedgerPage: React.FC = () => {
     } finally {
       setBalanceLoading(false);
     }
-  }, [hasBranchSelection, selectedBranchId, selectedWarehouse, variantWise]);
+  }, [hasBranchSelection, selectedBranchId, selectedWarehouse, selectedProductId, variantWise]);
 
   useEffect(() => {
     if (!hasBranchSelection) return;
@@ -207,14 +264,14 @@ const StockLedgerPage: React.FC = () => {
     else void fetchBalances();
   }, [viewMode, fetchLedger, fetchBalances, hasBranchSelection]);
 
-  useEffect(() => { setLedgerPage(1); }, [selectedWarehouse, typeFilter, dateFrom, dateTo, ledgerPageSize]);
+  useEffect(() => { setLedgerPage(1); }, [selectedWarehouse, selectedProductId, typeFilter, dateFrom, dateTo, ledgerPageSize]);
 
   // ── Summary stats for balances ───────────────────────────────────────────
   const balanceStats = useMemo(() => ({
     total: balances.length,
-    inStock: balances.filter((b) => b.quantity > 0).length,
-    lowStock: balances.filter((b) => b.quantity > 0 && b.quantity < 10).length,
-    outOfStock: balances.filter((b) => b.quantity <= 0).length,
+    inStock: balances.filter((b) => getStockStatus(b.quantity, b) === 'in_stock').length,
+    lowStock: balances.filter((b) => getStockStatus(b.quantity, b) === 'low_stock').length,
+    outOfStock: balances.filter((b) => getStockStatus(b.quantity, b) === 'out_of_stock').length,
   }), [balances]);
 
   // ── Ledger total amount ──────────────────────────────────────────────────
@@ -372,9 +429,9 @@ const StockLedgerPage: React.FC = () => {
       sortable: true,
       render: (v, row) => {
         const qty = Number(v ?? row.quantity ?? 0);
-        const color = qty <= 0 ? 'text-red-700' : qty < 10 ? 'text-yellow-700' : 'text-green-700';
+        const status = getStockStatus(qty, row);
         return (
-          <span className={`text-base font-bold tabular-nums ${color}`}>
+          <span className={`text-base font-bold tabular-nums ${stockStatusQtyColor(status)}`}>
             {formatQty(qty)}
           </span>
         );
@@ -385,11 +442,12 @@ const StockLedgerPage: React.FC = () => {
       header: 'Status',
       render: (v, row) => {
         const qty = Number(v ?? row.quantity ?? 0);
-        if (qty <= 0)
-          return <Badge variant="danger" size="sm" dot>Out of Stock</Badge>;
-        if (qty < 10)
-          return <Badge variant="warning" size="sm" dot>Low Stock</Badge>;
-        return <Badge variant="success" size="sm" dot>In Stock</Badge>;
+        const status = getStockStatus(qty, row);
+        return (
+          <Badge variant={stockStatusBadgeVariant(status)} size="sm" dot>
+            {stockStatusLabel(status)}
+          </Badge>
+        );
       },
     },
   ], [variantWise]);
@@ -451,6 +509,90 @@ const StockLedgerPage: React.FC = () => {
                   <option key={w.id} value={w.id}>{w.name}</option>
                 ))}
               </select>
+            </div>
+
+            {/* Product filter */}
+            <div ref={productFilterRef} className="relative min-w-[220px]">
+              <label className="mb-1 block text-xs font-medium text-gray-500">Product</label>
+              <button
+                type="button"
+                onClick={() => setProductDropdownOpen((open) => !open)}
+                className="flex w-full min-w-[220px] items-center justify-between gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-left text-sm focus:border-blue-500 focus:outline-none"
+              >
+                <span className={selectedProductId ? 'text-gray-900' : 'text-gray-500'}>
+                  {selectedProductLabel || 'All Products'}
+                </span>
+                <svg className="h-4 w-4 shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {productDropdownOpen && (
+                <div className="absolute z-50 mt-1 w-full min-w-[280px] rounded-lg border border-gray-200 bg-white shadow-lg">
+                  <div className="border-b border-gray-100 p-2">
+                    <input
+                      type="text"
+                      value={productSearchTerm}
+                      onChange={(e) => setProductSearchTerm(e.target.value)}
+                      placeholder="Search product name or code…"
+                      autoFocus
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+                  <ul className="max-h-56 overflow-y-auto py-1">
+                    <li>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedProductId(null);
+                          setSelectedProductLabel('');
+                          setProductDropdownOpen(false);
+                          setProductSearchTerm('');
+                        }}
+                        className={`w-full px-3 py-2 text-left text-sm hover:bg-blue-50 ${
+                          !selectedProductId ? 'bg-blue-50 font-medium text-blue-700' : 'text-gray-800'
+                        }`}
+                      >
+                        All Products
+                      </button>
+                    </li>
+                    {productSearchLoading ? (
+                      <li className="px-3 py-2 text-sm text-gray-500">Searching…</li>
+                    ) : productSearchResults.length === 0 ? (
+                      <li className="px-3 py-2 text-sm text-gray-500">No products found</li>
+                    ) : (
+                      productSearchResults.map((product) => {
+                        const label = product.productCode
+                          ? `${product.productName} (${product.productCode})`
+                          : product.productName;
+                        return (
+                          <li key={product.id}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedProductId(product.id);
+                                setSelectedProductLabel(label);
+                                setProductDropdownOpen(false);
+                                setProductSearchTerm('');
+                              }}
+                              className={`w-full px-3 py-2 text-left text-sm hover:bg-blue-50 ${
+                                selectedProductId === product.id
+                                  ? 'bg-blue-50 font-medium text-blue-700'
+                                  : 'text-gray-800'
+                              }`}
+                            >
+                              <span className="block font-medium">{product.productName}</span>
+                              {product.productCode && (
+                                <span className="block text-xs text-gray-500">{product.productCode}</span>
+                              )}
+                            </button>
+                          </li>
+                        );
+                      })
+                    )}
+                  </ul>
+                </div>
+              )}
             </div>
 
             {viewMode === 'balances' && (
@@ -558,6 +700,9 @@ const StockLedgerPage: React.FC = () => {
                 {typeFilter && (
                   <span> · filtered by <strong>{TYPE_LABEL[typeFilter]}</strong></span>
                 )}
+                {selectedProductLabel && (
+                  <span> · product <strong>{selectedProductLabel}</strong></span>
+                )}
               </span>
               <span className="text-sm font-semibold text-blue-900">
                 Page total: {formatCurrency(ledgerPageTotal)}
@@ -574,8 +719,8 @@ const StockLedgerPage: React.FC = () => {
               searchable
               searchPlaceholder="Search by product or warehouse…"
               emptyMessage={
-                selectedWarehouse
-                  ? 'No stock found for the selected warehouse.'
+                selectedWarehouse || selectedProductId
+                  ? 'No stock found for the selected filters.'
                   : 'No stock entries found. Post a purchase to update stock.'
               }
             />
@@ -589,7 +734,7 @@ const StockLedgerPage: React.FC = () => {
               pageSizeOptions={[25, 50, 100]}
               onPageSizeChange={(n) => { setLedgerPageSize(n); setLedgerPage(1); }}
               emptyMessage={
-                typeFilter || dateFrom || dateTo
+                typeFilter || dateFrom || dateTo || selectedProductId
                   ? 'No ledger entries match the current filters.'
                   : 'No ledger entries found. Post a purchase to create ledger entries.'
               }

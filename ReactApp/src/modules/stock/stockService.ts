@@ -40,6 +40,47 @@ export interface StockBalance {
   warehouseId: number;
   warehouseName: string;
   quantity: number;
+  enableLowStockAlert?: boolean;
+  lowStockAlertLevel?: number | null;
+}
+
+export interface StockAlertSettings {
+  enableLowStockAlert?: boolean;
+  lowStockAlertLevel?: number | null;
+}
+
+export type StockStatus = 'out_of_stock' | 'low_stock' | 'in_stock';
+
+export function getStockStatus(qty: number, settings?: StockAlertSettings): StockStatus {
+  if (qty <= 0) return 'out_of_stock';
+  if (
+    settings?.enableLowStockAlert &&
+    settings.lowStockAlertLevel != null &&
+    qty <= settings.lowStockAlertLevel
+  ) {
+    return 'low_stock';
+  }
+  return 'in_stock';
+}
+
+export function stockStatusBadgeVariant(
+  status: StockStatus,
+): 'danger' | 'warning' | 'success' {
+  if (status === 'out_of_stock') return 'danger';
+  if (status === 'low_stock') return 'warning';
+  return 'success';
+}
+
+export function stockStatusLabel(status: StockStatus): string {
+  if (status === 'out_of_stock') return 'Out of Stock';
+  if (status === 'low_stock') return 'Low Stock';
+  return 'In Stock';
+}
+
+export function stockStatusQtyColor(status: StockStatus): string {
+  if (status === 'out_of_stock') return 'text-red-700';
+  if (status === 'low_stock') return 'text-yellow-700';
+  return 'text-green-700';
 }
 
 export interface StockTransferPayload {

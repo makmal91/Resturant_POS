@@ -51,6 +51,8 @@ export interface StockSummaryItem {
   productId: number;
   productName: string;
   closingBalance: number;
+  enableLowStockAlert?: boolean;
+  lowStockAlertLevel?: number | null;
 }
 
 export interface StockSummaryResponse {

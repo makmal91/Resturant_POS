@@ -230,21 +230,26 @@ public class ReportsController : ControllerBase
 
         var productIds = balances.Select(b => b.ProductId).ToList();
 
-        var products = productIds.Count > 0
+        var productRows = productIds.Count > 0
             ? await _db.Products.AsNoTracking()
                 .Where(p => productIds.Contains(p.Id))
-                .ToDictionaryAsync(p => p.Id, p => p.ProductName)
-            : new Dictionary<int, string>();
+                .Select(p => new { p.Id, p.ProductName, p.EnableLowStockAlert, p.LowStockAlertLevel })
+                .ToListAsync()
+            : [];
+
+        var productMap = productRows.ToDictionary(p => p.Id);
 
         var items = balances.Select(b =>
         {
-            products.TryGetValue(b.ProductId, out var productName);
+            productMap.TryGetValue(b.ProductId, out var product);
 
             return new
             {
-                productId      = b.ProductId,
-                productName    = productName ?? "Unknown",
-                closingBalance = b.ClosingBalance,
+                productId            = b.ProductId,
+                productName          = product?.ProductName ?? "Unknown",
+                closingBalance       = b.ClosingBalance,
+                enableLowStockAlert  = product?.EnableLowStockAlert ?? false,
+                lowStockAlertLevel   = product?.LowStockAlertLevel,
             };
         }).ToList();
 

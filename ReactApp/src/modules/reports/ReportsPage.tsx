@@ -7,6 +7,12 @@ import { getApiErrorMessage } from '../../services/api';
 import { safeString } from '../../utils/safeValues';
 import { warehouseService, type WarehouseItem } from '../warehouse/warehouseService';
 import {
+  getStockStatus,
+  stockStatusBadgeVariant,
+  stockStatusLabel,
+  stockStatusQtyColor,
+} from '../stock/stockService';
+import {
   reportService,
   type SalesByProductRow,
   type SalesSummaryDto,
@@ -145,6 +151,11 @@ const ReportsPage: React.FC = () => {
             productId: Number(row.productId ?? row.ProductId ?? 0),
             productName: String(row.productName ?? row.ProductName ?? ''),
             closingBalance: Number(row.closingBalance ?? row.ClosingBalance ?? row.quantity ?? row.Quantity ?? 0),
+            enableLowStockAlert: Boolean(row.enableLowStockAlert ?? row.EnableLowStockAlert ?? false),
+            lowStockAlertLevel:
+              row.lowStockAlertLevel != null || row.LowStockAlertLevel != null
+                ? Number(row.lowStockAlertLevel ?? row.LowStockAlertLevel)
+                : null,
           }))
         : [];
       setStockSummary(raw ? { ...raw, items } : null);
@@ -185,9 +196,23 @@ const ReportsPage: React.FC = () => {
       sortable: true,
       render: (v, row) => {
         const q = Number(v ?? row.closingBalance ?? 0);
+        const status = getStockStatus(q, row);
         return (
-          <Badge variant={q <= 0 ? 'danger' : q <= 5 ? 'warning' : 'success'} size="sm">
+          <span className={`font-semibold tabular-nums ${stockStatusQtyColor(status)}`}>
             {fmtQty(q)}
+          </span>
+        );
+      },
+    },
+    {
+      key: 'closingBalance',
+      header: 'Status',
+      render: (v, row) => {
+        const q = Number(v ?? row.closingBalance ?? 0);
+        const status = getStockStatus(q, row);
+        return (
+          <Badge variant={stockStatusBadgeVariant(status)} size="sm" dot>
+            {stockStatusLabel(status)}
           </Badge>
         );
       },

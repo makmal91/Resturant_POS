@@ -12,6 +12,8 @@ public class StockBalanceDto
     public int WarehouseId { get; set; }
     public string WarehouseName { get; set; } = string.Empty;
     public decimal Quantity { get; set; }
+    public bool EnableLowStockAlert { get; set; }
+    public decimal? LowStockAlertLevel { get; set; }
 }
 
 public class StockLedgerDto

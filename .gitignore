@@ -29,6 +29,14 @@ logs/
 .env.test.local
 .env.production.local
 
+# License — customer files and secrets (see docs/LICENSE_DEPLOYMENT.md)
+API/licenses/*.lic
+!API/licenses/.gitkeep
+
+# Local overrides with private keys (optional pattern)
+**/appsettings.*.local.json
+Tools/LicenseGenerator/appsettings.local.json
+
 # IDE
 .vscode/
 .idea/

@@ -128,7 +128,7 @@ public class StockLedgerRepository : IStockLedgerRepository
         var products = await _context.Products
             .IgnoreQueryFilters()
             .Where(p => productIds.Contains(p.Id))
-            .Select(p => new { p.Id, p.ProductName, p.ProductCode })
+            .Select(p => new { p.Id, p.ProductName, p.ProductCode, p.EnableLowStockAlert, p.LowStockAlertLevel })
             .ToListAsync();
 
         var variantMap = new Dictionary<int, string>();
@@ -155,21 +155,26 @@ public class StockLedgerRepository : IStockLedgerRepository
                 warehouseMap[wh.Id] = wh.Name;
         }
 
-        var productMap = products.ToDictionary(p => p.Id, p => (p.ProductName, p.ProductCode));
+        var productMap = products.ToDictionary(
+            p => p.Id,
+            p => (p.ProductName, p.ProductCode, p.EnableLowStockAlert, p.LowStockAlertLevel));
 
         return balanceList.Select(b =>
         {
             var whId = warehouseId ?? b.WarehouseId;
+            productMap.TryGetValue(b.ProductId, out var p);
             return new StockBalanceDto
             {
-                ProductId     = b.ProductId,
-                ProductName   = productMap.TryGetValue(b.ProductId, out var p) ? p.ProductName : string.Empty,
-                ProductCode   = productMap.TryGetValue(b.ProductId, out var pc) ? pc.ProductCode : string.Empty,
-                VariantId     = variantWise ? b.VariantId : null,
-                VariantName   = variantWise && b.VariantId.HasValue && variantMap.TryGetValue(b.VariantId.Value, out var vn) ? vn : null,
-                WarehouseId   = whId,
-                WarehouseName = warehouseMap.TryGetValue(whId, out var w) ? w : string.Empty,
-                Quantity      = b.Quantity,
+                ProductId             = b.ProductId,
+                ProductName           = p.ProductName ?? string.Empty,
+                ProductCode           = p.ProductCode ?? string.Empty,
+                VariantId             = variantWise ? b.VariantId : null,
+                VariantName           = variantWise && b.VariantId.HasValue && variantMap.TryGetValue(b.VariantId.Value, out var vn) ? vn : null,
+                WarehouseId           = whId,
+                WarehouseName         = warehouseMap.TryGetValue(whId, out var w) ? w : string.Empty,
+                Quantity              = b.Quantity,
+                EnableLowStockAlert   = p.EnableLowStockAlert,
+                LowStockAlertLevel    = p.LowStockAlertLevel,
             };
         }).OrderBy(b => b.ProductName).ThenBy(b => b.VariantName).ToList();
     }
