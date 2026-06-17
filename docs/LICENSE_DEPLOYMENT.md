@@ -1,5 +1,7 @@
 # License System — Deployment & Git Guide
 
+> **Full step-by-step setup (RSA key generation → license → deploy):** see [`LICENSE_COMPLETE_SETUP.md`](./LICENSE_COMPLETE_SETUP.md)
+
 This document explains how the Restaurant POS license system works, how to generate and install licenses, and **which files belong in Git vs. stay on the server/local machine only**.
 
 ---
