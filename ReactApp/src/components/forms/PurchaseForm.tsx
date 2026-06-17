@@ -476,10 +476,10 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
 
   return (
     <form onSubmit={handleSubmit} className="flex h-full min-h-0 flex-col">
-      <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5 space-y-6">
+      {/* Header fields — fixed, no scroll */}
+      <div className="shrink-0 space-y-5 border-b border-gray-100 px-6 py-5">
         <p className="text-sm text-gray-500">Fill in the purchase order details and add line items below.</p>
 
-        {/* ── Header fields ── */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {errors.branchId && (
             <p className="md:col-span-2 text-sm text-red-600">{errors.branchId}</p>
@@ -552,9 +552,10 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
             />
           </div>
         </div>
+      </div>
 
-        {/* ── Line Items ── */}
-        <div>
+      {/* Line Items — only this section scrolls */}
+      <div className="flex min-h-0 flex-1 flex-col px-6 py-4">
           <div className="mb-3 flex items-center justify-between">
             <div>
               <h3 className="text-sm font-semibold text-gray-800">Line Items</h3>
@@ -585,9 +586,9 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
             </div>
           )}
 
-          <div className="rounded-lg border border-gray-200 bg-white shadow-sm">
-            {/* Table header */}
-            <div className="grid grid-cols-[2fr_1.5fr_1.2fr_80px_80px_90px_90px_72px] gap-0 border-b border-gray-200 bg-gray-50 px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-gray-500">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+            {/* Table header — sticky within line items panel */}
+            <div className="shrink-0 grid grid-cols-[2fr_1.5fr_1.2fr_80px_80px_90px_90px_72px] gap-0 border-b border-gray-200 bg-gray-50 px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-gray-500">
               <div>Product</div>
               <div>Variant</div>
               <div>Unit</div>
@@ -598,8 +599,8 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
               <div className="text-center">Actions</div>
             </div>
 
-            {/* Rows */}
-            <div className="divide-y divide-gray-100">
+            {/* Rows — scrollable */}
+            <div className="min-h-0 flex-1 divide-y divide-gray-100 overflow-y-auto">
               {rows.map((row, idx) => (
                 <div
                   key={row.key}
@@ -812,8 +813,8 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
               ))}
             </div>
 
-            {/* Grand total footer */}
-            <div className="flex items-center justify-between rounded-b-lg border-t border-gray-200 bg-gray-50 px-4 py-3">
+            {/* Grand total footer — fixed below scroll area */}
+            <div className="flex shrink-0 items-center justify-between rounded-b-lg border-t border-gray-200 bg-gray-50 px-4 py-3">
               <span className="text-sm font-medium text-gray-500">
                 {rows.filter((r) => r.productId > 0).length} of {rows.length}{' '}
                 {rows.length === 1 ? 'row' : 'rows'} filled
@@ -826,7 +827,6 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
               </div>
             </div>
           </div>
-        </div>
       </div>
 
       {/* Footer */}
