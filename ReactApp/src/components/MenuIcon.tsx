@@ -29,11 +29,30 @@ export const ICON_PATHS = {
   menu:           'M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4',
   expenses:       'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
   cashflow:       'M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z',
+  settings:       'M15 12a3 3 0 11-6 0 3 3 0 016 0z',
+  codeseq:        'M7 20h14M4 16h16M4 12h16M4 8h16M4 4h16',
+  countries:      'M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+  cities:         'M15 11a3 3 0 11-6 0 3 3 0 016 0z',
+  sizes:          'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10',
+  colors:         'M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01',
+  expensecategories: 'M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z',
   alert:          'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z',
   default:        'M4 6h16M4 12h16M4 18h7',
 } as const
 
 export type MenuIconKey = keyof typeof ICON_PATHS
+
+/** Icons that need a secondary stroke path (e.g. cog ring). */
+export const ICON_PATH_SETS: Partial<Record<MenuIconKey, string[]>> = {
+  settings: [
+    'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z',
+    ICON_PATHS.settings,
+  ],
+  cities: [
+    'M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z',
+    ICON_PATHS.cities,
+  ],
+}
 
 /** Resolve an icon key from the DB icon string or module name */
 export const resolveIconKey = (icon: string | null | undefined, name: string): MenuIconKey => {
@@ -75,15 +94,28 @@ export const resolveIconKey = (icon: string | null | undefined, name: string): M
       purchasemanagement: 'purchase',
       salesmanagement: 'pos',
       finance: 'expenses',
-      settings: 'default',
+      settings: 'settings',
       variants: 'products',
       stocktransfer: 'inventory',
       salesreports: 'reports',
       purchasereports: 'reports',
       stockreports: 'reports',
-      systemsettings: 'default',
-      cs: 'default',
-      codesequences: 'default',
+      systemsettings: 'settings',
+      set: 'settings',
+      codeseq: 'codeseq',
+      cs: 'codeseq',
+      codesequences: 'codeseq',
+      countries: 'countries',
+      co: 'countries',
+      cities: 'cities',
+      ci: 'cities',
+      sizes: 'sizes',
+      sz: 'sizes',
+      colors: 'colors',
+      cl: 'colors',
+      expensecategories: 'expensecategories',
+      expensecategory: 'expensecategories',
+      ec: 'expensecategories',
       invoices: 'invoices',
       rolespermissions: 'roles',
       subcategories: 'subcategories',
@@ -140,7 +172,8 @@ const MenuIcon: React.FC<MenuIconProps> = ({
   className = 'w-[18px] h-[18px]',
 }) => {
   const key = iconKey ?? resolveIconKey(icon, name)
-  const d = ICON_PATHS[key] ?? ICON_PATHS.default
+  const pathSet = ICON_PATH_SETS[key]
+  const paths = pathSet ?? [ICON_PATHS[key] ?? ICON_PATHS.default]
 
   return (
     <svg
@@ -153,7 +186,9 @@ const MenuIcon: React.FC<MenuIconProps> = ({
       strokeLinejoin="round"
       aria-hidden
     >
-      <path d={d} />
+      {paths.map((d, index) => (
+        <path key={index} d={d} />
+      ))}
     </svg>
   )
 }

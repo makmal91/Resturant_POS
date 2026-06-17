@@ -33,6 +33,8 @@ public class POSDbContext : DbContext
     public DbSet<SubCategory> SubCategories { get; set; } = null!;
     public DbSet<Brand> Brands { get; set; } = null!;
     public DbSet<MeasurementUnit> Units { get; set; } = null!;
+    public DbSet<ProductSize> Sizes { get; set; } = null!;
+    public DbSet<ProductColor> Colors { get; set; } = null!;
     public DbSet<Product> Products { get; set; } = null!;
     public DbSet<ProductUnit> ProductUnits { get; set; } = null!;
     public DbSet<ProductVariant> ProductVariants { get; set; } = null!;
@@ -99,6 +101,8 @@ public class POSDbContext : DbContext
         modelBuilder.ApplyConfiguration(new SubCategoryConfiguration());
         modelBuilder.ApplyConfiguration(new BrandConfiguration());
         modelBuilder.ApplyConfiguration(new MeasurementUnitConfiguration());
+        modelBuilder.ApplyConfiguration(new ProductSizeConfiguration());
+        modelBuilder.ApplyConfiguration(new ProductColorConfiguration());
         modelBuilder.ApplyConfiguration(new ProductConfiguration());
         modelBuilder.ApplyConfiguration(new ProductUnitConfiguration());
         modelBuilder.ApplyConfiguration(new ProductVariantConfiguration());

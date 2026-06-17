@@ -35,6 +35,13 @@ public static class NavigationMenuSeeder
         new("Taxes", "/taxes", "T", null, "Master Data", 13),
         new("Discounts", "/discounts", "Di", null, "Master Data", 14),
         new("Warehouses", "/warehouses", "W", "Warehouses", "Master Data", 15),
+        new("Settings", null, null, null, null, 5),
+        new("System Settings", "/settings", "settings", "System Settings", "Settings", 1),
+        new("Code Sequences", "/settings/code-sequences", "codeseq", "Code Sequences", "Settings", 2),
+        new("Countries", "/settings/countries", "countries", "Countries", "Settings", 3),
+        new("Cities", "/settings/cities", "cities", "Cities", "Settings", 4),
+        new("Sizes", "/settings/sizes", "sizes", "Sizes", "Settings", 5),
+        new("Colors", "/settings/colors", "colors", "Colors", "Settings", 6),
         new("POS Billing", "/pos", "POS", "POS Billing", "Operations", 1),
         new("Invoice History", "/sales-invoices", "I", "Sales", "Operations", 2),
         new("Inventory", "/inventory", "Inv", "Inventory", "Operations", 3),
@@ -43,9 +50,10 @@ public static class NavigationMenuSeeder
         new("Reports", "/reports", "Rp", "Reports", "Operations", 6),
         new("Orders", "/orders", "O", "Orders", "Operations", 7),
         new("Expenses", "/expenses", "Exp", "Expenses", "Accounts", 1),
-        new("Cash Dashboard", "/cashflow", "CF", "Cash Flow", "Accounts", 2),
-        new("Cash Ledger", "/cashflow/ledger", "CFL", "Cash Flow", "Accounts", 3),
-        new("Cash Summary", "/cashflow/summary", "CFS", "Cash Flow", "Accounts", 4)
+        new("Expense Categories", "/expenses/categories", "expensecategories", "Expense Categories", "Accounts", 2),
+        new("Cash Dashboard", "/cashflow", "CF", "Cash Flow", "Accounts", 3),
+        new("Cash Ledger", "/cashflow/ledger", "CFL", "Cash Flow", "Accounts", 4),
+        new("Cash Summary", "/cashflow/summary", "CFS", "Cash Flow", "Accounts", 5)
     ];
 
     public static async Task SeedDefaultMenusAsync(POSDbContext context, ILogger logger)
@@ -78,6 +86,12 @@ public static class NavigationMenuSeeder
         ("/customers", "Cu"),
         ("/suppliers", "Su"),
         ("/units", "Un"),
+        ("/settings", "settings"),
+        ("/settings/code-sequences", "codeseq"),
+        ("/settings/countries", "countries"),
+        ("/settings/cities", "cities"),
+        ("/settings/sizes", "sizes"),
+        ("/settings/colors", "colors"),
         ("/taxes", "T"),
         ("/discounts", "Di"),
         ("/warehouses", "W"),
@@ -89,6 +103,7 @@ public static class NavigationMenuSeeder
         ("/reports", "Rp"),
         ("/orders", "O"),
         ("/expenses", "Exp"),
+        ("/expenses/categories", "expensecategories"),
         ("/cashflow", "CF"),
         ("/cashflow/ledger", "CFL"),
         ("/cashflow/summary", "CFS"),
@@ -105,6 +120,15 @@ public static class NavigationMenuSeeder
                 """
                 UPDATE [Menus] SET [IsActive] = 0
                 WHERE [Route] = N'/cashflow/transaction';
+                """),
+            ExecuteRawSeedAsync(
+                context,
+                logger,
+                "Hide legacy /masters routes",
+                """
+                UPDATE [Menus] SET [IsActive] = 0
+                WHERE [Route] LIKE N'/masters/%'
+                   OR [Route] = N'/settings/expense-categories';
                 """),
             ExecuteRawSeedAsync(
                 context,

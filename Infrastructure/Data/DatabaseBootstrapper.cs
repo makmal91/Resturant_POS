@@ -33,6 +33,7 @@ public static class DatabaseBootstrapper
         await TenantSeedDatabaseInitializer.EnsureSeedDataAsync(context, logger);
 
         await UnitMasterDatabaseInitializer.EnsureSchemaAsync(context, logger);
+        await VariantMasterDatabaseInitializer.EnsureSchemaAsync(context, logger);
         await BrandDatabaseInitializer.EnsureSchemaAsync(context, logger);
         await ProductManagementDatabaseInitializer.EnsureSchemaAsync(context, logger);
         await PurchaseWarehouseInitializer.EnsureSchemaAsync(context, logger);

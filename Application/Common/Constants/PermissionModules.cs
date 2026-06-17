@@ -26,6 +26,11 @@ public static class PermissionModules
     public const string CashFlow = "Cash Flow";
     public const string Dashboard = "Dashboard";
     public const string Variants = "Variants";
+    public const string Sizes = "Sizes";
+    public const string Colors = "Colors";
+    public const string ExpenseCategories = "Expense Categories";
+    public const string Countries = "Countries";
+    public const string Cities = "Cities";
     public const string StockTransfer = "Stock Transfer";
     public const string SalesReports = "Sales Reports";
     public const string PurchaseReports = "Purchase Reports";
@@ -40,7 +45,12 @@ public static class PermissionModules
         Brands,
         Products,
         Units,
+        Sizes,
+        Colors,
         Variants,
+        ExpenseCategories,
+        Countries,
+        Cities,
         Menu,
         Orders,
         Inventory,

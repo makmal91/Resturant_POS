@@ -63,6 +63,12 @@ function App() {
                             }
                           />
                         ))}
+                        <Route path="/masters/sizes" element={<Navigate to="/settings/sizes" replace />} />
+                        <Route path="/masters/colors" element={<Navigate to="/settings/colors" replace />} />
+                        <Route path="/masters/expense-categories" element={<Navigate to="/expenses/categories" replace />} />
+                        <Route path="/settings/expense-categories" element={<Navigate to="/expenses/categories" replace />} />
+                        <Route path="/masters/countries" element={<Navigate to="/settings/countries" replace />} />
+                        <Route path="/masters/cities" element={<Navigate to="/settings/cities" replace />} />
                         {/* Edit invoice — dynamic route, not in sidebar */}
                         <Route
                           path="/sales-invoices/edit/:id"

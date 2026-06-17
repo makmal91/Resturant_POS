@@ -1,6 +1,8 @@
 export { default as FormInput } from './FormInput';
 export { default as FormSelect } from './FormSelect';
+export { default as FormColorPicker } from './FormColorPicker';
 export { default as SearchableSelect } from './SearchableSelect';
+export { default as MasterSelect } from './MasterSelect';
 export { default as FormButton } from './FormButton';
 export { default as FormTextarea } from './FormTextarea';
 export { default as BranchForm } from './BranchForm';

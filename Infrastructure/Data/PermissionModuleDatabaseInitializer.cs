@@ -192,9 +192,10 @@ public static class PermissionModuleSeeder
 
         // Finance
         new("Expenses", PermissionModules.Expenses, "Finance", 1, "/expenses", "Exp"),
-        new("Cash Dashboard", PermissionModules.CashFlow, "Finance", 2, "/cashflow", "CF"),
-        new("Cash Ledger", "CashFlow.Ledger", "Finance", 3, "/cashflow/ledger", "CFL"),
-        new("Cash Summary", "CashFlow.Summary", "Finance", 4, "/cashflow/summary", "CFS"),
+        new("Expense Categories", PermissionModules.ExpenseCategories, "Finance", 2, "/expenses/categories", "expensecategories"),
+        new("Cash Dashboard", PermissionModules.CashFlow, "Finance", 3, "/cashflow", "CF"),
+        new("Cash Ledger", "CashFlow.Ledger", "Finance", 4, "/cashflow/ledger", "CFL"),
+        new("Cash Summary", "CashFlow.Summary", "Finance", 5, "/cashflow/summary", "CFS"),
 
         // Reports
         new("Sales Reports", PermissionModules.SalesReports, "Reports", 1, "/reports", "Rp"),
@@ -202,8 +203,12 @@ public static class PermissionModuleSeeder
         new("Stock Reports", PermissionModules.StockReports, "Reports", 3, "/reports", "Rp"),
 
         // Settings
-        new("System Settings", PermissionModules.SystemSettings, "Settings", 1, "/settings", "Set"),
-        new("Code Sequences", PermissionModules.CodeSequences, "Settings", 2, "/settings/code-sequences", "CS"),
+        new("System Settings", PermissionModules.SystemSettings, "Settings", 1, "/settings", "settings"),
+        new("Code Sequences", PermissionModules.CodeSequences, "Settings", 2, "/settings/code-sequences", "codeseq"),
+        new("Countries", PermissionModules.Countries, "Settings", 3, "/settings/countries", "countries"),
+        new("Cities", PermissionModules.Cities, "Settings", 4, "/settings/cities", "cities"),
+        new("Sizes", PermissionModules.Sizes, "Settings", 5, "/settings/sizes", "sizes"),
+        new("Colors", PermissionModules.Colors, "Settings", 6, "/settings/colors", "colors"),
     ];
 
     public static async Task SeedDefaultModulesAsync(POSDbContext context, ILogger logger)
@@ -226,6 +231,7 @@ public static class PermissionModuleSeeder
         }
 
         await DeactivateLegacyModulesAsync(context, logger);
+        await DeactivateEmptyMasterDataGroupAsync(context, logger);
         await BackfillRolePermissionModuleIdsAsync(context, logger);
         await ModuleFormSeeder.SeedDefaultFormsAsync(context, logger);
     }
@@ -259,6 +265,23 @@ public static class PermissionModuleSeeder
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to deactivate legacy modules.");
+        }
+    }
+
+    private static async Task DeactivateEmptyMasterDataGroupAsync(POSDbContext context, ILogger logger)
+    {
+        try
+        {
+            await context.Database.ExecuteSqlRawAsync("""
+                UPDATE [Modules] SET [IsActive] = 0, [UpdatedDate] = GETUTCDATE()
+                WHERE [ModuleName] = N'Master Data' AND ([ModuleKey] = N'' OR [ModuleKey] IS NULL);
+                UPDATE [Menus] SET [IsActive] = 0
+                WHERE [Route] LIKE N'/masters/%';
+                """);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to deactivate legacy Master Data navigation.");
         }
     }
 

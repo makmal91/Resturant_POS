@@ -31,6 +31,11 @@ import CashFlowDashboardPage from './modules/cashflow/CashFlowDashboardPage';
 import CashLedgerPage from './modules/cashflow/CashLedgerPage';
 import CashFlowSummaryPage from './modules/cashflow/CashFlowSummaryPage';
 import ExpensePage from './modules/expense/ExpensePage';
+import SizePage from './modules/master/SizePage';
+import ColorPage from './modules/master/ColorPage';
+import ExpenseCategoryPage from './modules/master/ExpenseCategoryPage';
+import CountryPage from './modules/master/CountryPage';
+import CityPage from './modules/master/CityPage';
 import ReportsPage from './modules/reports/ReportsPage';
 import SettingsPage from './modules/settings/SettingsPage';
 import CodeSequencePage from './modules/settings/CodeSequencePage';
@@ -51,6 +56,10 @@ export const routeRegistry: RouteDefinition[] = [
   { path: '/customers', label: 'Customers', component: CustomerPage, module: 'Customers' },
   { path: '/suppliers', label: 'Suppliers', component: SupplierPage, module: 'Suppliers' },
   { path: '/units', label: 'Units', component: UnitPage, module: 'Units' },
+  { path: '/settings/sizes', label: 'Sizes', component: SizePage, module: 'Sizes' },
+  { path: '/settings/colors', label: 'Colors', component: ColorPage, module: 'Colors' },
+  { path: '/settings/countries', label: 'Countries', component: CountryPage, module: 'Countries' },
+  { path: '/settings/cities', label: 'Cities', component: CityPage, module: 'Cities' },
   { path: '/taxes', label: 'Taxes', component: TaxPage },
   { path: '/discounts', label: 'Discounts', component: DiscountPage },
   { path: '/inventory', label: 'Inventory', component: InventoryList, module: 'Inventory' },
@@ -61,6 +70,7 @@ export const routeRegistry: RouteDefinition[] = [
   { path: '/reports', label: 'Reports', component: ReportsPage, module: 'Reports' },
   { path: '/sales-invoices', label: 'Invoice History', component: SaleInvoicesPage, module: 'Sales' },
   { path: '/expenses',          label: 'Expenses',        component: ExpensePage,           module: 'Expenses' },
+  { path: '/expenses/categories', label: 'Expense Categories', component: ExpenseCategoryPage, module: 'Expense Categories' },
   { path: '/cashflow',          label: 'Cash Dashboard',  component: CashFlowDashboardPage, module: 'Cash Flow' },
   { path: '/cashflow/ledger',   label: 'Cash Ledger',     component: CashLedgerPage,        module: 'Cash Flow' },
   { path: '/cashflow/summary',  label: 'Cash Summary',    component: CashFlowSummaryPage,   module: 'Cash Flow' },

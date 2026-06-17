@@ -10,6 +10,7 @@ import {
 import { getApiErrorMessage } from '../../services/api';
 import { CODE_MODULES, codeGeneratorService } from '../../services/codeGeneratorService';
 import CodeFieldWithGenerate from '../../components/forms/CodeFieldWithGenerate';
+import MasterSelect from '../../components/forms/MasterSelect';
 import { useBranchStore } from '../../stores/useBranchStore';
 import { resolveEffectiveBranchId } from '../../utils/resolveBranchId';
 import { warehouseService, type WarehouseItem } from '../warehouse/warehouseService';
@@ -842,10 +843,24 @@ const ProductForm: React.FC<ProductFormProps> = ({
                           <input placeholder="e.g. Large Red" value={variant.variantName} onChange={(event) => updateVariant(index, { variantName: event.target.value })} className="w-full rounded border px-3 py-2" />
                         </td>
                         <td className="px-3 py-3 align-middle">
-                          <input placeholder="Size" value={variant.size ?? ''} onChange={(event) => updateVariant(index, { size: event.target.value })} className="w-full rounded border px-3 py-2" />
+                          <MasterSelect
+                            source="size"
+                            branchId={effectiveBranchId}
+                            value={variant.size ?? ''}
+                            onChange={(size) => updateVariant(index, { size })}
+                            placeholder="Size"
+                            valueByName
+                          />
                         </td>
                         <td className="px-3 py-3 align-middle">
-                          <input placeholder="Color" value={variant.color ?? ''} onChange={(event) => updateVariant(index, { color: event.target.value })} className="w-full rounded border px-3 py-2" />
+                          <MasterSelect
+                            source="color"
+                            branchId={effectiveBranchId}
+                            value={variant.color ?? ''}
+                            onChange={(color) => updateVariant(index, { color })}
+                            placeholder="Color"
+                            valueByName
+                          />
                         </td>
                         <td className="px-3 py-3 align-middle">
                           <input placeholder="SKU" value={variant.sku ?? ''} onChange={(event) => updateVariant(index, { sku: event.target.value })} className="w-full rounded border px-3 py-2" />

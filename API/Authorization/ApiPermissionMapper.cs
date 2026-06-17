@@ -22,7 +22,7 @@ public static class ApiPermissionMapper
         ["role-permissions"] = PermissionModules.Roles,
         ["Branches"] = PermissionModules.Branches,
         ["Businesses"] = PermissionModules.Businesses,
-        ["Countries"] = PermissionModules.Branches,
+        ["Countries"] = PermissionModules.Countries,
         ["Recipes"] = PermissionModules.Products,
         ["Warehouses"] = PermissionModules.Warehouses,
         ["Suppliers"] = PermissionModules.Suppliers,
@@ -31,6 +31,7 @@ public static class ApiPermissionMapper
         ["Sales"] = PermissionModules.Sales,
         ["Customers"] = PermissionModules.Customers,
         ["Expenses"] = PermissionModules.Expenses,
+        ["expense-categories"] = PermissionModules.ExpenseCategories,
         ["CashFlow"] = PermissionModules.CashFlow,
         ["code-sequences"] = PermissionModules.CodeSequences,
     };
@@ -49,9 +50,24 @@ public static class ApiPermissionMapper
         if (method.Equals("GET", StringComparison.OrdinalIgnoreCase) &&
             (path.Contains("/warehouses/active", StringComparison.OrdinalIgnoreCase) ||
              path.Contains("/suppliers/active", StringComparison.OrdinalIgnoreCase) ||
-             path.Contains("/codes/preview", StringComparison.OrdinalIgnoreCase)))
+             path.Contains("/codes/preview", StringComparison.OrdinalIgnoreCase) ||
+             path.Contains("/api/masters/", StringComparison.OrdinalIgnoreCase)))
         {
             return null;
+        }
+
+        var mastersModule = ResolveMastersModuleFromPath(path);
+        if (mastersModule != null)
+        {
+            var mastersAction = method.ToUpperInvariant() switch
+            {
+                "GET" or "HEAD" => PermissionActions.View,
+                "POST" => PermissionActions.Create,
+                "PUT" or "PATCH" => PermissionActions.Edit,
+                "DELETE" => PermissionActions.Delete,
+                _ => PermissionActions.View
+            };
+            return (mastersModule, mastersAction);
         }
 
         if (path.Contains("/export", StringComparison.OrdinalIgnoreCase))
@@ -104,6 +120,29 @@ public static class ApiPermissionMapper
             return null;
 
         return ControllerModuleMap.TryGetValue(segments[1], out var module) ? module : null;
+    }
+
+    private static string? ResolveMastersModuleFromPath(string path)
+    {
+        var segments = path
+            .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        var mastersIndex = Array.FindIndex(
+            segments,
+            s => s.Equals("masters", StringComparison.OrdinalIgnoreCase));
+
+        if (mastersIndex < 0 || mastersIndex + 1 >= segments.Length)
+            return null;
+
+        return segments[mastersIndex + 1].ToLowerInvariant() switch
+        {
+            "size" => PermissionModules.Sizes,
+            "color" => PermissionModules.Colors,
+            "expense-category" => PermissionModules.ExpenseCategories,
+            "country" => PermissionModules.Countries,
+            "city" => PermissionModules.Cities,
+            _ => null
+        };
     }
 
     private static bool IsUploadRequest(HttpContext context, string path)
