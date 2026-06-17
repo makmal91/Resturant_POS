@@ -9,7 +9,8 @@ public interface IStockLedgerRepository
     Task AddAsync(StockLedger entry);
     Task AddRangeAsync(IEnumerable<StockLedger> entries);
     Task<PagedResultDto<StockLedger>> GetPagedAsync(StockLedgerFilterDto filter);
-    Task<List<StockBalanceDto>> GetStockBalancesAsync(int businessId, int branchId, int? warehouseId = null, int? productId = null, int? variantId = null);
+    Task<List<StockBalanceDto>> GetStockBalancesAsync(
+        int businessId, int branchId, int? warehouseId = null, int? productId = null, int? variantId = null, bool variantWise = false);
     Task<decimal> GetCurrentStockAsync(int businessId, int branchId, int productId, int? variantId, int warehouseId);
     /// <summary>
     /// Returns total stock keyed as "productId:variantId" (variantId = 0 for no variant).

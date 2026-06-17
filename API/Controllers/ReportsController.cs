@@ -179,13 +179,15 @@ public class ReportsController : ControllerBase
 
     // ─── Stock Report (StockLedger) ────────────────────────────────────────────
 
-    /// <summary>Current stock balances with estimated stock value.</summary>
+    /// <summary>Aggregated closing stock balance per product (Opening + In − Out from ledger).</summary>
     [HttpGet("stock-summary")]
     [RequirePermission(PermissionModules.Reports, PermissionActions.View)]
     public async Task<IActionResult> GetStockSummary(
         [FromQuery] int? branchId,
         [FromQuery] int? businessId,
         [FromQuery] int? warehouseId,
+        [FromQuery] DateTime? fromDate,
+        [FromQuery] DateTime? toDate,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
         [FromQuery] string? search = null,
@@ -195,9 +197,13 @@ public class ReportsController : ControllerBase
         var biz    = this.ResolveBusinessId(businessId);
         var branch = this.ResolveBranchId(branchId);
 
+        var from = (fromDate ?? DateTime.UtcNow.Date.AddDays(-30)).Date;
+        var to   = (toDate   ?? DateTime.UtcNow).Date.AddDays(1);
+
         var ledgerQuery = _db.StockLedgerEntries
+            .IgnoreQueryFilters()
             .AsNoTracking()
-            .Where(e => e.BusinessId == biz);
+            .Where(e => e.BusinessId == biz && !e.IsDeleted);
 
         if (branch > 0)
             ledgerQuery = ledgerQuery.Where(e => e.BranchId == branch);
@@ -205,101 +211,61 @@ public class ReportsController : ControllerBase
         if (warehouseId.HasValue && warehouseId.Value > 0)
             ledgerQuery = ledgerQuery.Where(e => e.WarehouseId == warehouseId.Value);
 
-        var balances = await ledgerQuery
-            .GroupBy(e => new { e.ProductId, e.VariantId, e.WarehouseId })
-            .Select(g => new
-            {
-                g.Key.ProductId,
-                g.Key.VariantId,
-                g.Key.WarehouseId,
-                quantity = g.Sum(e => e.QuantityInBaseUnit),
-            })
-            .Where(b => b.quantity != 0)
+        // Remaining balance = cumulative ledger sum through toDate (Opening + In − Out).
+        // Materialize then group in memory — nested GroupBy aggregates are unreliable in EF Core.
+        var ledgerRows = await ledgerQuery
+            .Where(e => e.Date < to)
+            .Select(e => new { e.ProductId, e.QuantityInBaseUnit })
             .ToListAsync();
 
-        var productIds   = balances.Select(b => b.ProductId).Distinct().ToList();
-        var variantIds   = balances.Where(b => b.VariantId.HasValue).Select(b => b.VariantId!.Value).Distinct().ToList();
-        var warehouseIds = balances.Select(b => b.WarehouseId).Distinct().ToList();
+        var balances = ledgerRows
+            .GroupBy(e => e.ProductId)
+            .Select(g => new
+            {
+                ProductId      = g.Key,
+                ClosingBalance = g.Sum(e => e.QuantityInBaseUnit),
+            })
+            .Where(b => b.ClosingBalance != 0)
+            .ToList();
 
-        var products = await _db.Products.AsNoTracking()
-            .Where(p => productIds.Contains(p.Id))
-            .Select(p => new { p.Id, p.ProductName, p.ProductCode, p.CostPrice })
-            .ToDictionaryAsync(p => p.Id);
+        var productIds = balances.Select(b => b.ProductId).ToList();
 
-        var variantMap = new Dictionary<int, (string VariantName, decimal? CostPriceOverride)>();
-        if (variantIds.Count > 0)
-        {
-            var variantList = await _db.ProductVariants.AsNoTracking()
-                .Where(v => variantIds.Contains(v.Id))
-                .Select(v => new { v.Id, v.VariantName, v.CostPriceOverride })
-                .ToListAsync();
-            foreach (var v in variantList)
-                variantMap[v.Id] = (v.VariantName, v.CostPriceOverride);
-        }
-
-        var warehouses = await _db.Warehouses.AsNoTracking()
-            .Where(w => warehouseIds.Contains(w.Id))
-            .Select(w => new { w.Id, w.Name })
-            .ToDictionaryAsync(w => w.Id);
+        var products = productIds.Count > 0
+            ? await _db.Products.AsNoTracking()
+                .Where(p => productIds.Contains(p.Id))
+                .ToDictionaryAsync(p => p.Id, p => p.ProductName)
+            : new Dictionary<int, string>();
 
         var items = balances.Select(b =>
         {
-            products.TryGetValue(b.ProductId, out var product);
-            variantMap.TryGetValue(b.VariantId ?? 0, out var variant);
-            warehouses.TryGetValue(b.WarehouseId, out var wh);
-
-            var costPrice = variant.CostPriceOverride ?? product?.CostPrice ?? 0m;
-            var stockValue = b.quantity * costPrice;
+            products.TryGetValue(b.ProductId, out var productName);
 
             return new
             {
-                productId     = b.ProductId,
-                productName   = product?.ProductName ?? "Unknown",
-                productCode   = product?.ProductCode ?? "",
-                variantId     = b.VariantId,
-                variantName   = variant.VariantName != null ? variant.VariantName : null,
-                warehouseId   = b.WarehouseId,
-                warehouseName = wh?.Name ?? "Unknown",
-                quantity      = b.quantity,
-                costPrice,
-                stockValue,
+                productId      = b.ProductId,
+                productName    = productName ?? "Unknown",
+                closingBalance = b.ClosingBalance,
             };
         }).ToList();
 
         if (!string.IsNullOrWhiteSpace(search))
         {
             var term = search.Trim().ToLower();
-            items = items.Where(i =>
-                i.productName.ToLower().Contains(term) ||
-                i.productCode.ToLower().Contains(term) ||
-                (i.variantName ?? string.Empty).ToLower().Contains(term) ||
-                i.warehouseName.ToLower().Contains(term)).ToList();
+            items = items.Where(i => i.productName.ToLower().Contains(term)).ToList();
         }
 
         var descending = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase);
         items = (sortBy ?? "productName").ToLowerInvariant() switch
         {
-            "productcode" or "code" => descending
-                ? items.OrderByDescending(i => i.productCode).ThenByDescending(i => i.productName).ToList()
-                : items.OrderBy(i => i.productCode).ThenBy(i => i.productName).ToList(),
-            "variantname" or "variant" => descending
-                ? items.OrderByDescending(i => i.variantName).ThenByDescending(i => i.productName).ToList()
-                : items.OrderBy(i => i.variantName).ThenBy(i => i.productName).ToList(),
-            "warehousename" or "warehouse" => descending
-                ? items.OrderByDescending(i => i.warehouseName).ThenByDescending(i => i.productName).ToList()
-                : items.OrderBy(i => i.warehouseName).ThenBy(i => i.productName).ToList(),
-            "quantity" or "qty" => descending
-                ? items.OrderByDescending(i => i.quantity).ToList()
-                : items.OrderBy(i => i.quantity).ToList(),
-            "costprice" or "cost" => descending
-                ? items.OrderByDescending(i => i.costPrice).ToList()
-                : items.OrderBy(i => i.costPrice).ToList(),
-            "stockvalue" or "value" => descending
-                ? items.OrderByDescending(i => i.stockValue).ToList()
-                : items.OrderBy(i => i.stockValue).ToList(),
+            "productid" or "id" => descending
+                ? items.OrderByDescending(i => i.productId).ToList()
+                : items.OrderBy(i => i.productId).ToList(),
+            "closingbalance" or "balance" or "quantity" or "qty" => descending
+                ? items.OrderByDescending(i => i.closingBalance).ToList()
+                : items.OrderBy(i => i.closingBalance).ToList(),
             _ => descending
-                ? items.OrderByDescending(i => i.productName).ThenByDescending(i => i.variantName).ToList()
-                : items.OrderBy(i => i.productName).ThenBy(i => i.variantName).ToList(),
+                ? items.OrderByDescending(i => i.productName).ToList()
+                : items.OrderBy(i => i.productName).ToList(),
         };
 
         page = Math.Max(1, page);
@@ -315,81 +281,9 @@ public class ReportsController : ControllerBase
             totalPages   = (int)Math.Ceiling(totalRecords / (double)Math.Max(pageSize, 1)),
             currentPage  = page,
             pageSize,
-            totalQuantity = items.Sum(i => i.quantity),
-            totalStockValue = items.Sum(i => i.stockValue),
-            lowStockCount = items.Count(i => i.quantity > 0 && i.quantity <= 5),
-        });
-    }
-
-    /// <summary>Stock movement summary grouped by ledger type for a date range.</summary>
-    [HttpGet("stock-movement")]
-    [RequirePermission(PermissionModules.Reports, PermissionActions.View)]
-    public async Task<IActionResult> GetStockMovement(
-        [FromQuery] int? branchId,
-        [FromQuery] int? businessId,
-        [FromQuery] int? warehouseId,
-        [FromQuery] DateTime? fromDate,
-        [FromQuery] DateTime? toDate)
-    {
-        var biz    = this.ResolveBusinessId(businessId);
-        var branch = this.ResolveBranchId(branchId);
-
-        var from = (fromDate ?? DateTime.UtcNow.Date.AddDays(-30)).Date;
-        var to   = (toDate   ?? DateTime.UtcNow).Date.AddDays(1);
-
-        var query = _db.StockLedgerEntries
-            .AsNoTracking()
-            .Where(e => e.BusinessId == biz
-                     && e.Date >= from
-                     && e.Date < to);
-
-        if (branch > 0)
-            query = query.Where(e => e.BranchId == branch);
-
-        if (warehouseId.HasValue && warehouseId.Value > 0)
-            query = query.Where(e => e.WarehouseId == warehouseId.Value);
-
-        // Project to memory first — enum.ToString() and nested GroupBy aggregates
-        // are not reliably translatable to SQL Server.
-        var entries = await query
-            .Select(e => new { e.Type, e.QuantityInBaseUnit, e.TotalAmount, e.Date })
-            .ToListAsync();
-
-        var byType = entries
-            .GroupBy(e => e.Type)
-            .Select(g => new
-            {
-                type          = g.Key.ToString(),
-                entryCount    = g.Count(),
-                totalQuantity = g.Sum(e => e.QuantityInBaseUnit),
-                totalIn       = g.Where(e => e.QuantityInBaseUnit > 0).Sum(e => e.QuantityInBaseUnit),
-                totalOut      = g.Where(e => e.QuantityInBaseUnit < 0).Sum(e => Math.Abs(e.QuantityInBaseUnit)),
-                totalAmount   = g.Sum(e => e.TotalAmount),
-            })
-            .OrderBy(g => g.type)
-            .ToList();
-
-        var dailyMovement = entries
-            .GroupBy(e => e.Date.Date)
-            .Select(g => new
-            {
-                date     = g.Key,
-                stockIn  = g.Where(e => e.QuantityInBaseUnit > 0).Sum(e => e.QuantityInBaseUnit),
-                stockOut = g.Where(e => e.QuantityInBaseUnit < 0).Sum(e => Math.Abs(e.QuantityInBaseUnit)),
-                netQty   = g.Sum(e => e.QuantityInBaseUnit),
-            })
-            .OrderBy(g => g.date)
-            .ToList();
-
-        return Ok(new
-        {
-            fromDate      = from,
-            toDate        = to.AddDays(-1),
-            totalEntries  = byType.Sum(t => t.entryCount),
-            totalStockIn  = byType.Sum(t => t.totalIn),
-            totalStockOut = byType.Sum(t => t.totalOut),
-            byType,
-            dailyMovement,
+            fromDate     = from,
+            toDate       = to.AddDays(-1),
+            totalClosingBalance = items.Sum(i => i.closingBalance),
         });
     }
 

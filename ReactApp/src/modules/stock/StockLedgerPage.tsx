@@ -89,6 +89,7 @@ const StockLedgerPage: React.FC = () => {
   // Balance state
   const [balances, setBalances] = useState<StockBalance[]>([]);
   const [balanceLoading, setBalanceLoading] = useState(false);
+  const [variantWise, setVariantWise] = useState(false);
 
   const [notification, setNotification] = useState<{ kind: 'error'; msg: string } | null>(null);
 
@@ -161,14 +162,37 @@ const StockLedgerPage: React.FC = () => {
     if (!hasBranchSelection || selectedBranchId === null) return;
     setBalanceLoading(true);
     try {
-      const res = await stockService.getBalances(selectedBranchId, selectedWarehouse ?? undefined);
-      setBalances(Array.isArray(res.data) ? res.data : []);
+      const res = await stockService.getBalances(
+        selectedBranchId,
+        selectedWarehouse ?? undefined,
+        undefined,
+        undefined,
+        variantWise,
+      );
+      const raw = Array.isArray(res.data) ? res.data : [];
+      setBalances(
+        raw.map((row: unknown) => {
+          const r = row as Record<string, unknown>;
+          return {
+            productId: Number(r.productId ?? r.ProductId ?? 0),
+            productName: safeString(r.productName ?? r.ProductName),
+            productCode: safeString(r.productCode ?? r.ProductCode),
+            variantId: r.variantId ?? r.VariantId ?? null,
+            variantName: safeString(r.variantName ?? r.VariantName) || null,
+            warehouseId: Number(r.warehouseId ?? r.WarehouseId ?? 0),
+            warehouseName: safeString(r.warehouseName ?? r.WarehouseName),
+            quantity: Number(
+              r.quantity ?? r.Quantity ?? r.closingBalance ?? r.ClosingBalance ?? 0,
+            ),
+          } as StockBalance;
+        }),
+      );
     } catch (err) {
       showError(getApiErrorMessage(err, 'Failed to load stock balances.'));
     } finally {
       setBalanceLoading(false);
     }
-  }, [hasBranchSelection, selectedBranchId, selectedWarehouse]);
+  }, [hasBranchSelection, selectedBranchId, selectedWarehouse, variantWise]);
 
   useEffect(() => {
     if (!hasBranchSelection) return;
@@ -320,37 +344,27 @@ const StockLedgerPage: React.FC = () => {
         </div>
       ),
     },
-    {
-      key: 'variantName',
-      header: 'Variant',
-      render: (v) =>
-        safeString(v) ? (
-          <span className="rounded-full bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-700">
-            {safeString(v)}
-          </span>
-        ) : (
-          <span className="text-gray-300">—</span>
-        ),
-    },
-    {
-      key: 'warehouseName',
-      header: 'Warehouse',
-      sortable: true,
-      render: (v) => (
-        <span className="inline-flex items-center gap-1 text-sm text-gray-700">
-          <svg className="h-3.5 w-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-          </svg>
-          {safeString(v)}
-        </span>
-      ),
-    },
+    ...(variantWise
+      ? [{
+          key: 'variantName' as const,
+          header: 'Variant',
+          sortable: true,
+          render: (v: unknown) =>
+            safeString(v) ? (
+              <span className="rounded-full bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-700">
+                {safeString(v)}
+              </span>
+            ) : (
+              <span className="text-gray-400 text-xs">No variant</span>
+            ),
+        }]
+      : []),
     {
       key: 'quantity',
-      header: 'Stock (Base Unit)',
+      header: 'Remaining Balance',
       sortable: true,
-      render: (v) => {
-        const qty = Number(v);
+      render: (v, row) => {
+        const qty = Number(v ?? row.quantity ?? 0);
         const color = qty <= 0 ? 'text-red-700' : qty < 10 ? 'text-yellow-700' : 'text-green-700';
         return (
           <span className={`text-base font-bold tabular-nums ${color}`}>
@@ -362,8 +376,8 @@ const StockLedgerPage: React.FC = () => {
     {
       key: 'quantity',
       header: 'Status',
-      render: (v) => {
-        const qty = Number(v);
+      render: (v, row) => {
+        const qty = Number(v ?? row.quantity ?? 0);
         if (qty <= 0)
           return <Badge variant="danger" size="sm" dot>Out of Stock</Badge>;
         if (qty < 10)
@@ -371,7 +385,7 @@ const StockLedgerPage: React.FC = () => {
         return <Badge variant="success" size="sm" dot>In Stock</Badge>;
       },
     },
-  ], []);
+  ], [variantWise]);
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
@@ -431,6 +445,18 @@ const StockLedgerPage: React.FC = () => {
                 ))}
               </select>
             </div>
+
+            {viewMode === 'balances' && (
+              <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={variantWise}
+                  onChange={(e) => setVariantWise(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                Variant-wise stock
+              </label>
+            )}
 
             {/* Ledger-only filters */}
             {viewMode === 'ledger' && (

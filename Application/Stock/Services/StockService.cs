@@ -27,9 +27,9 @@ public class StockService : IStockService
     }
 
     public Task<List<StockBalanceDto>> GetStockBalancesAsync(
-        int businessId, int branchId, int? warehouseId = null, int? productId = null, int? variantId = null)
+        int businessId, int branchId, int? warehouseId = null, int? productId = null, int? variantId = null, bool variantWise = false)
     {
-        return _ledgerRepository.GetStockBalancesAsync(businessId, branchId, warehouseId, productId, variantId);
+        return _ledgerRepository.GetStockBalancesAsync(businessId, branchId, warehouseId, productId, variantId, variantWise);
     }
 
     public Task<decimal> GetCurrentStockAsync(int businessId, int branchId, int productId, int? variantId, int warehouseId)

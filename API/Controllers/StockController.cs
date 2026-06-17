@@ -73,7 +73,8 @@ public class StockController : ControllerBase
         [FromQuery] int? businessId,
         [FromQuery] int? warehouseId,
         [FromQuery] int? productId,
-        [FromQuery] int? variantId)
+        [FromQuery] int? variantId,
+        [FromQuery] bool variantWise = false)
     {
         var resolvedBusinessId = this.ResolveBusinessId(businessId);
         var resolvedBranchId = this.ResolveBranchId(branchId);
@@ -81,7 +82,7 @@ public class StockController : ControllerBase
         try
         {
             var balances = await _stockService.GetStockBalancesAsync(
-                resolvedBusinessId, resolvedBranchId, warehouseId, productId, variantId);
+                resolvedBusinessId, resolvedBranchId, warehouseId, productId, variantId, variantWise);
             return Ok(balances);
         }
         catch (InvalidOperationException ex)

@@ -55,31 +55,75 @@ public class StockLedgerRepository : IStockLedgerRepository
     }
 
     public async Task<List<StockBalanceDto>> GetStockBalancesAsync(
-        int businessId, int branchId, int? warehouseId = null, int? productId = null, int? variantId = null)
+        int businessId, int branchId, int? warehouseId = null, int? productId = null, int? variantId = null, bool variantWise = false)
     {
         var query = _context.StockLedgerEntries
             .IgnoreQueryFilters()
-            .Where(e => e.BusinessId == businessId);
+            .AsNoTracking()
+            .Where(e => e.BusinessId == businessId && !e.IsDeleted);
 
         if (branchId > 0) query = query.Where(e => e.BranchId == branchId);
         if (warehouseId.HasValue) query = query.Where(e => e.WarehouseId == warehouseId.Value);
         if (productId.HasValue) query = query.Where(e => e.ProductId == productId.Value);
         if (variantId.HasValue) query = query.Where(e => e.VariantId == variantId.Value);
 
-        var balances = await query
-            .GroupBy(e => new { e.ProductId, e.VariantId, e.WarehouseId })
-            .Select(g => new
-            {
-                g.Key.ProductId,
-                g.Key.VariantId,
-                g.Key.WarehouseId,
-                Quantity = g.Sum(e => e.QuantityInBaseUnit)
-            })
+        if (variantWise)
+        {
+            var ledgerRows = await query
+                .Select(e => new { e.ProductId, e.VariantId, e.WarehouseId, e.QuantityInBaseUnit })
+                .ToListAsync();
+
+            var balances = ledgerRows
+                .GroupBy(e => new { e.ProductId, e.VariantId })
+                .Select(g => new BalanceGroupRow
+                {
+                    ProductId   = g.Key.ProductId,
+                    VariantId   = g.Key.VariantId,
+                    Quantity    = g.Sum(e => e.QuantityInBaseUnit),
+                    WarehouseId = warehouseId ?? g.Select(x => x.WarehouseId).FirstOrDefault(),
+                })
+                .ToList();
+
+            return await MapBalanceDtosAsync(balances, variantWise: true, warehouseId);
+        }
+
+        var productRows = await query
+            .Select(e => new { e.ProductId, e.WarehouseId, e.QuantityInBaseUnit })
             .ToListAsync();
 
-        var productIds = balances.Select(b => b.ProductId).Distinct().ToList();
-        var variantIds = balances.Where(b => b.VariantId.HasValue).Select(b => b.VariantId!.Value).Distinct().ToList();
-        var warehouseIds = balances.Select(b => b.WarehouseId).Distinct().ToList();
+        var productBalances = productRows
+            .GroupBy(e => e.ProductId)
+            .Select(g => new BalanceGroupRow
+            {
+                ProductId   = g.Key,
+                VariantId   = null,
+                Quantity    = g.Sum(e => e.QuantityInBaseUnit),
+                WarehouseId = warehouseId ?? g.Select(x => x.WarehouseId).FirstOrDefault(),
+            })
+            .ToList();
+
+        return await MapBalanceDtosAsync(productBalances, variantWise: false, warehouseId);
+    }
+
+    private sealed class BalanceGroupRow
+    {
+        public int ProductId { get; init; }
+        public int? VariantId { get; init; }
+        public decimal Quantity { get; init; }
+        public int WarehouseId { get; init; }
+    }
+
+    private async Task<List<StockBalanceDto>> MapBalanceDtosAsync(
+        IEnumerable<BalanceGroupRow> balances, bool variantWise, int? warehouseId)
+    {
+        var balanceList = balances.ToList();
+        var productIds = balanceList.Select(b => b.ProductId).Distinct().ToList();
+        var variantIds = variantWise
+            ? balanceList.Where(b => b.VariantId.HasValue).Select(b => b.VariantId!.Value).Distinct().ToList()
+            : new List<int>();
+        var warehouseIds = warehouseId.HasValue
+            ? new List<int> { warehouseId.Value }
+            : balanceList.Select(b => b.WarehouseId).Where(id => id > 0).Distinct().ToList();
 
         var products = await _context.Products
             .IgnoreQueryFilters()
@@ -95,29 +139,39 @@ public class StockLedgerRepository : IStockLedgerRepository
                 .Where(v => variantIds.Contains(v.Id))
                 .Select(v => new { v.Id, v.VariantName })
                 .ToListAsync();
-            foreach (var v in variantList) variantMap[v.Id] = v.VariantName;
+            foreach (var v in variantList)
+                variantMap[v.Id] = v.VariantName;
         }
 
-        var warehouses = await _context.Warehouses
-            .IgnoreQueryFilters()
-            .Where(w => warehouseIds.Contains(w.Id))
-            .Select(w => new { w.Id, w.Name })
-            .ToListAsync();
+        var warehouseMap = new Dictionary<int, string>();
+        if (warehouseIds.Count > 0)
+        {
+            var warehouseList = await _context.Warehouses
+                .IgnoreQueryFilters()
+                .Where(w => warehouseIds.Contains(w.Id))
+                .Select(w => new { w.Id, w.Name })
+                .ToListAsync();
+            foreach (var wh in warehouseList)
+                warehouseMap[wh.Id] = wh.Name;
+        }
 
         var productMap = products.ToDictionary(p => p.Id, p => (p.ProductName, p.ProductCode));
-        var warehouseMap = warehouses.ToDictionary(w => w.Id, w => w.Name);
 
-        return balances.Select(b => new StockBalanceDto
+        return balanceList.Select(b =>
         {
-            ProductId = b.ProductId,
-            ProductName = productMap.TryGetValue(b.ProductId, out var p) ? p.ProductName : string.Empty,
-            ProductCode = productMap.TryGetValue(b.ProductId, out var pc) ? pc.ProductCode : string.Empty,
-            VariantId = b.VariantId,
-            VariantName = b.VariantId.HasValue && variantMap.TryGetValue(b.VariantId.Value, out var vn) ? vn : null,
-            WarehouseId = b.WarehouseId,
-            WarehouseName = warehouseMap.TryGetValue(b.WarehouseId, out var w) ? w : string.Empty,
-            Quantity = b.Quantity
-        }).ToList();
+            var whId = warehouseId ?? b.WarehouseId;
+            return new StockBalanceDto
+            {
+                ProductId     = b.ProductId,
+                ProductName   = productMap.TryGetValue(b.ProductId, out var p) ? p.ProductName : string.Empty,
+                ProductCode   = productMap.TryGetValue(b.ProductId, out var pc) ? pc.ProductCode : string.Empty,
+                VariantId     = variantWise ? b.VariantId : null,
+                VariantName   = variantWise && b.VariantId.HasValue && variantMap.TryGetValue(b.VariantId.Value, out var vn) ? vn : null,
+                WarehouseId   = whId,
+                WarehouseName = warehouseMap.TryGetValue(whId, out var w) ? w : string.Empty,
+                Quantity      = b.Quantity,
+            };
+        }).OrderBy(b => b.ProductName).ThenBy(b => b.VariantName).ToList();
     }
 
     public async Task<decimal> GetCurrentStockAsync(
@@ -131,10 +185,8 @@ public class StockLedgerRepository : IStockLedgerRepository
 
         if (variantId.HasValue)
             query = query.Where(e => e.VariantId == variantId.Value);
-        else
-            query = query.Where(e => e.VariantId == null);
 
-        return await query.SumAsync(e => e.QuantityInBaseUnit);
+        return await query.SumAsync(e => (decimal?)e.QuantityInBaseUnit) ?? 0m;
     }
 
     public async Task<Dictionary<string, decimal>> GetStockForProductsAsync(

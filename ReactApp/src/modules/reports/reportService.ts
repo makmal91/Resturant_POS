@@ -50,14 +50,7 @@ export interface SalesByProductResponse {
 export interface StockSummaryItem {
   productId: number;
   productName: string;
-  productCode: string;
-  variantId: number | null;
-  variantName: string | null;
-  warehouseId: number;
-  warehouseName: string;
-  quantity: number;
-  costPrice: number;
-  stockValue: number;
+  closingBalance: number;
 }
 
 export interface StockSummaryResponse {
@@ -66,35 +59,9 @@ export interface StockSummaryResponse {
   totalPages: number;
   currentPage: number;
   pageSize: number;
-  totalQuantity: number;
-  totalStockValue: number;
-  lowStockCount: number;
-}
-
-export interface StockMovementByType {
-  type: string;
-  entryCount: number;
-  totalQuantity: number;
-  totalIn: number;
-  totalOut: number;
-  totalAmount: number;
-}
-
-export interface StockMovementDaily {
-  date: string;
-  stockIn: number;
-  stockOut: number;
-  netQty: number;
-}
-
-export interface StockMovementResponse {
   fromDate: string;
   toDate: string;
-  totalEntries: number;
-  totalStockIn: number;
-  totalStockOut: number;
-  byType: StockMovementByType[];
-  dailyMovement: StockMovementDaily[];
+  totalClosingBalance: number;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -132,7 +99,7 @@ export const reportService = {
 
   getStockSummary: (
     branchId: number,
-    params: {
+    params: ReportDateRange & {
       warehouseId?: number;
       page?: number;
       pageSize?: number;
@@ -142,15 +109,6 @@ export const reportService = {
     } = {},
   ) =>
     apiClient.get<StockSummaryResponse>('/reports/stock-summary', {
-      params: { branchId, ...params },
-      ...bh(branchId),
-    }),
-
-  getStockMovement: (
-    branchId: number,
-    params: ReportDateRange & { warehouseId?: number } = {},
-  ) =>
-    apiClient.get<StockMovementResponse>('/reports/stock-movement', {
       params: { branchId, ...params },
       ...bh(branchId),
     }),

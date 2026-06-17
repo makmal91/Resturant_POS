@@ -68,9 +68,15 @@ export const stockService = {
       ...branchHeader(params.branchId),
     }),
 
-  getBalances: (branchId: number, warehouseId?: number, productId?: number, variantId?: number) =>
+  getBalances: (branchId: number, warehouseId?: number, productId?: number, variantId?: number, variantWise = false) =>
     apiClient.get<StockBalance[]>('/stock/balances', {
-      params: { branchId, ...(warehouseId ? { warehouseId } : {}), ...(productId ? { productId } : {}), ...(variantId ? { variantId } : {}) },
+      params: {
+        branchId,
+        variantWise,
+        ...(warehouseId ? { warehouseId } : {}),
+        ...(productId ? { productId } : {}),
+        ...(variantId ? { variantId } : {}),
+      },
       ...branchHeader(branchId),
     }),
 

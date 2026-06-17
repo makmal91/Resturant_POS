@@ -10,7 +10,6 @@ import {
   reportService,
   type SalesByProductRow,
   type SalesSummaryDto,
-  type StockMovementResponse,
   type StockSummaryItem,
   type StockSummaryResponse,
 } from './reportService';
@@ -43,16 +42,6 @@ const monthStart = () => {
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
-const TYPE_LABEL: Record<string, string> = {
-  PurchaseEntry:  'Purchase',
-  SaleEntry:      'Sale',
-  PurchaseReturn: 'Purchase Return',
-  SaleReturn:     'Sale Return',
-  Adjustment:     'Adjustment',
-  TransferIn:     'Transfer In',
-  TransferOut:    'Transfer Out',
-};
-
 // ─── Component ────────────────────────────────────────────────────────────────
 
 const ReportsPage: React.FC = () => {
@@ -82,7 +71,6 @@ const ReportsPage: React.FC = () => {
 
   // Stock state
   const [stockSummary, setStockSummary] = useState<StockSummaryResponse | null>(null);
-  const [stockMovement, setStockMovement] = useState<StockMovementResponse | null>(null);
   const [stockPage, setStockPage] = useState(1);
   const [stockPageSize, setStockPageSize] = useState(25);
   const [stockSearch, setStockSearch] = useState('');
@@ -142,6 +130,8 @@ const ReportsPage: React.FC = () => {
 
     try {
       const summaryRes = await reportService.getStockSummary(branchId, {
+        fromDate,
+        toDate,
         warehouseId: wh,
         page: stockPage,
         pageSize: stockPageSize,
@@ -149,25 +139,21 @@ const ReportsPage: React.FC = () => {
         sortBy: stockSortColumn,
         sortDirection: stockSortDirection,
       });
-      setStockSummary(summaryRes.data);
+      const raw = summaryRes.data;
+      const items = Array.isArray(raw?.items)
+        ? raw.items.map((row: Record<string, unknown>) => ({
+            productId: Number(row.productId ?? row.ProductId ?? 0),
+            productName: String(row.productName ?? row.ProductName ?? ''),
+            closingBalance: Number(row.closingBalance ?? row.ClosingBalance ?? row.quantity ?? row.Quantity ?? 0),
+          }))
+        : [];
+      setStockSummary(raw ? { ...raw, items } : null);
     } catch (err) {
       setStockSummary(null);
       showNotification('error', getApiErrorMessage(err, 'Failed to load stock balances.'));
+    } finally {
+      setLoading(false);
     }
-
-    try {
-      const movementRes = await reportService.getStockMovement(branchId, {
-        fromDate,
-        toDate,
-        warehouseId: wh,
-      });
-      setStockMovement(movementRes.data);
-    } catch (err) {
-      setStockMovement(null);
-      showNotification('error', getApiErrorMessage(err, 'Failed to load stock movement summary.'));
-    }
-
-    setLoading(false);
   }, [branchId, fromDate, toDate, warehouseId, stockPage, stockPageSize, stockSearch, stockSortColumn, stockSortDirection, showNotification]);
 
   useEffect(() => {
@@ -191,16 +177,14 @@ const ReportsPage: React.FC = () => {
   ], []);
 
   const stockColumns: Column<StockSummaryItem>[] = useMemo(() => [
-    { key: 'productCode', header: 'Code', sortable: true, render: (v) => <span className="font-mono text-xs">{safeString(v) || '—'}</span> },
+    { key: 'productId', header: 'Product ID', sortable: true },
     { key: 'productName', header: 'Product', sortable: true },
-    { key: 'variantName', header: 'Variant', sortable: true, render: (v) => safeString(v) || '—' },
-    { key: 'warehouseName', header: 'Warehouse', sortable: true },
     {
-      key: 'quantity',
-      header: 'Qty',
+      key: 'closingBalance',
+      header: 'Closing Balance',
       sortable: true,
-      render: (v) => {
-        const q = Number(v ?? 0);
+      render: (v, row) => {
+        const q = Number(v ?? row.closingBalance ?? 0);
         return (
           <Badge variant={q <= 0 ? 'danger' : q <= 5 ? 'warning' : 'success'} size="sm">
             {fmtQty(q)}
@@ -208,8 +192,6 @@ const ReportsPage: React.FC = () => {
         );
       },
     },
-    { key: 'costPrice', header: 'Cost', sortable: true, render: (v) => fmt(Number(v ?? 0)) },
-    { key: 'stockValue', header: 'Value', sortable: true, render: (v) => <span className="font-semibold">{fmt(Number(v ?? 0))}</span> },
   ], []);
 
   if (!hasBranch) {
@@ -239,7 +221,7 @@ const ReportsPage: React.FC = () => {
         <div>
           <h1 className="mb-2 text-3xl font-bold text-gray-900">Reports</h1>
           <p className="text-gray-600">
-            {tab === 'sales' ? 'Sales performance and product breakdown' : 'Stock balances and movement summary'}
+            {tab === 'sales' ? 'Sales performance and product breakdown' : 'Closing stock balance by product'}
             {salesSummary?.branchName && tab === 'sales' ? ` — ${salesSummary.branchName}` : ''}
           </p>
         </div>
@@ -424,12 +406,10 @@ const ReportsPage: React.FC = () => {
       {tab === 'stock' && (
         <div className="space-y-6">
           {stockSummary && (
-            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-2">
               {[
-                { label: 'Stock Items', value: String(stockSummary.totalRecords), color: 'text-blue-700 bg-blue-50 border-blue-100' },
-                { label: 'Total Quantity', value: fmtQty(stockSummary.totalQuantity), color: 'text-gray-800 bg-gray-50 border-gray-200' },
-                { label: 'Stock Value', value: fmt(stockSummary.totalStockValue), color: 'text-emerald-700 bg-emerald-50 border-emerald-100' },
-                { label: 'Low Stock (≤5)', value: String(stockSummary.lowStockCount), color: 'text-orange-700 bg-orange-50 border-orange-100' },
+                { label: 'Products', value: String(stockSummary.totalRecords), color: 'text-blue-700 bg-blue-50 border-blue-100' },
+                { label: 'Total Closing Balance', value: fmtQty(stockSummary.totalClosingBalance), color: 'text-emerald-700 bg-emerald-50 border-emerald-100' },
               ].map(({ label, value, color }) => (
                 <div key={label} className={`rounded-lg border p-4 ${color}`}>
                   <p className="text-xs font-medium uppercase tracking-wide opacity-70">{label}</p>
@@ -439,55 +419,14 @@ const ReportsPage: React.FC = () => {
             </div>
           )}
 
-          {stockMovement && stockMovement.byType.length > 0 && (
-            <div className="overflow-hidden rounded-xl border border-gray-100 bg-white">
-              <div className="border-b border-gray-50 px-5 py-4">
-                <h2 className="text-base font-semibold text-gray-700">Stock Movement Summary</h2>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-gray-50 text-xs uppercase tracking-wide text-gray-600">
-                      <th className="px-5 py-3 text-left">Type</th>
-                      <th className="px-4 py-3 text-right">Entries</th>
-                      <th className="px-4 py-3 text-right">Stock In</th>
-                      <th className="px-4 py-3 text-right">Stock Out</th>
-                      <th className="px-5 py-3 text-right">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {stockMovement.byType.map((row) => (
-                      <tr key={row.type}>
-                        <td className="px-5 py-2.5 font-medium">{TYPE_LABEL[row.type] ?? row.type}</td>
-                        <td className="px-4 py-2.5 text-right">{row.entryCount}</td>
-                        <td className="px-4 py-2.5 text-right text-emerald-600">{fmtQty(row.totalIn)}</td>
-                        <td className="px-4 py-2.5 text-right text-red-500">{fmtQty(row.totalOut)}</td>
-                        <td className="px-5 py-2.5 text-right">{fmt(row.totalAmount)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="border-t border-gray-200 bg-gray-50 font-bold text-gray-700">
-                      <td className="px-5 py-3">Total</td>
-                      <td className="px-4 py-3 text-right">{stockMovement.totalEntries}</td>
-                      <td className="px-4 py-3 text-right text-emerald-700">{fmtQty(stockMovement.totalStockIn)}</td>
-                      <td className="px-4 py-3 text-right text-red-600">{fmtQty(stockMovement.totalStockOut)}</td>
-                      <td className="px-5 py-3 text-right">—</td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            </div>
-          )}
-
           <div>
-            <h2 className="mb-4 text-base font-semibold text-gray-700">Current Stock Balances</h2>
+            <h2 className="mb-4 text-base font-semibold text-gray-700">Stock Balance Report</h2>
             <DataTable
               data={stockSummary?.items ?? []}
               columns={stockColumns}
               loading={loading}
               searchable
-              searchPlaceholder="Search stock items..."
+              searchPlaceholder="Search products..."
               pagination
               pageSize={stockPageSize}
               pageSizeOptions={[25, 50, 100]}
