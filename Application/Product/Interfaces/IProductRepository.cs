@@ -13,6 +13,8 @@ public interface IProductRepository
     Task<bool> CategoryExistsAsync(int categoryId, int businessId, int branchId);
     Task<bool> SubCategoryBelongsToCategoryAsync(int subCategoryId, int categoryId, int businessId, int branchId);
     Task<bool> BrandExistsAsync(int brandId, int businessId, int branchId);
+    Task<Dictionary<int, (bool AllowNegativeStock, bool EnableLowStockAlert, decimal? LowStockAlertLevel)>> GetStockSettingsByIdsAsync(
+        int businessId, int branchId, IEnumerable<int> productIds);
     Task AddAsync(ProductEntity product);
     Task<POSSystem.Domain.ProductImage?> GetImageByIdAsync(int productId, int imageId, int businessId, int branchId);
     void RemoveImage(POSSystem.Domain.ProductImage image);

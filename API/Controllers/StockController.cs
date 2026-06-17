@@ -130,4 +130,19 @@ public class StockController : ControllerBase
             return BadRequest(new { message = ex.Message });
         }
     }
+
+    [HttpGet("low-stock-alerts")]
+    public async Task<IActionResult> GetLowStockAlerts(
+        [FromQuery] int? branchId,
+        [FromQuery] int? businessId,
+        [FromQuery] int? warehouseId)
+    {
+        var resolvedBusinessId = this.ResolveBusinessId(businessId);
+        var resolvedBranchId = this.ResolveBranchId(branchId);
+
+        var alerts = await _stockService.GetLowStockAlertsAsync(
+            resolvedBusinessId, resolvedBranchId, warehouseId);
+
+        return Ok(alerts);
+    }
 }

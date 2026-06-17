@@ -20,6 +20,11 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
         builder.Property(p => p.WholesalePrice).HasPrecision(18, 2);
         builder.Property(p => p.DiscountType).HasConversion<int?>();
         builder.Property(p => p.DiscountValue).HasPrecision(18, 2);
+        builder.Property(p => p.AllowNegativeStock).HasDefaultValue(false);
+        builder.Property(p => p.EnableLowStockAlert).HasDefaultValue(false);
+        builder.Property(p => p.LowStockAlertLevel).HasPrecision(18, 4);
+        builder.Property(p => p.OpeningStock).HasPrecision(18, 4).HasDefaultValue(0m);
+        builder.Property(p => p.OpeningStockVariantWise).HasDefaultValue(false);
 
         builder.HasIndex(p => new { p.BusinessId, p.BranchId, p.ProductCode })
             .IsUnique()

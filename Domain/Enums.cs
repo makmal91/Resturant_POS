@@ -82,15 +82,16 @@ public enum PurchaseStatus
 
 public enum StockLedgerType
 {
-    PurchaseEntry    = 1,
-    SaleEntry        = 2,
-    PurchaseReturn   = 3,
+    PurchaseEntry    = 1,   // Purchase
+    SaleEntry        = 2,   // Sale
+    PurchaseReturn   = 3,   // Return In (purchase return)
     Adjustment       = 4,
-    TransferOut      = 5,
-    TransferIn       = 6,
-    SaleReturn       = 7,
+    TransferOut      = 5,   // Return Out / transfer out
+    TransferIn       = 6,   // Return In / transfer in
+    SaleReturn       = 7,   // Return In (sale return)
     SaleReversal     = 8,
     PurchaseReversal = 9,
+    Opening          = 10,
 }
 
 public enum CashFlowTransactionType

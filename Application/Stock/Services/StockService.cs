@@ -8,10 +8,12 @@ namespace POSSystem.Application.Stock.Services;
 public class StockService : IStockService
 {
     private readonly IStockLedgerRepository _ledgerRepository;
+    private readonly ILowStockAlertService _lowStockAlertService;
 
-    public StockService(IStockLedgerRepository ledgerRepository)
+    public StockService(IStockLedgerRepository ledgerRepository, ILowStockAlertService lowStockAlertService)
     {
         _ledgerRepository = ledgerRepository;
+        _lowStockAlertService = lowStockAlertService;
     }
 
     public async Task<PagedResultDto<StockLedgerDto>> GetLedgerAsync(StockLedgerFilterDto filter)
@@ -89,7 +91,19 @@ public class StockService : IStockService
 
         await _ledgerRepository.AddRangeAsync(new[] { outEntry, inEntry });
         await _ledgerRepository.SaveChangesAsync();
+
+        await _lowStockAlertService.EvaluateAfterStockChangeAsync(
+            dto.BusinessId,
+            dto.BranchId,
+            [
+                new StockChangeItem(dto.ProductId, dto.VariantId, dto.FromWarehouseId),
+                new StockChangeItem(dto.ProductId, dto.VariantId, dto.ToWarehouseId)
+            ]);
     }
+
+    public Task<List<LowStockAlertDto>> GetLowStockAlertsAsync(
+        int businessId, int branchId, int? warehouseId = null)
+        => _lowStockAlertService.GetActiveAlertsAsync(businessId, branchId, warehouseId);
 
     private static StockLedgerDto MapLedgerDto(StockLedger e) => new()
     {

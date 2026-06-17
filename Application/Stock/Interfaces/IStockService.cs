@@ -10,4 +10,5 @@ public interface IStockService
         int businessId, int branchId, int? warehouseId = null, int? productId = null, int? variantId = null, bool variantWise = false);
     Task<decimal> GetCurrentStockAsync(int businessId, int branchId, int productId, int? variantId, int warehouseId);
     Task TransferStockAsync(StockTransferDto dto);
+    Task<List<LowStockAlertDto>> GetLowStockAlertsAsync(int businessId, int branchId, int? warehouseId = null);
 }

@@ -35,6 +35,9 @@ public class ProductListDto
     public bool IsVariantEnabled { get; set; }
     public int BranchId { get; set; }
     public string BranchName { get; set; } = string.Empty;
+    public bool AllowNegativeStock { get; set; }
+    public bool EnableLowStockAlert { get; set; }
+    public decimal? LowStockAlertLevel { get; set; }
 }
 
 public class ProductDetailDto : ProductListDto
@@ -50,6 +53,23 @@ public class ProductDetailDto : ProductListDto
     public List<ProductVariantDto> Variants { get; set; } = new();
     public List<ProductBarcodeDto> Barcodes { get; set; } = new();
     public List<ProductImageDto> Images { get; set; } = new();
+    public decimal OpeningStock { get; set; }
+    public bool HasOpeningStockApplied { get; set; }
+    public bool OpeningStockVariantWise { get; set; }
+    public List<ProductOpeningStockDto> OpeningStockByVariant { get; set; } = new();
+}
+
+public class ProductOpeningStockWriteDto
+{
+    public string VariantName { get; set; } = string.Empty;
+    public int? VariantId { get; set; }
+    public decimal Quantity { get; set; }
+}
+
+public class ProductOpeningStockDto : ProductOpeningStockWriteDto
+{
+    public decimal UnitPrice { get; set; }
+    public decimal TotalAmount { get; set; }
 }
 
 public class CreateProductDto
@@ -74,6 +94,13 @@ public class CreateProductDto
     public List<ProductUnitWriteDto> Units { get; set; } = new();
     public List<ProductVariantWriteDto> Variants { get; set; } = new();
     public List<ProductBarcodeWriteDto> Barcodes { get; set; } = new();
+    public bool AllowNegativeStock { get; set; }
+    public bool EnableLowStockAlert { get; set; }
+    public decimal? LowStockAlertLevel { get; set; }
+    public decimal OpeningStock { get; set; }
+    public int? OpeningStockWarehouseId { get; set; }
+    public bool OpeningStockVariantWise { get; set; }
+    public List<ProductOpeningStockWriteDto> OpeningStockByVariant { get; set; } = new();
 }
 
 public class UpdateProductDto : CreateProductDto

@@ -2,6 +2,7 @@ using POSSystem.Application.CashFlow.Interfaces;
 using POSSystem.Application.Common.Constants;
 using POSSystem.Application.Common.DTOs;
 using POSSystem.Application.Common.Interfaces;
+using POSSystem.Application.Product.Interfaces;
 using POSSystem.Application.Sales.DTOs;
 using POSSystem.Application.Sales.Interfaces;
 using POSSystem.Application.Stock.Interfaces;
@@ -14,17 +15,23 @@ public class SalesService : ISalesService
 {
     private readonly ISalesRepository _salesRepository;
     private readonly IStockLedgerRepository _stockLedgerRepository;
+    private readonly IProductRepository _productRepository;
+    private readonly ILowStockAlertService _lowStockAlertService;
     private readonly ICashFlowService _cashFlowService;
     private readonly ICodeGeneratorService _codeGenerator;
 
     public SalesService(
         ISalesRepository salesRepository,
         IStockLedgerRepository stockLedgerRepository,
+        IProductRepository productRepository,
+        ILowStockAlertService lowStockAlertService,
         ICashFlowService cashFlowService,
         ICodeGeneratorService codeGenerator)
     {
         _salesRepository = salesRepository;
         _stockLedgerRepository = stockLedgerRepository;
+        _productRepository = productRepository;
+        _lowStockAlertService = lowStockAlertService;
         _cashFlowService = cashFlowService;
         _codeGenerator = codeGenerator;
     }
@@ -176,6 +183,7 @@ public class SalesService : ISalesService
     public async Task<SaleInvoiceDto> CreateSaleInvoiceAsync(CreateSaleInvoiceDto dto)
     {
         ValidateInvoiceDto(dto.BranchId, dto.WarehouseId, dto.Items);
+        await ValidateStockAvailabilityAsync(dto.BusinessId, dto.BranchId, dto.WarehouseId, dto.Items);
 
         var invoiceNo = await GenerateInvoiceNoAsync(dto.BranchId);
         var invoice = BuildInvoice(invoiceNo, dto);
@@ -204,6 +212,13 @@ public class SalesService : ISalesService
             });
         }
         await _stockLedgerRepository.SaveChangesAsync();
+
+        await _lowStockAlertService.EvaluateAfterStockChangeAsync(
+            dto.BusinessId,
+            dto.BranchId,
+            invoice.Items
+                .Where(i => !i.IsDeleted)
+                .Select(i => new StockChangeItem(i.ProductId, i.VariantId, invoice.WarehouseId)));
 
         var (cash, card) = ResolvePaymentAmounts(invoice);
         await _cashFlowService.RecordSaleAsync(
@@ -341,6 +356,40 @@ public class SalesService : ISalesService
             : 0;
 
         return invoice;
+    }
+
+    private async Task ValidateStockAvailabilityAsync(
+        int businessId, int branchId, int warehouseId, List<CreateSaleInvoiceItemDto> items)
+    {
+        var productIds = items.Select(i => i.ProductId).Distinct();
+        var settings = await _productRepository.GetStockSettingsByIdsAsync(businessId, branchId, productIds);
+
+        var requiredByKey = new Dictionary<string, decimal>();
+        foreach (var item in items)
+        {
+            if (!settings.TryGetValue(item.ProductId, out var productSettings) || productSettings.AllowNegativeStock)
+                continue;
+
+            var cf = item.ConversionFactor > 0 ? item.ConversionFactor : 1m;
+            var baseQty = item.Quantity * cf;
+            var key = $"{item.ProductId}:{item.VariantId ?? 0}";
+
+            requiredByKey[key] = requiredByKey.GetValueOrDefault(key) + baseQty;
+        }
+
+        foreach (var (key, requiredQty) in requiredByKey)
+        {
+            var parts = key.Split(':');
+            var productId = int.Parse(parts[0]);
+            var variantId = int.Parse(parts[1]);
+            int? variant = variantId == 0 ? null : variantId;
+
+            var available = await _stockLedgerRepository.GetCurrentStockAsync(
+                businessId, branchId, productId, variant, warehouseId);
+
+            if (requiredQty > available)
+                throw new InvalidOperationException("Insufficient stock for this product.");
+        }
     }
 
     private static void ValidateInvoiceDto(int branchId, int warehouseId, List<CreateSaleInvoiceItemDto> items)
@@ -552,6 +601,11 @@ public class SalesService : ISalesService
         await _salesRepository.SaveChangesAsync();
         await _stockLedgerRepository.SaveChangesAsync();
 
+        await _lowStockAlertService.EvaluateAfterStockChangeAsync(
+            dto.BusinessId,
+            dto.BranchId,
+            reversals.Select(r => new StockChangeItem(r.ProductId, r.VariantId, r.WarehouseId)));
+
         await _cashFlowService.ReverseSaleAsync(
             dto.BusinessId, dto.BranchId, invoice.Id, invoice.InvoiceNo,
             prevCash, prevCard, DateTime.UtcNow, dto.Reason);
@@ -658,6 +712,8 @@ public class SalesService : ISalesService
 
         await _salesRepository.SaveChangesAsync();
 
+        await ValidateStockAvailabilityAsync(dto.BusinessId, dto.BranchId, dto.WarehouseId, dto.Items);
+
         // STEP 4: Write new SaleEntry ledger records for updated items
         foreach (var item in invoice.Items.Where(i => !i.IsDeleted))
         {
@@ -679,6 +735,13 @@ public class SalesService : ISalesService
         }
 
         await _stockLedgerRepository.SaveChangesAsync();
+
+        await _lowStockAlertService.EvaluateAfterStockChangeAsync(
+            dto.BusinessId,
+            dto.BranchId,
+            invoice.Items
+                .Where(i => !i.IsDeleted)
+                .Select(i => new StockChangeItem(i.ProductId, i.VariantId, invoice.WarehouseId)));
 
         await _cashFlowService.ReverseSaleAsync(
             dto.BusinessId, dto.BranchId, invoice.Id, invoice.InvoiceNo,

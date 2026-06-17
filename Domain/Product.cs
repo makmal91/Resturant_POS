@@ -25,6 +25,11 @@ public class Product : BaseEntity
     public bool IsDiscountAllowed { get; set; }
     public ProductDiscountType? DiscountType { get; set; }
     public decimal DiscountValue { get; set; }
+    public bool AllowNegativeStock { get; set; }
+    public bool EnableLowStockAlert { get; set; }
+    public decimal? LowStockAlertLevel { get; set; }
+    public decimal OpeningStock { get; set; }
+    public bool OpeningStockVariantWise { get; set; }
 
     public virtual MenuCategory Category { get; set; } = null!;
     public virtual SubCategory? SubCategory { get; set; }

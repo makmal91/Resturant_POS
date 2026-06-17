@@ -228,4 +228,58 @@ public class StockLedgerRepository : IStockLedgerRepository
     }
 
     public Task SaveChangesAsync() => _context.SaveChangesAsync();
+
+    public async Task<bool> HasOpeningEntryAsync(int productId, int businessId, int branchId)
+    {
+        return await _context.StockLedgerEntries
+            .IgnoreQueryFilters()
+            .AnyAsync(e => e.ProductId == productId
+                           && e.BusinessId == businessId
+                           && e.BranchId == branchId
+                           && e.Type == StockLedgerType.Opening
+                           && !e.IsDeleted);
+    }
+
+    public async Task<List<StockLedger>> GetOpeningEntriesAsync(int productId, int businessId, int branchId)
+    {
+        return await _context.StockLedgerEntries
+            .IgnoreQueryFilters()
+            .Include(e => e.Variant)
+            .Where(e => e.ProductId == productId
+                        && e.BusinessId == businessId
+                        && e.BranchId == branchId
+                        && e.Type == StockLedgerType.Opening
+                        && !e.IsDeleted)
+            .OrderBy(e => e.VariantId)
+            .ThenBy(e => e.Id)
+            .ToListAsync();
+    }
+
+    public async Task<Dictionary<int, (bool AllowNegativeStock, bool EnableLowStockAlert, decimal? LowStockAlertLevel)>> GetProductStockSettingsAsync(
+        int businessId, int branchId, IEnumerable<int> productIds)
+    {
+        var ids = productIds.Distinct().ToList();
+        if (ids.Count == 0)
+            return new Dictionary<int, (bool, bool, decimal?)>();
+
+        var rows = await _context.Products
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(p => ids.Contains(p.Id)
+                        && p.BusinessId == businessId
+                        && p.BranchId == branchId
+                        && !p.IsDeleted)
+            .Select(p => new
+            {
+                p.Id,
+                p.AllowNegativeStock,
+                p.EnableLowStockAlert,
+                p.LowStockAlertLevel
+            })
+            .ToListAsync();
+
+        return rows.ToDictionary(
+            p => p.Id,
+            p => (p.AllowNegativeStock, p.EnableLowStockAlert, p.LowStockAlertLevel));
+    }
 }

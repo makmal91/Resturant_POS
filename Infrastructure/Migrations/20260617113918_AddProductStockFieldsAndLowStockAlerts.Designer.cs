@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using POSSystem.Infrastructure.Data;
 
@@ -11,9 +12,11 @@ using POSSystem.Infrastructure.Data;
 namespace POSSystem.Infrastructure.Migrations
 {
     [DbContext(typeof(POSDbContext))]
-    partial class POSDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260617113918_AddProductStockFieldsAndLowStockAlerts")]
+    partial class AddProductStockFieldsAndLowStockAlerts
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -174,7 +177,7 @@ namespace POSSystem.Infrastructure.Migrations
                             ClosingTime = new TimeSpan(0, 22, 0, 0, 0),
                             Code = "MAIN",
                             CountryId = 3,
-                            CreatedAt = new DateTime(2026, 6, 17, 11, 51, 17, 596, DateTimeKind.Utc).AddTicks(4870),
+                            CreatedAt = new DateTime(2026, 6, 17, 11, 39, 16, 891, DateTimeKind.Utc).AddTicks(4398),
                             CreatedBy = 1,
                             Email = "info@akhsoft.com",
                             IsActive = true,
@@ -362,7 +365,7 @@ namespace POSSystem.Infrastructure.Migrations
                         {
                             Id = 1,
                             Address = "123 Main Street",
-                            CreatedAt = new DateTime(2026, 6, 17, 11, 51, 17, 596, DateTimeKind.Utc).AddTicks(3985),
+                            CreatedAt = new DateTime(2026, 6, 17, 11, 39, 16, 891, DateTimeKind.Utc).AddTicks(3759),
                             CreatedBy = 1,
                             Currency = "PKR",
                             Email = "info@akhsoft.com",
@@ -2255,11 +2258,6 @@ namespace POSSystem.Infrastructure.Migrations
                         .HasPrecision(18, 4)
                         .HasColumnType("decimal(18,4)")
                         .HasDefaultValue(0m);
-
-                    b.Property<bool>("OpeningStockVariantWise")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(false);
 
                     b.Property<string>("ProductCode")
                         .IsRequired()

@@ -18,7 +18,6 @@ namespace POSSystem.API.Controllers;
 [Route("api/[controller]")]
 public class DashboardController : ControllerBase
 {
-    private const decimal LowStockThreshold = 5m;
     private const int TrendDays = 30;
     private const int RecentLimit = 10;
 
@@ -726,7 +725,14 @@ public class DashboardController : ControllerBase
         var productMap = productIds.Count > 0
             ? await _db.Products.AsNoTracking()
                 .Where(p => productIds.Contains(p.Id))
-                .ToDictionaryAsync(p => p.Id, p => new { p.ProductName, p.ProductCode, p.CostPrice })
+                .ToDictionaryAsync(p => p.Id, p => new
+                {
+                    p.ProductName,
+                    p.ProductCode,
+                    p.CostPrice,
+                    p.EnableLowStockAlert,
+                    p.LowStockAlertLevel
+                })
             : [];
 
         var variantMap = variantIds.Count > 0
@@ -771,10 +777,18 @@ public class DashboardController : ControllerBase
                 WarehouseName = whName ?? "Unknown",
                 Quantity      = b.Quantity,
                 StockValue    = stockValue,
+                AlertLevel    = product?.EnableLowStockAlert == true ? product.LowStockAlertLevel : null,
             };
         }).ToList();
 
-        var lowStockItems  = items.Where(i => i.Quantity > 0 && i.Quantity <= LowStockThreshold).OrderBy(i => i.Quantity).Take(RecentLimit).ToList();
+        bool IsLowStock(StockAlertItemDto item)
+        {
+            if (item.Quantity <= 0 || !item.AlertLevel.HasValue)
+                return false;
+            return item.Quantity <= item.AlertLevel.Value;
+        }
+
+        var lowStockItems  = items.Where(IsLowStock).OrderBy(i => i.Quantity).Take(RecentLimit).ToList();
         var outOfStockItems = items.Where(i => i.Quantity <= 0).Take(RecentLimit).ToList();
 
         var warehouseDistribution = items
@@ -796,7 +810,7 @@ public class DashboardController : ControllerBase
             TotalVariants         = totalVariants,
             TotalQuantity         = items.Sum(i => i.Quantity),
             TotalStockValue       = items.Sum(i => i.StockValue),
-            LowStockCount         = items.Count(i => i.Quantity > 0 && i.Quantity <= LowStockThreshold),
+            LowStockCount         = items.Count(IsLowStock),
             OutOfStockCount       = items.Count(i => i.Quantity <= 0),
             LowStockItems         = lowStockItems,
             OutOfStockItems       = outOfStockItems,

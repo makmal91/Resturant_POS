@@ -70,6 +70,7 @@ public static class ServiceRegistration
         services.AddScoped<ISupplierRepository, SupplierRepository>();
         services.AddScoped<IPurchaseRepository, PurchaseRepository>();
         services.AddScoped<IStockLedgerRepository, StockLedgerRepository>();
+        services.AddScoped<ILowStockAlertRepository, LowStockAlertRepository>();
 
         // Register sales repository
         services.AddScoped<ISalesRepository, SalesRepository>();

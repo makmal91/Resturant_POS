@@ -93,6 +93,7 @@ public static class ServiceRegistration
         services.AddScoped<ISupplierService, SupplierService>();
         services.AddScoped<IPurchaseService, PurchaseService>();
         services.AddScoped<IStockService, StockService>();
+        services.AddScoped<ILowStockAlertService, LowStockAlertService>();
 
         // Register POS sales service
         services.AddScoped<ISalesService, SalesService>();

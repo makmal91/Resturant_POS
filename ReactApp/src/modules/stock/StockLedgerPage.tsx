@@ -29,13 +29,16 @@ const formatQty = (v: number) => {
 
 /** Human-readable label for each ledger type */
 const TYPE_LABEL: Record<StockLedgerType, string> = {
-  PurchaseEntry:  'Purchase Entry',
-  SaleEntry:      'Sale Entry',
-  PurchaseReturn: 'Purchase Return',
-  SaleReturn:     'Sale Return',
+  PurchaseEntry:  'Purchase',
+  SaleEntry:      'Sale',
+  PurchaseReturn: 'Return In',
+  SaleReturn:     'Return In',
   Adjustment:     'Adjustment',
-  TransferIn:     'Transfer In',
-  TransferOut:    'Transfer Out',
+  TransferIn:     'Return In',
+  TransferOut:    'Return Out',
+  Opening:        'Opening',
+  SaleReversal:   'Sale Reversal',
+  PurchaseReversal: 'Purchase Reversal',
 };
 
 const TYPE_BADGE: Record<StockLedgerType, 'success' | 'danger' | 'info' | 'warning' | 'secondary' | 'primary'> = {
@@ -46,6 +49,9 @@ const TYPE_BADGE: Record<StockLedgerType, 'success' | 'danger' | 'info' | 'warni
   Adjustment:     'primary',
   TransferIn:     'info',
   TransferOut:    'warning',
+  Opening:        'secondary',
+  SaleReversal:   'warning',
+  PurchaseReversal: 'warning',
 };
 
 /** Reference prefix based on type */
@@ -53,6 +59,7 @@ const refPrefix = (type: StockLedgerType) => {
   switch (type) {
     case 'PurchaseEntry':  return 'PO';
     case 'SaleEntry':      return 'SO';
+    case 'Opening':        return 'OP';
     case 'PurchaseReturn': return 'PR';
     case 'SaleReturn':     return 'SR';
     case 'TransferIn':
@@ -484,6 +491,7 @@ const StockLedgerPage: React.FC = () => {
                       <option value="TransferOut">Transfer Out</option>
                     </optgroup>
                     <optgroup label="Other">
+                      <option value="Opening">Opening</option>
                       <option value="Adjustment">Adjustment</option>
                     </optgroup>
                   </select>

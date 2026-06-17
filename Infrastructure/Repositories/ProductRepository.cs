@@ -159,6 +159,34 @@ public class ProductRepository : IProductRepository
             .AnyAsync(b => !b.IsDeleted && b.Id == brandId && b.BusinessId == businessId && b.BranchId == branchId);
     }
 
+    public async Task<Dictionary<int, (bool AllowNegativeStock, bool EnableLowStockAlert, decimal? LowStockAlertLevel)>> GetStockSettingsByIdsAsync(
+        int businessId, int branchId, IEnumerable<int> productIds)
+    {
+        var ids = productIds.Distinct().ToList();
+        if (ids.Count == 0)
+            return new Dictionary<int, (bool, bool, decimal?)>();
+
+        var rows = await _context.Products
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(p => ids.Contains(p.Id)
+                        && p.BusinessId == businessId
+                        && p.BranchId == branchId
+                        && !p.IsDeleted)
+            .Select(p => new
+            {
+                p.Id,
+                p.AllowNegativeStock,
+                p.EnableLowStockAlert,
+                p.LowStockAlertLevel
+            })
+            .ToListAsync();
+
+        return rows.ToDictionary(
+            p => p.Id,
+            p => (p.AllowNegativeStock, p.EnableLowStockAlert, p.LowStockAlertLevel));
+    }
+
     public async Task AddAsync(ProductEntity product)
     {
         await _context.Products.AddAsync(product);

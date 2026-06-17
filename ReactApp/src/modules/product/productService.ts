@@ -42,6 +42,14 @@ export interface ProductImageInfo {
   sortOrder: number;
 }
 
+export interface ProductOpeningStockLine {
+  variantName: string;
+  variantId?: number | null;
+  quantity: number;
+  unitPrice?: number;
+  totalAmount?: number;
+}
+
 export interface ProductPayload {
   id?: number;
   productName: string;
@@ -63,6 +71,13 @@ export interface ProductPayload {
   units: ProductUnitPayload[];
   variants: ProductVariantPayload[];
   barcodes: ProductBarcodePayload[];
+  allowNegativeStock?: boolean;
+  enableLowStockAlert?: boolean;
+  lowStockAlertLevel?: number | null;
+  openingStock?: number;
+  openingStockWarehouseId?: number | null;
+  openingStockVariantWise?: boolean;
+  openingStockByVariant?: ProductOpeningStockLine[];
 }
 
 export interface ProductListItem {
@@ -81,6 +96,9 @@ export interface ProductListItem {
   hasImage: boolean;
   branchId: number;
   branchName: string;
+  allowNegativeStock?: boolean;
+  enableLowStockAlert?: boolean;
+  lowStockAlertLevel?: number | null;
 }
 
 export interface ProductDetail extends ProductListItem {
@@ -95,6 +113,13 @@ export interface ProductDetail extends ProductListItem {
   variants: ProductVariantPayload[];
   barcodes: ProductBarcodePayload[];
   images: ProductImageInfo[];
+  allowNegativeStock?: boolean;
+  enableLowStockAlert?: boolean;
+  lowStockAlertLevel?: number | null;
+  openingStock?: number;
+  hasOpeningStockApplied?: boolean;
+  openingStockVariantWise?: boolean;
+  openingStockByVariant?: ProductOpeningStockLine[];
 }
 
 export interface ProductListResponse {
@@ -194,6 +219,21 @@ const normalizePayload = (data: ProductPayload, branchId: number) => ({
   isDiscountAllowed: data.isDiscountAllowed,
   discountType: data.isDiscountAllowed ? data.discountType : null,
   discountValue: data.isDiscountAllowed ? Number(data.discountValue ?? 0) : 0,
+  allowNegativeStock: Boolean(data.allowNegativeStock),
+  enableLowStockAlert: Boolean(data.enableLowStockAlert),
+  lowStockAlertLevel: data.enableLowStockAlert && data.lowStockAlertLevel != null
+    ? Number(data.lowStockAlertLevel)
+    : null,
+  openingStock: Number(data.openingStock ?? 0),
+  openingStockWarehouseId: data.openingStockWarehouseId ? Number(data.openingStockWarehouseId) : null,
+  openingStockVariantWise: Boolean(data.openingStockVariantWise && data.isVariantEnabled),
+  openingStockByVariant: data.openingStockVariantWise && data.isVariantEnabled
+    ? (data.openingStockByVariant ?? []).map((line) => ({
+        variantName: line.variantName,
+        variantId: line.variantId ?? null,
+        quantity: Number(line.quantity ?? 0),
+      }))
+    : [],
   branchId,
   units: data.units ?? [],
   variants: data.isVariantEnabled ? data.variants ?? [] : [],

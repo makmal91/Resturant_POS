@@ -7,7 +7,10 @@ export type StockLedgerType =
   | 'SaleReturn'
   | 'Adjustment'
   | 'TransferOut'
-  | 'TransferIn';
+  | 'TransferIn'
+  | 'Opening'
+  | 'SaleReversal'
+  | 'PurchaseReversal';
 
 export interface StockLedgerEntry {
   id: number;
@@ -88,4 +91,10 @@ export const stockService = {
 
   transfer: (data: StockTransferPayload) =>
     apiClient.post('/stock/transfer', data, branchHeader(data.branchId)),
+
+  getLowStockAlerts: (branchId: number, warehouseId?: number) =>
+    apiClient.get('/stock/low-stock-alerts', {
+      params: { branchId, ...(warehouseId ? { warehouseId } : {}) },
+      ...branchHeader(branchId),
+    }),
 };

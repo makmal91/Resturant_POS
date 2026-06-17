@@ -371,6 +371,41 @@ const ProductDetailView: React.FC<{ product: ProductDetail }> = ({ product }) =>
       <Info label="Status" value={product.status ? 'Active' : 'Inactive'} />
     </section>
 
+    <section>
+      <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">Stock Settings</h3>
+      <div className="grid grid-cols-1 gap-3 text-sm md:grid-cols-3">
+        <Info label="Opening Stock Qty" value={(product.openingStock ?? 0).toString()} />
+        <Info label="Opening Stock Total" value={((product.openingStock ?? 0) * product.costPrice).toFixed(2)} />
+        <Info label="Opening Mode" value={product.openingStockVariantWise ? 'Variant-wise' : 'Product-level'} />
+        <Info label="Opening Applied" value={product.hasOpeningStockApplied ? 'Yes' : 'No'} />
+        <Info label="Allow Negative Stock" value={product.allowNegativeStock ? 'Yes' : 'No'} />
+        <Info label="Low Stock Alert" value={product.enableLowStockAlert ? `Enabled (≤ ${product.lowStockAlertLevel ?? 0})` : 'Disabled'} />
+      </div>
+      {product.openingStockVariantWise && (product.openingStockByVariant?.length ?? 0) > 0 && (
+        <div className="mt-4 overflow-x-auto rounded-lg border border-gray-200">
+          <table className="min-w-[480px] w-full divide-y divide-gray-200 text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                {['Variant', 'Quantity', 'Unit Cost', 'Total'].map((header) => (
+                  <th key={header} className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">{header}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 bg-white">
+              {product.openingStockByVariant!.map((line) => (
+                <tr key={line.variantName}>
+                  <td className="px-3 py-2">{line.variantName}</td>
+                  <td className="px-3 py-2">{line.quantity}</td>
+                  <td className="px-3 py-2">{(line.unitPrice ?? product.costPrice).toFixed(2)}</td>
+                  <td className="px-3 py-2">{(line.totalAmount ?? line.quantity * (line.unitPrice ?? product.costPrice)).toFixed(2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+
     <DetailList title="Units" rows={product.units.map((unit) => `${unit.unitName} | factor ${unit.conversionFactor}${unit.isBaseUnit ? ' | Base' : ''}`)} />
     <DetailList title="Variants" rows={product.variants.map((variant) => `${variant.variantName}${variant.size ? ` | ${variant.size}` : ''}${variant.color ? ` | ${variant.color}` : ''} | +${variant.additionalPrice}`)} />
     <DetailList title="Barcodes" rows={product.barcodes.map((barcode) => `${barcode.barcodeValue}${barcode.isPrimary ? ' | Primary' : ''}`)} />

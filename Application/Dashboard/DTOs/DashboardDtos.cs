@@ -64,6 +64,7 @@ public class StockAlertItemDto
     public string WarehouseName { get; set; } = string.Empty;
     public decimal Quantity { get; set; }
     public decimal StockValue { get; set; }
+    public decimal? AlertLevel { get; set; }
 }
 
 public class WarehouseStockDto

@@ -60,3 +60,18 @@ public class StockTransferDto
     public int BusinessId { get; set; }
     public int BranchId { get; set; }
 }
+
+public class LowStockAlertDto
+{
+    public int Id { get; set; }
+    public int ProductId { get; set; }
+    public string ProductName { get; set; } = string.Empty;
+    public string ProductCode { get; set; } = string.Empty;
+    public int? VariantId { get; set; }
+    public string? VariantName { get; set; }
+    public int WarehouseId { get; set; }
+    public string WarehouseName { get; set; } = string.Empty;
+    public decimal CurrentStock { get; set; }
+    public decimal AlertLevel { get; set; }
+    public DateTime LastTriggeredAt { get; set; }
+}

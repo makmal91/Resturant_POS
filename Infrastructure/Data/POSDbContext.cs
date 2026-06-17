@@ -56,6 +56,7 @@ public class POSDbContext : DbContext
     public DbSet<Purchase> Purchases { get; set; } = null!;
     public DbSet<PurchaseItem> PurchaseItems { get; set; } = null!;
     public DbSet<StockLedger> StockLedgerEntries { get; set; } = null!;
+    public DbSet<LowStockAlert> LowStockAlerts { get; set; } = null!;
 
     // POS Sales module
     public DbSet<SaleInvoice> SaleInvoices { get; set; } = null!;
@@ -103,6 +104,7 @@ public class POSDbContext : DbContext
         modelBuilder.ApplyConfiguration(new ProductVariantConfiguration());
         modelBuilder.ApplyConfiguration(new ProductBarcodeConfiguration());
         modelBuilder.ApplyConfiguration(new ProductImageConfiguration());
+        modelBuilder.ApplyConfiguration(new LowStockAlertConfiguration());
         modelBuilder.ApplyConfiguration(new MenuItemConfiguration());
         modelBuilder.ApplyConfiguration(new MenuItemVariantConfiguration());
         modelBuilder.ApplyConfiguration(new MenuItemAddonConfiguration());

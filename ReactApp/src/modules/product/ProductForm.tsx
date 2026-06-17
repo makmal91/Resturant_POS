@@ -5,12 +5,14 @@ import {
   ProductPayload,
   ProductUnitPayload,
   ProductVariantPayload,
+  ProductOpeningStockLine,
 } from './productService';
 import { getApiErrorMessage } from '../../services/api';
 import { CODE_MODULES, codeGeneratorService } from '../../services/codeGeneratorService';
 import CodeFieldWithGenerate from '../../components/forms/CodeFieldWithGenerate';
 import { useBranchStore } from '../../stores/useBranchStore';
 import { resolveEffectiveBranchId } from '../../utils/resolveBranchId';
+import { warehouseService, type WarehouseItem } from '../warehouse/warehouseService';
 
 export interface ProductOption {
   id: number;
@@ -59,13 +61,14 @@ const emptyBarcode = (): ProductBarcodePayload => ({
   isPrimary: false,
 });
 
-type ProductFormTab = 'basic' | 'pricing' | 'units' | 'variants' | 'barcodes';
+type ProductFormTab = 'basic' | 'pricing' | 'stock' | 'units' | 'variants' | 'barcodes';
 
 const formTabs: Array<{ id: ProductFormTab; label: string; helper: string }> = [
   { id: 'basic', label: 'Basic Info', helper: 'Name, category, brand' },
-  { id: 'pricing', label: 'Pricing', helper: 'Retail, wholesale, discount' },
   { id: 'units', label: 'Units', helper: 'Base and alternate units' },
   { id: 'variants', label: 'Variants', helper: 'Size, color, SKU' },
+  { id: 'pricing', label: 'Pricing', helper: 'Retail, wholesale, discount' },
+  { id: 'stock', label: 'Stock', helper: 'Opening stock & alerts' },
   { id: 'barcodes', label: 'Barcodes & Images', helper: 'Codes and photos' },
 ];
 
@@ -91,6 +94,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
   const [activeTab, setActiveTab] = useState<ProductFormTab>('basic');
   const [primaryImageFile, setPrimaryImageFile] = useState<File | null>(null);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [warehouses, setWarehouses] = useState<WarehouseItem[]>([]);
   const [formData, setFormData] = useState<ProductPayload>({
     productName: '',
     productCode: '',
@@ -111,9 +115,26 @@ const ProductForm: React.FC<ProductFormProps> = ({
     units: [{ ...emptyUnit(), unitName: 'Piece', isBaseUnit: true }],
     variants: [],
     barcodes: [],
+    allowNegativeStock: false,
+    enableLowStockAlert: false,
+    lowStockAlertLevel: null,
+    openingStock: 0,
+    openingStockWarehouseId: null,
+    openingStockVariantWise: false,
+    openingStockByVariant: [],
   });
 
   const defaultUnitName = unitOptions[0]?.name ?? 'Piece';
+
+  useEffect(() => {
+    if (effectiveBranchId > 0) {
+      void warehouseService.getAllActive(effectiveBranchId)
+        .then((res) => setWarehouses(Array.isArray(res.data) ? res.data : []))
+        .catch(() => setWarehouses([]));
+    } else {
+      setWarehouses([]);
+    }
+  }, [effectiveBranchId]);
 
   useEffect(() => {
     if (initialData) {
@@ -138,6 +159,13 @@ const ProductForm: React.FC<ProductFormProps> = ({
         units: initialData.units.length ? initialData.units : [{ ...emptyUnit(), unitName: defaultUnitName, isBaseUnit: true }],
         variants: initialData.variants ?? [],
         barcodes: initialData.barcodes ?? [],
+        allowNegativeStock: initialData.allowNegativeStock ?? false,
+        enableLowStockAlert: initialData.enableLowStockAlert ?? false,
+        lowStockAlertLevel: initialData.lowStockAlertLevel ?? null,
+        openingStock: initialData.openingStock ?? 0,
+        openingStockWarehouseId: null,
+        openingStockVariantWise: initialData.openingStockVariantWise ?? false,
+        openingStockByVariant: initialData.openingStockByVariant ?? [],
       });
     } else {
       setFormData((prev) => ({
@@ -162,6 +190,280 @@ const ProductForm: React.FC<ProductFormProps> = ({
   }, [branchId, categories, defaultUnitName, initialData]);
 
   const filteredSubCategories = subCategories.filter((item) => item.categoryId === Number(formData.categoryId));
+
+  const activeVariants = useMemo(
+    () => formData.variants.filter((variant) => variant.variantName.trim()),
+    [formData.variants],
+  );
+
+  const canUseVariantWiseOpening = formData.isVariantEnabled && activeVariants.length > 0;
+
+  const buildVariantOpeningLines = (
+    variants: ProductVariantPayload[],
+    existing: ProductOpeningStockLine[] = [],
+  ): ProductOpeningStockLine[] =>
+    variants
+      .filter((variant) => variant.variantName.trim())
+      .map((variant) => {
+        const name = variant.variantName.trim();
+        const prev = existing.find(
+          (line) => line.variantName.toLowerCase() === name.toLowerCase(),
+        );
+        return {
+          variantName: name,
+          variantId: variant.id ?? null,
+          quantity: prev?.quantity ?? 0,
+        };
+      });
+
+  const getVariantUnitCost = (variantName: string) => {
+    const variant = activeVariants.find(
+      (v) => v.variantName.trim().toLowerCase() === variantName.trim().toLowerCase(),
+    );
+    return Number(variant?.costPriceOverride ?? formData.costPrice ?? 0);
+  };
+
+  const variantOpeningLines = useMemo(() => {
+    if (!formData.openingStockVariantWise || !canUseVariantWiseOpening) return [];
+    return buildVariantOpeningLines(activeVariants, formData.openingStockByVariant ?? []);
+  }, [activeVariants, canUseVariantWiseOpening, formData.openingStockByVariant, formData.openingStockVariantWise]);
+
+  const openingStockQty = formData.openingStockVariantWise && canUseVariantWiseOpening
+    ? variantOpeningLines.reduce((sum, line) => sum + Number(line.quantity ?? 0), 0)
+    : Number(formData.openingStock ?? 0);
+
+  const openingStockUnitCost = Number(formData.costPrice ?? 0);
+
+  const openingStockTotal = useMemo(() => {
+    if (formData.openingStockVariantWise && canUseVariantWiseOpening) {
+      return variantOpeningLines.reduce(
+        (sum, line) => sum + Number(line.quantity ?? 0) * getVariantUnitCost(line.variantName),
+        0,
+      );
+    }
+    return Math.max(0, openingStockQty) * Math.max(0, openingStockUnitCost);
+  }, [canUseVariantWiseOpening, formData.costPrice, formData.openingStockVariantWise, openingStockQty, openingStockUnitCost, variantOpeningLines]);
+
+  const updateVariantOpeningQty = (variantName: string, quantity: number) => {
+    setFormData((prev) => {
+      const lines = buildVariantOpeningLines(activeVariants, prev.openingStockByVariant ?? []);
+      return {
+        ...prev,
+        openingStockByVariant: lines.map((line) =>
+          line.variantName === variantName ? { ...line, quantity } : line,
+        ),
+        openingStock: lines.reduce(
+          (sum, line) => sum + (line.variantName === variantName ? quantity : line.quantity),
+          0,
+        ),
+      };
+    });
+  };
+
+  const renderOpeningStockFields = (readOnly = false) => {
+    const displayVariantLines = readOnly
+      ? (initialData?.openingStockByVariant ?? formData.openingStockByVariant ?? [])
+      : variantOpeningLines;
+
+    const showVariantWise = readOnly
+      ? Boolean(initialData?.openingStockVariantWise && displayVariantLines.length > 0)
+      : formData.openingStockVariantWise && canUseVariantWiseOpening;
+
+    return (
+      <div className="rounded-lg border border-gray-200 bg-white p-4">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <h4 className="text-sm font-semibold text-gray-800">Opening Stock</h4>
+          {!readOnly && formData.isVariantEnabled && (
+            <div className="flex flex-col items-end gap-1">
+              <label className={`flex items-center gap-2 text-sm ${canUseVariantWiseOpening ? 'text-gray-700' : 'text-gray-400'}`}>
+                <input
+                  type="checkbox"
+                  checked={Boolean(formData.openingStockVariantWise)}
+                  disabled={!canUseVariantWiseOpening}
+                  onChange={(event) => {
+                    const enabled = event.target.checked;
+                    setFormData((prev) => ({
+                      ...prev,
+                      openingStockVariantWise: enabled,
+                      openingStock: enabled
+                        ? buildVariantOpeningLines(activeVariants, prev.openingStockByVariant ?? [])
+                            .reduce((sum, line) => sum + line.quantity, 0)
+                        : 0,
+                      openingStockByVariant: enabled
+                        ? buildVariantOpeningLines(activeVariants, prev.openingStockByVariant ?? [])
+                        : [],
+                    }));
+                  }}
+                />
+                Variant-wise opening stock
+              </label>
+              {!canUseVariantWiseOpening && (
+                <span className="text-xs text-amber-700">Add variants on the Variants tab first</span>
+              )}
+            </div>
+          )}
+          {readOnly && initialData?.openingStockVariantWise && (
+            <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
+              Variant-wise
+            </span>
+          )}
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="min-w-[720px] w-full table-fixed divide-y divide-gray-200 text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                {(showVariantWise ? ['Variant', 'Quantity', 'Unit Cost', 'Total Value'] : ['Quantity', 'Unit Cost', 'Total Value'])
+                  .concat(readOnly ? [] : ['Warehouse'])
+                  .map((header) => (
+                    <th key={header} className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      {header}
+                    </th>
+                  ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {showVariantWise ? (
+                displayVariantLines.length > 0 ? (
+                  displayVariantLines.map((line) => {
+                  const unitCost = readOnly
+                    ? Number(line.unitPrice ?? getVariantUnitCost(line.variantName))
+                    : getVariantUnitCost(line.variantName);
+                  const lineTotal = Number(line.quantity ?? 0) * unitCost;
+                  return (
+                    <tr key={line.variantName}>
+                      <td className="px-3 py-3 align-middle font-medium text-gray-900">{line.variantName}</td>
+                      <td className="px-3 py-3 align-middle">
+                        {readOnly ? (
+                          <span>{Number(line.quantity ?? 0)}</span>
+                        ) : (
+                          <input
+                            type="number"
+                            min={0}
+                            step="0.0001"
+                            value={Number(line.quantity ?? 0)}
+                            onChange={(event) => updateVariantOpeningQty(line.variantName, Number(event.target.value || 0))}
+                            className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
+                          />
+                        )}
+                      </td>
+                      <td className="px-3 py-3 align-middle">{unitCost.toFixed(2)}</td>
+                      <td className="px-3 py-3 align-middle font-semibold text-gray-900">{lineTotal.toFixed(2)}</td>
+                      {!readOnly && <td className="px-3 py-3 align-middle text-gray-400">—</td>}
+                    </tr>
+                  );
+                })
+                ) : (
+                  <tr>
+                    <td colSpan={readOnly ? 4 : 5} className="px-3 py-6 text-center text-sm text-gray-500">
+                      No variants available. Enable variants and add them on the Variants tab, then return here to set stock per variant.
+                    </td>
+                  </tr>
+                )
+              ) : (
+                <tr>
+                  <td className="px-3 py-3 align-middle">
+                    {readOnly ? (
+                      <span className="font-medium text-gray-900">{openingStockQty}</span>
+                    ) : (
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.0001"
+                        value={openingStockQty}
+                        onChange={(event) => setFormData((prev) => ({
+                          ...prev,
+                          openingStock: Number(event.target.value || 0),
+                        }))}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
+                      />
+                    )}
+                  </td>
+                  <td className="px-3 py-3 align-middle">
+                    {readOnly ? (
+                      <span className="font-medium text-gray-900">{openingStockUnitCost.toFixed(2)}</span>
+                    ) : (
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={openingStockUnitCost}
+                        onChange={(event) => setFormData((prev) => ({
+                          ...prev,
+                          costPrice: Number(event.target.value || 0),
+                        }))}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
+                      />
+                    )}
+                  </td>
+                  <td className="px-3 py-3 align-middle">
+                    <span className="font-semibold text-gray-900">{openingStockTotal.toFixed(2)}</span>
+                  </td>
+                  {!readOnly && (
+                    <td className="px-3 py-3 align-middle">
+                      <select
+                        value={formData.openingStockWarehouseId ?? 0}
+                        onChange={(event) => setFormData((prev) => ({
+                          ...prev,
+                          openingStockWarehouseId: Number(event.target.value) || null,
+                        }))}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
+                        disabled={openingStockQty <= 0}
+                      >
+                        <option value={0}>Default warehouse</option>
+                        {warehouses.map((warehouse) => (
+                          <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>
+                        ))}
+                      </select>
+                    </td>
+                  )}
+                </tr>
+              )}
+            </tbody>
+            {showVariantWise && (
+              <tfoot className="bg-gray-50">
+                <tr>
+                  <td className="px-3 py-2 text-sm font-semibold text-gray-700" colSpan={showVariantWise ? 3 : 2}>
+                    Grand Total
+                  </td>
+                  <td className="px-3 py-2 text-sm font-bold text-gray-900">{openingStockTotal.toFixed(2)}</td>
+                  {!readOnly && <td />}
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </div>
+
+        {showVariantWise && !readOnly && (
+          <div className="mt-3 max-w-sm">
+            <label className="mb-1 block text-sm font-medium text-gray-700">Warehouse</label>
+            <select
+              value={formData.openingStockWarehouseId ?? 0}
+              onChange={(event) => setFormData((prev) => ({
+                ...prev,
+                openingStockWarehouseId: Number(event.target.value) || null,
+              }))}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
+              disabled={openingStockQty <= 0}
+            >
+              <option value={0}>Default warehouse</option>
+              {warehouses.map((warehouse) => (
+                <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <p className="mt-2 text-xs text-gray-500">
+          {readOnly
+            ? 'Opening stock was recorded once in the stock ledger and cannot be changed.'
+            : showVariantWise
+              ? 'Enter opening quantity per variant. One Opening ledger entry is created for each variant with quantity > 0.'
+              : 'Set initial quantity here. A single Opening ledger entry is created when the product is saved.'}
+        </p>
+      </div>
+    );
+  };
 
   const updateUnit = (index: number, changes: Partial<ProductUnitPayload>) => {
     setFormData((prev) => ({
@@ -229,6 +531,36 @@ const ProductForm: React.FC<ProductFormProps> = ({
       return;
     }
 
+    if (Number(formData.openingStock ?? 0) < 0) {
+      showValidationError('Opening stock cannot be negative.', 'stock');
+      return;
+    }
+
+    if (formData.openingStockVariantWise && canUseVariantWiseOpening) {
+      const hasNegative = (formData.openingStockByVariant ?? []).some((line) => Number(line.quantity ?? 0) < 0);
+      if (hasNegative) {
+        showValidationError('Opening stock quantity cannot be negative for any variant.', 'stock');
+        return;
+      }
+    }
+
+    const totalOpeningQty = formData.openingStockVariantWise && canUseVariantWiseOpening
+      ? variantOpeningLines.reduce((sum, line) => sum + Number(line.quantity ?? 0), 0)
+      : Number(formData.openingStock ?? 0);
+
+    if (formData.enableLowStockAlert) {
+      const level = Number(formData.lowStockAlertLevel ?? -1);
+      if (level < 0) {
+        showValidationError('Low stock alert level is required and cannot be negative.', 'stock');
+        return;
+      }
+    }
+
+    if (!initialData && totalOpeningQty > 0 && warehouses.length === 0) {
+      showValidationError('Create at least one active warehouse before setting opening stock.', 'stock');
+      return;
+    }
+
     setError('');
     try {
       await onSubmit({
@@ -245,6 +577,23 @@ const ProductForm: React.FC<ProductFormProps> = ({
         sellingPrice: Number(formData.sellingPrice ?? 0),
         wholesalePrice: Number(formData.wholesalePrice ?? 0),
         discountValue: Number(formData.discountValue ?? 0),
+        allowNegativeStock: Boolean(formData.allowNegativeStock),
+        enableLowStockAlert: Boolean(formData.enableLowStockAlert),
+        lowStockAlertLevel: formData.enableLowStockAlert ? Number(formData.lowStockAlertLevel ?? 0) : null,
+        openingStock: initialData
+          ? 0
+          : formData.openingStockVariantWise && canUseVariantWiseOpening
+            ? variantOpeningLines.reduce((sum, line) => sum + Number(line.quantity ?? 0), 0)
+            : Number(formData.openingStock ?? 0),
+        openingStockWarehouseId: initialData ? null : (formData.openingStockWarehouseId ? Number(formData.openingStockWarehouseId) : null),
+        openingStockVariantWise: Boolean(formData.openingStockVariantWise && canUseVariantWiseOpening),
+        openingStockByVariant: formData.openingStockVariantWise && canUseVariantWiseOpening
+          ? variantOpeningLines.map((line) => ({
+              variantName: line.variantName,
+              variantId: line.variantId ?? null,
+              quantity: Number(line.quantity ?? 0),
+            }))
+          : [],
         units: formData.units.map((unit) => ({
           ...unit,
           unitName: unit.unitName.trim(),
@@ -271,7 +620,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
   return (
     <form onSubmit={handleSubmit} className="flex h-full flex-col">
       <div className="border-b border-gray-200 bg-gray-50 px-6 py-4">
-        <div className="grid grid-cols-1 gap-2 md:grid-cols-5">
+        <div className="flex gap-2 overflow-x-auto pb-1">
           {formTabs.map((tab, index) => {
             const isActive = activeTab === tab.id;
             return (
@@ -279,7 +628,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
-                className={`rounded-lg border px-3 py-2 text-left transition-colors ${
+                className={`min-w-[140px] shrink-0 rounded-lg border px-3 py-2 text-left transition-colors ${
                   isActive
                     ? 'border-blue-300 bg-white text-blue-700 shadow-sm'
                     : 'border-transparent bg-transparent text-gray-600 hover:bg-white'
@@ -404,38 +753,6 @@ const ProductForm: React.FC<ProductFormProps> = ({
         </section>
         )}
 
-        {activeTab === 'pricing' && (
-        <section className="space-y-5">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">Pricing & Discount</h3>
-            <p className="mt-1 text-sm text-gray-500">
-              Set product-level prices. Unit and variant prices can override these values where needed.
-            </p>
-          </div>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            {(['costPrice', 'sellingPrice', 'wholesalePrice'] as const).map((field) => (
-              <div key={field}>
-                <label className="mb-1 block text-sm font-medium text-gray-700">{field === 'costPrice' ? 'Cost Price' : field === 'sellingPrice' ? 'Selling Price' : 'Wholesale Price'}</label>
-                <input type="number" min={0} step="0.01" value={Number(formData[field] ?? 0)} onChange={(event) => setFormData((prev) => ({ ...prev, [field]: Number(event.target.value || 0) }))} className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none" />
-              </div>
-            ))}
-          </div>
-          <label className="flex items-center gap-2 text-sm text-gray-700">
-            <input type="checkbox" checked={formData.isDiscountAllowed} onChange={(event) => setFormData((prev) => ({ ...prev, isDiscountAllowed: event.target.checked }))} />
-            Discount allowed
-          </label>
-          {formData.isDiscountAllowed && (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <select value={formData.discountType ?? 'Percentage'} onChange={(event) => setFormData((prev) => ({ ...prev, discountType: event.target.value as 'Percentage' | 'Fixed' }))} className="rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none">
-                <option value="Percentage">Percentage</option>
-                <option value="Fixed">Fixed</option>
-              </select>
-              <input type="number" min={0} step="0.01" value={Number(formData.discountValue ?? 0)} onChange={(event) => setFormData((prev) => ({ ...prev, discountValue: Number(event.target.value || 0) }))} className="rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none" />
-            </div>
-          )}
-        </section>
-        )}
-
         {activeTab === 'units' && (
         <section className="space-y-5">
           <div>
@@ -486,7 +803,14 @@ const ProductForm: React.FC<ProductFormProps> = ({
             </p>
           </div>
           <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
-            <input type="checkbox" checked={formData.isVariantEnabled} onChange={(event) => setFormData((prev) => ({ ...prev, isVariantEnabled: event.target.checked, variants: event.target.checked ? prev.variants : [] }))} />
+            <input type="checkbox" checked={formData.isVariantEnabled} onChange={(event) => setFormData((prev) => ({
+              ...prev,
+              isVariantEnabled: event.target.checked,
+              variants: event.target.checked ? prev.variants : [],
+              openingStockVariantWise: event.target.checked ? prev.openingStockVariantWise : false,
+              openingStockByVariant: event.target.checked ? prev.openingStockByVariant : [],
+              openingStock: event.target.checked ? prev.openingStock : 0,
+            }))} />
             Enable variants
           </label>
           {formData.isVariantEnabled && (
@@ -546,6 +870,106 @@ const ProductForm: React.FC<ProductFormProps> = ({
                 </table>
               </div>
             </DynamicSection>
+          )}
+          {formData.isVariantEnabled && (
+            <p className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+              After adding variants, go to the <strong>Stock</strong> tab to set opening stock per variant.
+            </p>
+          )}
+        </section>
+        )}
+
+        {activeTab === 'pricing' && (
+        <section className="space-y-5">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">Pricing & Discount</h3>
+            <p className="mt-1 text-sm text-gray-500">
+              Set product-level prices. Unit and variant prices can override these values where needed.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            {(['costPrice', 'sellingPrice', 'wholesalePrice'] as const).map((field) => (
+              <div key={field}>
+                <label className="mb-1 block text-sm font-medium text-gray-700">{field === 'costPrice' ? 'Cost Price' : field === 'sellingPrice' ? 'Selling Price' : 'Wholesale Price'}</label>
+                <input type="number" min={0} step="0.01" value={Number(formData[field] ?? 0)} onChange={(event) => setFormData((prev) => ({ ...prev, [field]: Number(event.target.value || 0) }))} className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none" />
+              </div>
+            ))}
+          </div>
+          <label className="flex items-center gap-2 text-sm text-gray-700">
+            <input type="checkbox" checked={formData.isDiscountAllowed} onChange={(event) => setFormData((prev) => ({ ...prev, isDiscountAllowed: event.target.checked }))} />
+            Discount allowed
+          </label>
+          {formData.isDiscountAllowed && (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <select value={formData.discountType ?? 'Percentage'} onChange={(event) => setFormData((prev) => ({ ...prev, discountType: event.target.value as 'Percentage' | 'Fixed' }))} className="rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none">
+                <option value="Percentage">Percentage</option>
+                <option value="Fixed">Fixed</option>
+              </select>
+              <input type="number" min={0} step="0.01" value={Number(formData.discountValue ?? 0)} onChange={(event) => setFormData((prev) => ({ ...prev, discountValue: Number(event.target.value || 0) }))} className="rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none" />
+            </div>
+          )}
+        </section>
+        )}
+
+        {activeTab === 'stock' && (
+        <section className="space-y-5">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">Stock Settings</h3>
+            <p className="mt-1 text-sm text-gray-500">
+              Set opening stock after defining units and variants. Configure negative stock policy and low stock alerts here.
+            </p>
+          </div>
+
+          {!initialData && renderOpeningStockFields(false)}
+
+          {initialData && (initialData.hasOpeningStockApplied || (initialData.openingStock ?? 0) > 0) && (
+            renderOpeningStockFields(true)
+          )}
+
+          {initialData && !initialData.hasOpeningStockApplied && (initialData.openingStock ?? 0) <= 0 && (
+            <p className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+              No opening stock was recorded for this product.
+            </p>
+          )}
+
+          <label className="flex items-center gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={Boolean(formData.allowNegativeStock)}
+              onChange={(event) => setFormData((prev) => ({ ...prev, allowNegativeStock: event.target.checked }))}
+            />
+            Allow negative stock on sales
+          </label>
+
+          <label className="flex items-center gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={Boolean(formData.enableLowStockAlert)}
+              onChange={(event) => setFormData((prev) => ({
+                ...prev,
+                enableLowStockAlert: event.target.checked,
+                lowStockAlertLevel: event.target.checked ? prev.lowStockAlertLevel : null,
+              }))}
+            />
+            Enable low stock alert
+          </label>
+
+          {formData.enableLowStockAlert && (
+            <div className="max-w-sm">
+              <label className="mb-1 block text-sm font-medium text-gray-700">Low Stock Alert Level *</label>
+              <input
+                type="number"
+                min={0}
+                step="0.0001"
+                value={formData.lowStockAlertLevel ?? ''}
+                onChange={(event) => setFormData((prev) => ({
+                  ...prev,
+                  lowStockAlertLevel: event.target.value === '' ? null : Number(event.target.value),
+                }))}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
+              />
+              <p className="mt-1 text-xs text-gray-500">Alert when current stock is at or below this level.</p>
+            </div>
           )}
         </section>
         )}

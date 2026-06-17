@@ -13,15 +13,18 @@ public class PurchaseService : IPurchaseService
 {
     private readonly IPurchaseRepository _purchaseRepository;
     private readonly IStockLedgerRepository _stockLedgerRepository;
+    private readonly ILowStockAlertService _lowStockAlertService;
     private readonly ICodeGeneratorService _codeGenerator;
 
     public PurchaseService(
         IPurchaseRepository purchaseRepository,
         IStockLedgerRepository stockLedgerRepository,
+        ILowStockAlertService lowStockAlertService,
         ICodeGeneratorService codeGenerator)
     {
         _purchaseRepository = purchaseRepository;
         _stockLedgerRepository = stockLedgerRepository;
+        _lowStockAlertService = lowStockAlertService;
         _codeGenerator = codeGenerator;
     }
 
@@ -147,6 +150,16 @@ public class PurchaseService : IPurchaseService
         await _purchaseRepository.SaveChangesAsync();
         await _stockLedgerRepository.SaveChangesAsync();
 
+        if (entity.Status == PurchaseStatus.Posted)
+        {
+            await _lowStockAlertService.EvaluateAfterStockChangeAsync(
+                dto.BusinessId,
+                dto.BranchId,
+                entity.Items
+                    .Where(i => !i.IsDeleted)
+                    .Select(i => new StockChangeItem(i.ProductId, i.VariantId, entity.WarehouseId)));
+        }
+
         var updated = await _purchaseRepository.GetByIdWithItemsAsync(id, dto.BusinessId, dto.BranchId);
         return MapDetailDto(updated!);
     }
@@ -193,6 +206,12 @@ public class PurchaseService : IPurchaseService
         entity.Status = PurchaseStatus.Posted;
 
         await _purchaseRepository.SaveChangesAsync();
+        await _stockLedgerRepository.SaveChangesAsync();
+
+        await _lowStockAlertService.EvaluateAfterStockChangeAsync(
+            dto.BusinessId,
+            dto.BranchId,
+            activeItems.Select(i => new StockChangeItem(i.ProductId, i.VariantId, entity.WarehouseId)));
 
         var posted = await _purchaseRepository.GetByIdWithItemsAsync(id, dto.BusinessId, dto.BranchId);
         return MapDetailDto(posted!);
@@ -292,6 +311,11 @@ public class PurchaseService : IPurchaseService
 
         await _purchaseRepository.SaveChangesAsync();
         await _stockLedgerRepository.SaveChangesAsync();
+
+        await _lowStockAlertService.EvaluateAfterStockChangeAsync(
+            dto.BusinessId,
+            dto.BranchId,
+            reversals.Select(r => new StockChangeItem(r.ProductId, r.VariantId, r.WarehouseId)));
 
         var result = await _purchaseRepository.GetByIdWithItemsAsync(id, dto.BusinessId, dto.BranchId);
         return MapDetailDto(result!);
