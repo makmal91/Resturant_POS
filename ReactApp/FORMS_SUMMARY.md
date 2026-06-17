@@ -19,7 +19,7 @@
 
 ## 🎯 Quick Overview
 
-A complete set of **production-ready** React form components for a restaurant POS system, featuring:
+A complete set of **production-ready** React form components for AKHSOFT POS, featuring:
 
 - ✅ **5 Reusable Base Components** (Input, Select, Button, Textarea)
 - ✅ **5 Entity-Specific Forms** (Branch, User, Menu, Inventory)

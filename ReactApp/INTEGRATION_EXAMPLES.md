@@ -454,7 +454,7 @@ function SetupWizard() {
           <div className="text-6xl mb-4">✅</div>
           <h2 className="text-2xl font-bold text-green-800 mb-2">Setup Complete!</h2>
           <p className="text-green-700 mb-6">
-            Your restaurant POS system is ready to use.
+            Your AKHSOFT POS system is ready to use.
           </p>
           <button className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700">
             Go to Dashboard

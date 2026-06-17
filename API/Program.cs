@@ -30,7 +30,10 @@ builder.Services.AddScoped<ITenantContext, HttpTenantContext>();
 builder.Services.AddScoped<ITokenService, JwtTokenService>();
 builder.Services.AddMemoryCache();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new() { Title = "AKHSOFT POS API", Version = "v1" });
+});
 
 // JWT Authentication
 builder.Services.AddAuthentication("Bearer")

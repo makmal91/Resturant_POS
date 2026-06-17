@@ -9,7 +9,7 @@
 
 ## 📦 What Was Created
 
-A **production-ready component library** for a restaurant POS system with:
+A **production-ready component library** for AKHSOFT POS with:
 
 ✅ **4 Reusable Base Components**
 - FormInput - Text input with validation

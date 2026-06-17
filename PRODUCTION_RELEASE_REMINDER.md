@@ -1,4 +1,4 @@
-# Restaurant POS — Production Release Reminder
+# AKHSOFT POS — Production Release Reminder
 
 Checklist for building, configuring, and deploying a production release. Use this every time you ship to a client server or your own hosting environment.
 

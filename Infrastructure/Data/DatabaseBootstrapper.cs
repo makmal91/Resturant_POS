@@ -57,16 +57,35 @@ public static class DatabaseBootstrapper
             throw new InvalidOperationException("Database name is missing from the connection string.");
 
         builder.InitialCatalog = "master";
-        await using var connection = new SqlConnection(builder.ConnectionString);
-        await connection.OpenAsync();
+        if (builder.ConnectTimeout < 60)
+            builder.ConnectTimeout = 60;
 
-        await using var command = connection.CreateCommand();
-        command.CommandText = $"""
-            IF NOT EXISTS (SELECT 1 FROM sys.databases WHERE [name] = N'{databaseName.Replace("'", "''")}')
-                CREATE DATABASE [{databaseName.Replace("]", "]]")}];
-            """;
+        const int maxAttempts = 3;
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                await using var connection = new SqlConnection(builder.ConnectionString);
+                await connection.OpenAsync();
 
-        await command.ExecuteNonQueryAsync();
-        logger.LogInformation("Database '{DatabaseName}' is available.", databaseName);
+                await using var command = connection.CreateCommand();
+                command.CommandText = $"""
+                    IF NOT EXISTS (SELECT 1 FROM sys.databases WHERE [name] = N'{databaseName.Replace("'", "''")}')
+                        CREATE DATABASE [{databaseName.Replace("]", "]]")}];
+                    """;
+
+                await command.ExecuteNonQueryAsync();
+                logger.LogInformation("Database '{DatabaseName}' is available.", databaseName);
+                return;
+            }
+            catch (SqlException ex) when (attempt < maxAttempts && IsTransientConnectionError(ex))
+            {
+                logger.LogWarning(ex, "SQL connection attempt {Attempt}/{MaxAttempts} failed. Retrying...", attempt, maxAttempts);
+                await Task.Delay(TimeSpan.FromSeconds(attempt * 2));
+            }
+        }
     }
+
+    private static bool IsTransientConnectionError(SqlException ex) =>
+        ex.Number is -2 or 233 or 4060 or 10054 or 10060;
 }

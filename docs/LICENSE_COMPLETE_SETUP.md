@@ -353,4 +353,4 @@ dotnet run -- --years 1 --customer "Karachi Biryani House" --max-businesses 1 --
 
 ---
 
-*AKHSSOFT Restaurant POS — License System*
+*AKHSOFT POS — License System*

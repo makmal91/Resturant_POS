@@ -1,6 +1,6 @@
 # 📑 POS Forms Library - Complete Table of Contents
 
-**Project:** Restaurant POS System Forms  
+**Project:** AKHSOFT POS System Forms  
 **Framework:** React 18 + TypeScript + Tailwind CSS  
 **Status:** ✅ Complete and Production Ready  
 **Last Updated:** April 18, 2026

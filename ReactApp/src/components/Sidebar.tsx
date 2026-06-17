@@ -9,6 +9,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useMenuStore } from '../stores/useMenuStore'
 import { sidebarService, type SidebarTreeItem } from '../services/menuService'
+import { APP_NAME } from '../constants/appBranding'
 import MenuIcon from './MenuIcon'
 
 // ---------------------------------------------------------------------------
@@ -330,7 +331,7 @@ const Sidebar: React.FC = () => {
           {!collapsed && (
             <div className="flex-1 min-w-0">
               <p className="text-[13px] font-semibold text-white truncate leading-tight">{businessName}</p>
-              <p className="text-[11px] text-gray-500 leading-tight">POS System</p>
+              <p className="text-[11px] text-gray-500 leading-tight">{APP_NAME}</p>
             </div>
           )}
 

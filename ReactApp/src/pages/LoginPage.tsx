@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { APP_NAME, APP_SHORT_NAME } from '../constants/appBranding'
 
 const LoginPage: React.FC = () => {
   const { login, isAuthenticated, selectedBranchId } = useAuth()
@@ -37,10 +38,10 @@ const LoginPage: React.FC = () => {
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-900 via-blue-900 to-slate-800 px-4">
       <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-xl">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-blue-600 text-2xl text-white">
-            POS
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-blue-600 text-lg font-bold text-white">
+            {APP_SHORT_NAME.slice(0, 1)}
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">Restaurant POS</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{APP_NAME}</h1>
           <p className="mt-2 text-sm text-gray-500">Sign in to continue to your dashboard</p>
         </div>
 

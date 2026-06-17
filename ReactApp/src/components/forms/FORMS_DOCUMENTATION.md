@@ -1,6 +1,6 @@
 # POS System Forms - Documentation
 
-A comprehensive set of reusable React form components built with Tailwind CSS for a restaurant POS system.
+A comprehensive set of reusable React form components built with Tailwind CSS for AKHSOFT POS.
 
 ## 📦 Components Structure
 

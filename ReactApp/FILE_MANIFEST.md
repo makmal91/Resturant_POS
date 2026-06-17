@@ -1,6 +1,6 @@
 # 📋 POS Forms - Complete File Manifest
 
-**Project:** Restaurant POS System  
+**Project:** AKHSOFT POS System  
 **Component Library:** React Forms with Tailwind CSS  
 **Date Created:** April 18, 2026  
 **Status:** ✅ Complete and Ready to Use

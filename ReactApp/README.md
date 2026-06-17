@@ -1,6 +1,6 @@
-# Restaurant POS Frontend
+# AKHSOFT POS Frontend
 
-This is the React frontend for the Restaurant POS system.
+This is the React frontend for the AKHSOFT POS system.
 
 ## Technologies
 - React 18

@@ -1,4 +1,4 @@
-# Restaurant POS — Setup Reminder
+# AKHSOFT POS — Setup Reminder
 
 Quick checklist for developers after cloning the repo. Keep this file in Git; use it whenever you set up a new machine or onboard a teammate.
 
