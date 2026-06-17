@@ -1,4 +1,5 @@
 using POSSystem.Application.Common.DTOs;
+using POSSystem.Application.License.Interfaces;
 using POSSystem.Application.Users.DTOs;
 using POSSystem.Application.Users.Interfaces;
 using POSSystem.Domain;
@@ -10,12 +11,18 @@ public class UserService : IUserService
     private readonly IUserRepository _repository;
     private readonly IRoleRepository _roleRepository;
     private readonly IPasswordHasher _passwordHasher;
+    private readonly ILicenseEnforcementService _licenseEnforcement;
 
-    public UserService(IUserRepository repository, IRoleRepository roleRepository, IPasswordHasher passwordHasher)
+    public UserService(
+        IUserRepository repository,
+        IRoleRepository roleRepository,
+        IPasswordHasher passwordHasher,
+        ILicenseEnforcementService licenseEnforcement)
     {
         _repository = repository;
         _roleRepository = roleRepository;
         _passwordHasher = passwordHasher;
+        _licenseEnforcement = licenseEnforcement;
     }
 
     public Task<PagedResultDto<UserListItemDto>> GetUsersPagedAsync(
@@ -57,6 +64,8 @@ public class UserService : IUserService
 
         if (await _repository.EmailExistsAsync(dto.Email))
             throw new InvalidOperationException("Email is already registered.");
+
+        await _licenseEnforcement.EnsureCanCreateAsync(LicenseCreateOperation.User);
 
         var primaryBranchId = await ResolvePrimaryBranchIdAsync(dto.BusinessId, dto.BranchIds, role);
 

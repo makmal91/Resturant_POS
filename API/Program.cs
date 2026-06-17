@@ -7,6 +7,7 @@ using POSSystem.Application.Auth.Interfaces;
 using POSSystem.Application;
 using POSSystem.Application.Interfaces;
 using POSSystem.Infrastructure;
+using POSSystem.Application.License.Interfaces;
 using POSSystem.Infrastructure.Data;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -80,6 +81,9 @@ using (var scope = app.Services.CreateScope())
     await DatabaseBootstrapper.InitializeAsync(db, configuration, logger);
 }
 
+var licenseService = app.Services.GetRequiredService<ILicenseService>();
+await licenseService.InitializeAsync();
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
@@ -94,6 +98,8 @@ app.UseCors("FrontendPolicy");
 app.UseGlobalExceptionMiddleware();
 
 app.UseAuthentication();
+app.UseLicenseGateMiddleware();
+app.UseLicenseEnforcementMiddleware();
 app.UseBranchAccessMiddleware();
 app.UsePermissionAuthorizationMiddleware();
 app.UseAuthorization();

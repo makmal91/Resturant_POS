@@ -2,6 +2,7 @@ using POSSystem.Application.Branch.DTOs;
 using POSSystem.Application.Branch.Interfaces;
 using POSSystem.Application.Common.Constants;
 using POSSystem.Application.Common.Interfaces;
+using POSSystem.Application.License.Interfaces;
 using BranchEntity = POSSystem.Domain.Branch;
 
 namespace POSSystem.Application.Branch.Services;
@@ -10,11 +11,16 @@ public class BranchService : IBranchService
 {
     private readonly IBranchRepository _repository;
     private readonly ICodeGeneratorService _codeGenerator;
+    private readonly ILicenseEnforcementService _licenseEnforcement;
 
-    public BranchService(IBranchRepository repository, ICodeGeneratorService codeGenerator)
+    public BranchService(
+        IBranchRepository repository,
+        ICodeGeneratorService codeGenerator,
+        ILicenseEnforcementService licenseEnforcement)
     {
         _repository = repository;
         _codeGenerator = codeGenerator;
+        _licenseEnforcement = licenseEnforcement;
     }
     public Task<IReadOnlyList<BranchListItemDto>> GetBranchesAsync(int businessId)
     {
@@ -49,6 +55,8 @@ public class BranchService : IBranchService
 
         if (!await _repository.CityBelongsToCountryAsync(dto.CityId, dto.CountryId))
             throw new InvalidOperationException("Invalid CityId. City does not belong to the selected country.");
+
+        await _licenseEnforcement.EnsureCanCreateAsync(LicenseCreateOperation.Branch, businessId);
 
         var normalizedCode = (await _codeGenerator.ResolveAsync(CodeModuleNames.Branch, null, dto.Code))
             .ToUpperInvariant();

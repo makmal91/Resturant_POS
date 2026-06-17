@@ -1,8 +1,14 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { usePermission } from '../../hooks/usePermission';
+import { useIsMasterUser, usePermission } from '../../hooks/usePermission';
 
 const settingsLinks = [
+  {
+    title: 'System License',
+    description: 'Upload and monitor the signed system license, expiry, and usage limits.',
+    path: '/settings/licenses',
+    masterOnly: true,
+  },
   {
     title: 'Code Sequences',
     description: 'View and manage auto-numbering sequences for products, customers, invoices, and more.',
@@ -13,8 +19,10 @@ const settingsLinks = [
 
 const SettingsPage: React.FC = () => {
   const codeSeqPerm = usePermission('Code Sequences');
+  const isMasterUser = useIsMasterUser();
 
   const visibleLinks = settingsLinks.filter((link) => {
+    if (link.masterOnly) return isMasterUser;
     if (link.module === 'Code Sequences') return codeSeqPerm.canView;
     return true;
   });

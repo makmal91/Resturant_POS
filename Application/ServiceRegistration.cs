@@ -40,6 +40,8 @@ using POSSystem.Application.Customer.Interfaces;
 using POSSystem.Application.Customer.Services;
 using POSSystem.Application.CashFlow.Interfaces;
 using POSSystem.Application.CashFlow.Services;
+using POSSystem.Application.License.Interfaces;
+using POSSystem.Application.License.Services;
 
 namespace POSSystem.Application;
 
@@ -100,6 +102,9 @@ public static class ServiceRegistration
 
         // Register cash flow service
         services.AddScoped<ICashFlowService, CashFlowService>();
+
+        // License enforcement
+        services.AddScoped<ILicenseEnforcementService, LicenseEnforcementService>();
 
         // Add other application services here
 

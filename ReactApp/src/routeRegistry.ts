@@ -33,6 +33,7 @@ import ExpensePage from './modules/expense/ExpensePage';
 import ReportsPage from './modules/reports/ReportsPage';
 import SettingsPage from './modules/settings/SettingsPage';
 import CodeSequencePage from './modules/settings/CodeSequencePage';
+import LicensePage from './modules/settings/LicensePage';
 // POSBillingPage is registered directly in App.tsx as a fullscreen route (outside Layout)
 
 export const routeRegistry: RouteDefinition[] = [
@@ -64,6 +65,7 @@ export const routeRegistry: RouteDefinition[] = [
   { path: '/cashflow/summary',  label: 'Cash Summary',    component: CashFlowSummaryPage,   module: 'Cash Flow' },
   { path: '/settings', label: 'System Settings', component: SettingsPage, module: 'System Settings' },
   { path: '/settings/code-sequences', label: 'Code Sequences', component: CodeSequencePage, module: 'Code Sequences' },
+  { path: '/settings/licenses', label: 'System License', component: LicensePage },
 ];
 
 const routeMap = new Map(routeRegistry.map((route) => [route.path, route]));

@@ -2,6 +2,7 @@ using POSSystem.Application.Business.DTOs;
 using POSSystem.Application.Business.Interfaces;
 using POSSystem.Application.Common.DTOs;
 using POSSystem.Application.Common.Helpers;
+using POSSystem.Application.License.Interfaces;
 using BusinessEntity = POSSystem.Domain.Business;
 
 namespace POSSystem.Application.Business.Services;
@@ -9,10 +10,12 @@ namespace POSSystem.Application.Business.Services;
 public class BusinessService : IBusinessService
 {
     private readonly IBusinessRepository _repository;
+    private readonly ILicenseEnforcementService _licenseEnforcement;
 
-    public BusinessService(IBusinessRepository repository)
+    public BusinessService(IBusinessRepository repository, ILicenseEnforcementService licenseEnforcement)
     {
         _repository = repository;
+        _licenseEnforcement = licenseEnforcement;
     }
 
     public Task<PagedResultDto<BusinessListItemDto>> GetBusinessesAsync(int page, int pageSize, string? search = null, string? sortBy = null, string? sortDirection = null)
@@ -38,6 +41,8 @@ public class BusinessService : IBusinessService
     {
         if (string.IsNullOrWhiteSpace(dto.Name))
             throw new InvalidOperationException("Business name is required.");
+
+        await _licenseEnforcement.EnsureCanCreateAsync(LicenseCreateOperation.Business);
 
         var (currencyId, currencyCode) = await ResolveCurrencyAsync(dto.CurrencyId, dto.Currency);
 

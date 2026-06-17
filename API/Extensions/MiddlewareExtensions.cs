@@ -18,4 +18,14 @@ public static class MiddlewareExtensions
     {
         return app.UseMiddleware<PermissionAuthorizationMiddleware>();
     }
+
+    public static IApplicationBuilder UseLicenseGateMiddleware(this IApplicationBuilder app)
+    {
+        return app.UseMiddleware<LicenseGateMiddleware>();
+    }
+
+    public static IApplicationBuilder UseLicenseEnforcementMiddleware(this IApplicationBuilder app)
+    {
+        return app.UseMiddleware<LicenseEnforcementMiddleware>();
+    }
 }
