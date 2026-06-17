@@ -7,4 +7,5 @@ export const taxService = {
   create: (data: ManagementFormValues) => apiClient.post('/taxes', data),
   update: (id: number, data: ManagementFormValues) => apiClient.put(`/taxes/${id}`, data),
   delete: (id: number) => apiClient.delete(`/taxes/${id}`),
+  listKey: 'taxes',
 };

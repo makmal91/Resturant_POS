@@ -39,7 +39,9 @@ public class ProductsController : ControllerBase
         [FromQuery] int? categoryId = null,
         [FromQuery] int? subCategoryId = null,
         [FromQuery] int? brandId = null,
-        [FromQuery] bool? status = null)
+        [FromQuery] bool? status = null,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null)
     {
         if (!Request.Query.ContainsKey("branchId"))
             return BadRequest(new { message = "branchId is required." });
@@ -65,7 +67,9 @@ public class ProductsController : ControllerBase
                 CategoryId = categoryId,
                 SubCategoryId = subCategoryId,
                 BrandId = brandId,
-                Status = status
+                Status = status,
+                SortBy = sortBy,
+                SortDirection = sortDirection
             });
 
             return Ok(new

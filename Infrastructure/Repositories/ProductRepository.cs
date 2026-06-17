@@ -63,8 +63,19 @@ public class ProductRepository : IProductRepository
         if (totalPages > 0 && request.Page > totalPages)
             request.Page = totalPages;
 
-        var data = await query
-            .OrderBy(p => p.ProductName)
+        var descending = string.Equals(request.SortDirection, "desc", StringComparison.OrdinalIgnoreCase);
+        var orderedQuery = (request.SortBy ?? "productName").ToLowerInvariant() switch
+        {
+            "productcode" or "code" => descending ? query.OrderByDescending(p => p.ProductCode) : query.OrderBy(p => p.ProductCode),
+            "sku" => descending ? query.OrderByDescending(p => p.SKU) : query.OrderBy(p => p.SKU),
+            "categoryname" or "category" => descending ? query.OrderByDescending(p => p.Category!.Name) : query.OrderBy(p => p.Category!.Name),
+            "sellingprice" or "price" => descending ? query.OrderByDescending(p => p.SellingPrice) : query.OrderBy(p => p.SellingPrice),
+            "status" => descending ? query.OrderByDescending(p => p.Status) : query.OrderBy(p => p.Status),
+            "branchname" => descending ? query.OrderByDescending(p => p.Branch!.Name) : query.OrderBy(p => p.Branch!.Name),
+            _ => descending ? query.OrderByDescending(p => p.ProductName) : query.OrderBy(p => p.ProductName),
+        };
+
+        var data = await orderedQuery
             .Skip((request.Page - 1) * request.PageSize)
             .Take(request.PageSize)
             .ToListAsync();

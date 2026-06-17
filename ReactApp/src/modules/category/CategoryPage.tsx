@@ -35,7 +35,13 @@ const CategoryPage: React.FC = () => {
 
   const [categories, setCategories] = useState<CategoryItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortColumn, setSortColumn] = useState('displayOrder');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const { canCreate, canEdit, canDelete } = usePermission('Categories');
@@ -97,12 +103,23 @@ const CategoryPage: React.FC = () => {
   const fetchCategories = useCallback(async () => {
     if (selectedBranchId === null) {
       setCategories([]);
+      setTotalRecords(0);
+      setTotalPages(0);
       return;
     }
 
     setLoading(true);
     try {
-      const response = await categoryService.getAll(selectedBranchId, 1, 1000);
+      const response = await categoryService.getAll(
+        selectedBranchId,
+        currentPage,
+        pageSize,
+        {
+          search: searchTerm.trim() || undefined,
+          sortBy: sortColumn,
+          sortDirection,
+        },
+      );
       const rows = Array.isArray(response.data?.categories)
         ? response.data.categories
         : Array.isArray(response.data?.data)
@@ -114,18 +131,38 @@ const CategoryPage: React.FC = () => {
           .map((row) => normalizeCategory(row, selectedBranchId))
           .filter((category): category is CategoryItem => category !== null)
       );
+      setTotalRecords(Number(response.data?.totalRecords ?? 0));
+      setTotalPages(Number(response.data?.totalPages ?? 0));
     } catch (error) {
       console.error('Failed to fetch categories:', error);
       setCategories([]);
+      setTotalRecords(0);
+      setTotalPages(0);
       showNotification('error', getApiErrorMessage(error, 'Failed to load categories.'));
     } finally {
       setLoading(false);
     }
-  }, [selectedBranchId, normalizeCategory, showNotification]);
+  }, [
+    selectedBranchId,
+    currentPage,
+    pageSize,
+    searchTerm,
+    sortColumn,
+    sortDirection,
+    normalizeCategory,
+    showNotification,
+  ]);
 
   useEffect(() => {
-    void fetchCategories();
-  }, [fetchCategories]);
+    const timer = window.setTimeout(() => {
+      void fetchCategories();
+    }, searchTerm ? 300 : 0);
+    return () => window.clearTimeout(timer);
+  }, [fetchCategories, searchTerm]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedBranchId, pageSize]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -432,8 +469,28 @@ const CategoryPage: React.FC = () => {
         pagination={hasBranchSelection}
         pageSize={pageSize}
         pageSizeOptions={[5, 10, 25, 50]}
-        onPageSizeChange={setPageSize}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setCurrentPage(1);
+        }}
         emptyMessage={emptyMessage}
+        serverSide
+        totalRecords={totalRecords}
+        totalPages={totalPages}
+        currentPage={currentPage}
+        onPageChange={setCurrentPage}
+        searchTerm={searchTerm}
+        onSearchChange={(value) => {
+          setSearchTerm(value);
+          setCurrentPage(1);
+        }}
+        sortColumn={sortColumn}
+        sortDirection={sortDirection}
+        onSortChange={(column, direction) => {
+          setSortColumn(column);
+          setSortDirection(direction);
+          setCurrentPage(1);
+        }}
       />
     </div>
   );

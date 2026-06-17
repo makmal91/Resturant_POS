@@ -120,6 +120,8 @@ export const productService = {
       subCategoryId?: number | null;
       brandId?: number | null;
       status?: boolean | null;
+      sortBy?: string;
+      sortDirection?: 'asc' | 'desc';
     } = {}
   ) =>
     apiClient.get<ProductListResponse>('/products', {
@@ -132,6 +134,8 @@ export const productService = {
         ...(filters.subCategoryId ? { subCategoryId: filters.subCategoryId } : {}),
         ...(filters.brandId ? { brandId: filters.brandId } : {}),
         ...(filters.status !== null && filters.status !== undefined ? { status: filters.status } : {}),
+        ...(filters.sortBy ? { sortBy: filters.sortBy } : {}),
+        ...(filters.sortDirection ? { sortDirection: filters.sortDirection } : {}),
       },
       ...branchRequestConfig(branchId),
     }),

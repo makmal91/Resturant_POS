@@ -1,6 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import DataTable, { Action, Column } from '../../components/DataTable';
-import { CrudEntityService, defaultManagementFormValues, ManagementEntity, ManagementFormValues } from './types';
+import { useBranchWriteAccess } from '../../hooks/useBranchWriteAccess';
+import { hasBranchContext } from '../../types/permissions';
+import {
+  CrudEntityService,
+  defaultManagementFormValues,
+  ManagementEntity,
+  ManagementFormValues,
+} from './types';
+import { extractPagedMeta } from './pagedList';
 
 export interface EntityFormProps {
   isOpen: boolean;
@@ -50,6 +58,8 @@ const normalizeEntity = (rawItem: unknown): ManagementEntity => {
         ? record.IsActive
         : typeof statusValue === 'string'
         ? statusValue.toLowerCase() === 'active'
+        : typeof statusValue === 'boolean'
+        ? statusValue
         : true,
     branchId: Number(record.branchId ?? record.BranchId ?? 1),
     categoryType: String(record.categoryType ?? record.CategoryType ?? 'Sale') as
@@ -83,13 +93,14 @@ const normalizeEntity = (rawItem: unknown): ManagementEntity => {
   };
 };
 
-const extractEntityList = (payload: unknown): ManagementEntity[] => {
+const extractEntityList = (payload: unknown, listKey?: string): ManagementEntity[] => {
   if (Array.isArray(payload)) {
     return payload.map(normalizeEntity);
   }
 
   const record = toRecord(payload);
   const candidateArrays = [
+    listKey ? record[listKey] : undefined,
     record.data,
     record.items,
     record.results,
@@ -118,6 +129,10 @@ const ManagementPage: React.FC<ManagementPageProps> = ({
   service,
   FormComponent,
 }) => {
+  const { selectedBranchId } = useBranchWriteAccess();
+  const hasBranchSelection = hasBranchContext(selectedBranchId);
+  const usesServerSide = Boolean(service.getPaged);
+
   const [items, setItems] = useState<ManagementEntity[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -125,8 +140,16 @@ const ManagementPage: React.FC<ManagementPageProps> = ({
   const [successMessage, setSuccessMessage] = useState<string>('');
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [selectedEntity, setSelectedEntity] = useState<ManagementEntity | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortColumn, setSortColumn] = useState('name');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
 
   const isEditMode = selectedEntity !== null;
+  const branchId = hasBranchSelection && selectedBranchId !== null ? selectedBranchId : 0;
 
   const initialFormData = useMemo<ManagementFormValues>(
     () => ({
@@ -153,27 +176,73 @@ const ManagementPage: React.FC<ManagementPageProps> = ({
   );
 
   const loadItems = useCallback(async () => {
+    if (usesServerSide && branchId <= 0) {
+      setItems([]);
+      setTotalRecords(0);
+      setTotalPages(0);
+      return;
+    }
+
     setIsLoading(true);
     setErrorMessage('');
 
     try {
-      const response = await service.getAll();
-      const normalizedItems = extractEntityList(response?.data);
-      const fallbackWithIds = normalizedItems.map((item, index) => ({
-        ...item,
-        id: item.id > 0 ? item.id : index + 1,
-      }));
-      setItems(fallbackWithIds);
+      if (usesServerSide && service.getPaged) {
+        const response = await service.getPaged(branchId, {
+          page: currentPage,
+          pageSize,
+          search: searchTerm.trim() || undefined,
+          sortBy: sortColumn,
+          sortDirection,
+        });
+        const payload = toRecord(response?.data);
+        const normalizedItems = extractEntityList(payload, service.listKey);
+        setItems(normalizedItems.filter((item) => item.id > 0));
+        const meta = extractPagedMeta(payload);
+        setTotalRecords(meta.totalRecords);
+        setTotalPages(meta.totalPages);
+      } else if (service.getAll) {
+        const response = await service.getAll();
+        const normalizedItems = extractEntityList(response?.data, service.listKey);
+        setItems(normalizedItems.map((item, index) => ({
+          ...item,
+          id: item.id > 0 ? item.id : index + 1,
+        })));
+        setTotalRecords(0);
+        setTotalPages(0);
+      } else {
+        setItems([]);
+      }
     } catch {
       setErrorMessage(`Failed to load ${entityLabel.toLowerCase()} records.`);
+      setItems([]);
+      setTotalRecords(0);
+      setTotalPages(0);
     } finally {
       setIsLoading(false);
     }
-  }, [entityLabel, service]);
+  }, [
+    usesServerSide,
+    branchId,
+    service,
+    currentPage,
+    pageSize,
+    searchTerm,
+    sortColumn,
+    sortDirection,
+    entityLabel,
+  ]);
 
   useEffect(() => {
-    void loadItems();
-  }, [loadItems]);
+    const timer = window.setTimeout(() => {
+      void loadItems();
+    }, searchTerm && usesServerSide ? 300 : 0);
+    return () => window.clearTimeout(timer);
+  }, [loadItems, searchTerm, usesServerSide]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [branchId, pageSize]);
 
   const openAddModal = () => {
     setSelectedEntity(null);
@@ -187,7 +256,7 @@ const ManagementPage: React.FC<ManagementPageProps> = ({
     setSuccessMessage('');
 
     try {
-      const response = await service.getById(item.id);
+      const response = await service.getById(item.id, item.branchId ?? branchId);
       const details = normalizeEntity(response?.data ?? item);
       setSelectedEntity(details);
     } catch {
@@ -203,7 +272,7 @@ const ManagementPage: React.FC<ManagementPageProps> = ({
   };
 
   const handleDelete = async (item: ManagementEntity) => {
-    const confirmed = window.confirm(`Delete ${entityLabel} \"${item.name}\"?`);
+    const confirmed = window.confirm(`Delete ${entityLabel} "${item.name}"?`);
     if (!confirmed) {
       return;
     }
@@ -212,7 +281,7 @@ const ManagementPage: React.FC<ManagementPageProps> = ({
     setErrorMessage('');
 
     try {
-      await service.delete(item.id);
+      await service.delete(item.id, item.branchId ?? branchId);
       setSuccessMessage(`${entityLabel} deleted successfully.`);
       await loadItems();
     } catch {
@@ -256,11 +325,13 @@ const ManagementPage: React.FC<ManagementPageProps> = ({
             key: 'code' as keyof ManagementEntity,
             header: 'Code',
             render: (value: unknown) => String(value ?? '-'),
+            sortable: true,
           },
           {
             key: 'conversionFactor' as keyof ManagementEntity,
             header: 'Conversion',
             render: (value: unknown) => Number(value ?? 1).toString(),
+            sortable: true,
           },
         ]
       : []),
@@ -302,6 +373,8 @@ const ManagementPage: React.FC<ManagementPageProps> = ({
     },
   ];
 
+  const tableEnabled = !usesServerSide || hasBranchSelection;
+
   return (
     <div>
       <div className="mb-8 flex items-start justify-between">
@@ -311,12 +384,18 @@ const ManagementPage: React.FC<ManagementPageProps> = ({
         </div>
         <button
           onClick={openAddModal}
-          disabled={isSubmitting}
+          disabled={isSubmitting || (usesServerSide && !hasBranchSelection)}
           className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
           Add {entityLabel}
         </button>
       </div>
+
+      {usesServerSide && !hasBranchSelection && (
+        <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
+          Select a branch from the header to load {entityLabel.toLowerCase()} records.
+        </div>
+      )}
 
       {errorMessage && (
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -335,10 +414,40 @@ const ManagementPage: React.FC<ManagementPageProps> = ({
         columns={columns}
         actions={actions}
         loading={isLoading}
-        searchable={true}
-        pagination={true}
-        pageSize={10}
+        searchable={tableEnabled}
+        pagination={tableEnabled}
+        pageSize={pageSize}
+        pageSizeOptions={[5, 10, 25, 50]}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setCurrentPage(1);
+        }}
         emptyMessage={`No ${entityLabel.toLowerCase()} records found.`}
+        serverSide={usesServerSide}
+        totalRecords={usesServerSide ? totalRecords : undefined}
+        totalPages={usesServerSide ? totalPages : undefined}
+        currentPage={usesServerSide ? currentPage : undefined}
+        onPageChange={usesServerSide ? setCurrentPage : undefined}
+        searchTerm={usesServerSide ? searchTerm : undefined}
+        onSearchChange={
+          usesServerSide
+            ? (value) => {
+                setSearchTerm(value);
+                setCurrentPage(1);
+              }
+            : undefined
+        }
+        sortColumn={usesServerSide ? sortColumn : undefined}
+        sortDirection={usesServerSide ? sortDirection : undefined}
+        onSortChange={
+          usesServerSide
+            ? (column, direction) => {
+                setSortColumn(column);
+                setSortDirection(direction);
+                setCurrentPage(1);
+              }
+            : undefined
+        }
       />
 
       <FormComponent

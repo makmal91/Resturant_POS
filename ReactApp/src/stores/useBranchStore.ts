@@ -89,15 +89,20 @@ export const useBranchStore = create<BranchState>((set, get) => ({
     }
 
     try {
-      const response = await api.get('/branches')
-      const branches = Array.isArray(response.data)
-        ? response.data.map((item: Record<string, unknown>) => ({
-            id: Number(item.id ?? item.Id),
-            name: String(item.name ?? item.Name ?? ''),
-            code: String(item.code ?? item.Code ?? ''),
-            isActive: Boolean(item.isActive ?? item.IsActive ?? true),
-          }))
-        : []
+      const response = await api.get('/branches', { params: { page: 1, pageSize: 1000 } })
+      const payload = response.data
+      const rawRows = Array.isArray(payload)
+        ? payload
+        : Array.isArray(payload?.branches)
+          ? payload.branches
+          : []
+
+      const branches = rawRows.map((item: Record<string, unknown>) => ({
+        id: Number(item.id ?? item.Id),
+        name: String(item.name ?? item.Name ?? ''),
+        code: String(item.code ?? item.Code ?? ''),
+        isActive: Boolean(item.isActive ?? item.IsActive ?? true),
+      }))
 
       if (globalAdmin && branches.length > 0) {
         authStorage.setBranches(

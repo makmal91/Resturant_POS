@@ -35,6 +35,9 @@ public class CategoriesController : ControllerBase
         [FromQuery] int? businessId,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 25,
+        [FromQuery] string? search = null,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null,
         [FromQuery] CategoryType? categoryType = null)
     {
         if (!Request.Query.ContainsKey("branchId"))
@@ -51,7 +54,15 @@ public class CategoriesController : ControllerBase
 
         try
         {
-            var result = await _menuService.GetCategoriesPagedAsync(resolvedBusinessId, resolvedBranchId, page, pageSize, categoryType);
+            var result = await _menuService.GetCategoriesPagedAsync(
+                resolvedBusinessId,
+                resolvedBranchId,
+                page,
+                pageSize,
+                search,
+                sortBy,
+                sortDirection,
+                categoryType);
             return Ok(new
             {
                 categories = result.Data,

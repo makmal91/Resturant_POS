@@ -1,5 +1,6 @@
 using POSSystem.Application.Inventory.DTOs;
 using POSSystem.Application.Inventory.Interfaces;
+using POSSystem.Application.Common.DTOs;
 using POSSystem.Domain;
 
 namespace POSSystem.Application.Inventory.Services;
@@ -149,5 +150,24 @@ public class InventoryService : IInventoryService
     public async Task<ICollection<InventoryItem>> GetInventoryItemsAsync(int businessId, int branchId)
     {
         return await _repository.GetInventoryItemsByBranchAsync(businessId, branchId);
+    }
+
+    public Task<PagedResultDto<InventoryItem>> GetInventoryItemsPagedAsync(
+        int businessId,
+        int branchId,
+        int page,
+        int pageSize,
+        string? search = null,
+        string? sortBy = null,
+        string? sortDirection = null)
+    {
+        return _repository.GetInventoryItemsPagedAsync(
+            businessId,
+            branchId,
+            page,
+            pageSize,
+            search,
+            sortBy,
+            sortDirection);
     }
 }

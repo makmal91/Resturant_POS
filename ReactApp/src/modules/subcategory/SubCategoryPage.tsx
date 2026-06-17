@@ -130,7 +130,9 @@ const SubCategoryPage: React.FC = () => {
         pageSize,
         searchTerm.trim() || undefined,
         selectedCategoryId ?? undefined,
-        statusFilter
+        statusFilter,
+        sortColumn,
+        sortDirection,
       );
 
       const rows = Array.isArray(response.data?.subCategories) ? response.data.subCategories : [];
@@ -158,6 +160,8 @@ const SubCategoryPage: React.FC = () => {
     searchTerm,
     selectedCategoryId,
     statusFilter,
+    sortColumn,
+    sortDirection,
     normalizeSubCategory,
     showNotification,
   ]);

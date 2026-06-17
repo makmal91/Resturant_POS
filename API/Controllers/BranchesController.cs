@@ -21,11 +21,31 @@ public class BranchesController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetBranches([FromQuery] int? businessId = null)
+    public async Task<IActionResult> GetBranches(
+        [FromQuery] int? businessId = null,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 25,
+        [FromQuery] string? search = null,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null)
     {
         var resolvedBusinessId = this.ResolveBusinessId(businessId);
-        var branches = await _branchService.GetBranchesAsync(resolvedBusinessId);
-        return Ok(branches);
+        var result = await _branchService.GetBranchesPagedAsync(
+            resolvedBusinessId,
+            page,
+            pageSize,
+            search,
+            sortBy,
+            sortDirection);
+
+        return Ok(new
+        {
+            branches = result.Data,
+            totalRecords = result.TotalRecords,
+            totalPages = result.TotalPages,
+            currentPage = result.CurrentPage,
+            pageSize
+        });
     }
 
     [HttpGet("{id:int}")]

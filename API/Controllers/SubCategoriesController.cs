@@ -37,7 +37,9 @@ public class SubCategoriesController : ControllerBase
         [FromQuery] int pageSize = 25,
         [FromQuery] string? search = null,
         [FromQuery] int? categoryId = null,
-        [FromQuery] bool? status = null)
+        [FromQuery] bool? status = null,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null)
     {
         if (!Request.Query.ContainsKey("branchId"))
             return BadRequest(new { message = "branchId is required." });
@@ -60,7 +62,9 @@ public class SubCategoriesController : ControllerBase
                 pageSize,
                 search,
                 categoryId,
-                status);
+                status,
+                sortBy,
+                sortDirection);
 
             return Ok(new
             {

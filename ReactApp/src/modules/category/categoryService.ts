@@ -1,4 +1,5 @@
 import apiClient from '../../services/api';
+import { PagedListParams } from '../shared/pagedList';
 
 export interface CategoryPayload {
   name: string;
@@ -13,8 +14,6 @@ export interface CategoryPayload {
   branchId: number;
 }
 
-const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim() || '/api';
-
 const branchRequestConfig = (branchId: number) => ({
   headers: { 'X-Branch-Id': String(branchId) },
 });
@@ -22,11 +21,28 @@ const branchRequestConfig = (branchId: number) => ({
 export const categoryService = {
   getImageEndpoint: (id: number) => `/categories/${id}/image`,
 
-  getImageUrl: (id: number, branchId: number) =>
-    `${apiBaseUrl.replace(/\/$/, '')}/categories/${id}/image?branchId=${branchId}`,
+  getImageUrl: (id: number, branchId: number) => {
+    const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim() || '/api';
+    return `${apiBaseUrl.replace(/\/$/, '')}/categories/${id}/image?branchId=${branchId}`;
+  },
 
-  getAll: (branchId: number, page = 1, pageSize = 25) =>
-    apiClient.get('/categories', { params: { branchId, page, pageSize }, ...branchRequestConfig(branchId) }),
+  getAll: (
+    branchId: number,
+    page = 1,
+    pageSize = 25,
+    params: Omit<PagedListParams, 'page' | 'pageSize'> = {},
+  ) =>
+    apiClient.get('/categories', {
+      params: {
+        branchId,
+        page,
+        pageSize,
+        search: params.search?.trim() || undefined,
+        sortBy: params.sortBy || undefined,
+        sortDirection: params.sortDirection || undefined,
+      },
+      ...branchRequestConfig(branchId),
+    }),
 
   getById: (id: number, branchId: number) =>
     apiClient.get(`/categories/${id}`, { params: { branchId }, ...branchRequestConfig(branchId) }),

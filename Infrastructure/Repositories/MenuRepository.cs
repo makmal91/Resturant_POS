@@ -99,7 +99,9 @@ public class MenuRepository : IMenuRepository
         int pageSize,
         string? search = null,
         int? categoryId = null,
-        bool? status = null)
+        bool? status = null,
+        string? sortBy = null,
+        string? sortDirection = null)
     {
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, MaxPageSize);
@@ -138,9 +140,22 @@ public class MenuRepository : IMenuRepository
         if (totalPages > 0 && page > totalPages)
             page = totalPages;
 
-        var orderedQuery = branchId == 0
-            ? query.OrderBy(sc => sc.Branch!.Name).ThenBy(sc => sc.DisplayOrder).ThenBy(sc => sc.Name)
-            : query.OrderBy(sc => sc.DisplayOrder).ThenBy(sc => sc.Name);
+        var descending = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase);
+        var orderedQuery = (sortBy ?? "displayOrder").ToLowerInvariant() switch
+        {
+            "name" => descending ? query.OrderByDescending(sc => sc.Name) : query.OrderBy(sc => sc.Name),
+            "code" => descending ? query.OrderByDescending(sc => sc.Code) : query.OrderBy(sc => sc.Code),
+            "categoryname" => descending
+                ? query.OrderByDescending(sc => sc.Category!.Name).ThenByDescending(sc => sc.Name)
+                : query.OrderBy(sc => sc.Category!.Name).ThenBy(sc => sc.Name),
+            "status" => descending ? query.OrderByDescending(sc => sc.Status) : query.OrderBy(sc => sc.Status),
+            "branchname" => descending
+                ? query.OrderByDescending(sc => sc.Branch!.Name).ThenByDescending(sc => sc.Name)
+                : query.OrderBy(sc => sc.Branch!.Name).ThenBy(sc => sc.Name),
+            _ => descending
+                ? query.OrderByDescending(sc => sc.DisplayOrder).ThenByDescending(sc => sc.Name)
+                : query.OrderBy(sc => sc.DisplayOrder).ThenBy(sc => sc.Name),
+        };
 
         var data = await orderedQuery
             .Include(sc => sc.Category)
@@ -179,7 +194,15 @@ public class MenuRepository : IMenuRepository
                 .FirstOrDefaultAsync(i => i.Id == id && i.BusinessId == businessId && i.BranchId == branchId);
     }
 
-    public async Task<PagedResultDto<MenuCategory>> GetCategoriesPagedAsync(int businessId, int branchId, int page, int pageSize, CategoryType? categoryType = null)
+    public async Task<PagedResultDto<MenuCategory>> GetCategoriesPagedAsync(
+        int businessId,
+        int branchId,
+        int page,
+        int pageSize,
+        string? search = null,
+        string? sortBy = null,
+        string? sortDirection = null,
+        CategoryType? categoryType = null)
     {
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, MaxPageSize);
@@ -198,15 +221,35 @@ public class MenuRepository : IMenuRepository
             query = query.Where(c => c.CategoryType == categoryType.Value);
         }
 
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim().ToLower();
+            query = query.Where(c =>
+                c.Name.ToLower().Contains(term) ||
+                c.Code.ToLower().Contains(term) ||
+                c.Description.ToLower().Contains(term));
+        }
+
         var totalRecords = await query.CountAsync();
         var totalPages = totalRecords == 0 ? 0 : (int)Math.Ceiling(totalRecords / (double)pageSize);
 
         if (totalPages > 0 && page > totalPages)
             page = totalPages;
 
-        var orderedQuery = branchId == 0
-            ? query.OrderBy(c => c.Branch.Name).ThenBy(c => c.DisplayOrder).ThenBy(c => c.Name)
-            : query.OrderBy(c => c.DisplayOrder).ThenBy(c => c.Name);
+        var descending = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase);
+        var orderedQuery = (sortBy ?? "displayOrder").ToLowerInvariant() switch
+        {
+            "name" => descending ? query.OrderByDescending(c => c.Name) : query.OrderBy(c => c.Name),
+            "code" => descending ? query.OrderByDescending(c => c.Code) : query.OrderBy(c => c.Code),
+            "categorytype" or "type" => descending ? query.OrderByDescending(c => c.CategoryType) : query.OrderBy(c => c.CategoryType),
+            "status" => descending ? query.OrderByDescending(c => c.Status) : query.OrderBy(c => c.Status),
+            "branchname" => descending
+                ? query.OrderByDescending(c => c.Branch!.Name).ThenByDescending(c => c.Name)
+                : query.OrderBy(c => c.Branch!.Name).ThenBy(c => c.Name),
+            _ => descending
+                ? query.OrderByDescending(c => c.DisplayOrder).ThenByDescending(c => c.Name)
+                : query.OrderBy(c => c.DisplayOrder).ThenBy(c => c.Name),
+        };
 
         var data = await orderedQuery
             .Include(c => c.Branch)

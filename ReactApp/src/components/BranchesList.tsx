@@ -27,7 +27,13 @@ interface Branch {
 const BranchesList: React.FC = () => {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(5);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortColumn, setSortColumn] = useState('name');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const { openForm, isOpen } = useFormModal();
   const { showConfirm } = useConfirmDialog();
@@ -70,20 +76,49 @@ const BranchesList: React.FC = () => {
   const fetchBranches = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await BranchService.getAll();
-      setBranches(normalizeBranches(response?.data));
+      const response = await BranchService.getAll({
+        page: currentPage,
+        pageSize,
+        search: searchTerm,
+        sortBy: sortColumn,
+        sortDirection,
+      });
+      const payload = response?.data as { branches?: unknown[]; totalRecords?: number; totalPages?: number } | unknown[];
+      const rows = Array.isArray(payload)
+        ? payload
+        : Array.isArray(payload?.branches)
+          ? payload.branches
+          : [];
+
+      setBranches(normalizeBranches(rows));
+      if (Array.isArray(payload)) {
+        setTotalRecords(rows.length);
+        setTotalPages(Math.max(1, Math.ceil(rows.length / pageSize)));
+      } else {
+        setTotalRecords(Number(payload?.totalRecords ?? rows.length));
+        setTotalPages(Number(payload?.totalPages ?? 1));
+      }
     } catch (err) {
       console.error('Failed to load branches:', err);
       setBranches([]);
+      setTotalRecords(0);
+      setTotalPages(0);
       showNotification('error', getApiErrorMessage(err, 'Failed to load branches.'));
     } finally {
       setLoading(false);
     }
-  }, [showNotification]);
+  }, [currentPage, pageSize, searchTerm, sortColumn, sortDirection, showNotification]);
 
   useEffect(() => {
-    fetchBranches();
-  }, [fetchBranches]);
+    const timer = setTimeout(() => {
+      void fetchBranches();
+    }, searchTerm ? 300 : 0);
+    return () => clearTimeout(timer);
+  }, [fetchBranches, searchTerm]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [pageSize]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -263,8 +298,28 @@ const BranchesList: React.FC = () => {
         pagination={true}
         pageSize={pageSize}
         pageSizeOptions={[5, 10, 25, 50]}
-        onPageSizeChange={setPageSize}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setCurrentPage(1);
+        }}
         emptyMessage="No branches found"
+        serverSide
+        totalRecords={totalRecords}
+        totalPages={totalPages}
+        currentPage={currentPage}
+        onPageChange={setCurrentPage}
+        searchTerm={searchTerm}
+        onSearchChange={(value) => {
+          setSearchTerm(value);
+          setCurrentPage(1);
+        }}
+        sortColumn={sortColumn}
+        sortDirection={sortDirection}
+        onSortChange={(column, direction) => {
+          setSortColumn(column);
+          setSortDirection(direction);
+          setCurrentPage(1);
+        }}
       />
     </div>
   );

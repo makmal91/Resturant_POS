@@ -13,6 +13,8 @@ public class ProductSearchRequestDto
     public int? SubCategoryId { get; set; }
     public int? BrandId { get; set; }
     public bool? Status { get; set; }
+    public string? SortBy { get; set; }
+    public string? SortDirection { get; set; }
 }
 
 public class ProductListDto

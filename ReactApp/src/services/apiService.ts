@@ -3,9 +3,23 @@ import apiClient from './api';
 const DEFAULT_BRANCH_ID = 1;
 
 export const BranchService = {
-  getAll: (businessId?: number) =>
+  getAll: (params?: {
+    businessId?: number;
+    page?: number;
+    pageSize?: number;
+    search?: string;
+    sortBy?: string;
+    sortDirection?: 'asc' | 'desc';
+  }) =>
     apiClient.get('/branches', {
-      params: businessId && businessId > 0 ? { businessId } : undefined,
+      params: {
+        businessId: params?.businessId && params.businessId > 0 ? params.businessId : undefined,
+        page: params?.page ?? 1,
+        pageSize: params?.pageSize ?? 25,
+        search: params?.search?.trim() || undefined,
+        sortBy: params?.sortBy || undefined,
+        sortDirection: params?.sortDirection || undefined,
+      },
     }),
   getById: (id: number, businessId?: number) =>
     apiClient.get(`/branches/${id}`, {
@@ -126,7 +140,27 @@ export const MenuService = {
 };
 
 export const InventoryService = {
-  getAll: (branchId: number = DEFAULT_BRANCH_ID) => apiClient.get('/inventory', { params: { branchId } }),
+  getAll: (
+    branchId: number = DEFAULT_BRANCH_ID,
+    params?: {
+      page?: number;
+      pageSize?: number;
+      search?: string;
+      sortBy?: string;
+      sortDirection?: 'asc' | 'desc';
+    },
+  ) =>
+    apiClient.get('/inventory', {
+      params: {
+        branchId,
+        page: params?.page ?? 1,
+        pageSize: params?.pageSize ?? 25,
+        search: params?.search?.trim() || undefined,
+        sortBy: params?.sortBy || undefined,
+        sortDirection: params?.sortDirection || undefined,
+      },
+      headers: { 'X-Branch-Id': String(branchId) },
+    }),
   getById: (id: number) => apiClient.get(`/inventory/${id}`),
   create: (data: any) => apiClient.post('/inventory', data),
   update: (id: number, data: any) => apiClient.put(`/inventory/${id}`, data),

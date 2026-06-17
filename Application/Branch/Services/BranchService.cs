@@ -1,4 +1,5 @@
 using POSSystem.Application.Branch.DTOs;
+using POSSystem.Application.Common.DTOs;
 using POSSystem.Application.Branch.Interfaces;
 using POSSystem.Application.Common.Constants;
 using POSSystem.Application.Common.Interfaces;
@@ -25,6 +26,17 @@ public class BranchService : IBranchService
     public Task<IReadOnlyList<BranchListItemDto>> GetBranchesAsync(int businessId)
     {
         return _repository.GetByBusinessIdAsync(businessId);
+    }
+
+    public Task<PagedResultDto<BranchListItemDto>> GetBranchesPagedAsync(
+        int businessId,
+        int page,
+        int pageSize,
+        string? search = null,
+        string? sortBy = null,
+        string? sortDirection = null)
+    {
+        return _repository.GetPagedAsync(businessId, page, pageSize, search, sortBy, sortDirection);
     }
 
     public Task<BranchDetailDto?> GetBranchByIdAsync(int id, int businessId)

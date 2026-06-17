@@ -1,4 +1,5 @@
 using POSSystem.Application.Unit.DTOs;
+using POSSystem.Application.Common.DTOs;
 using POSSystem.Application.Unit.Interfaces;
 using MeasurementUnitEntity = POSSystem.Domain.MeasurementUnit;
 
@@ -17,6 +18,35 @@ public class UnitService : IUnitService
     {
         var units = await _repository.GetAllAsync(businessId, branchId, status);
         return units.Select(MapDto).ToList();
+    }
+
+    public async Task<PagedResultDto<UnitDto>> GetUnitsPagedAsync(
+        int businessId,
+        int branchId,
+        int page,
+        int pageSize,
+        string? search = null,
+        bool? status = null,
+        string? sortBy = null,
+        string? sortDirection = null)
+    {
+        var result = await _repository.GetPagedAsync(
+            businessId,
+            branchId,
+            page,
+            pageSize,
+            search,
+            status,
+            sortBy,
+            sortDirection);
+
+        return new PagedResultDto<UnitDto>
+        {
+            Data = result.Data.Select(MapDto).ToList(),
+            TotalRecords = result.TotalRecords,
+            TotalPages = result.TotalPages,
+            CurrentPage = result.CurrentPage
+        };
     }
 
     public async Task<UnitDto?> GetUnitByIdAsync(int id, int businessId, int branchId)

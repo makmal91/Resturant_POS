@@ -179,8 +179,17 @@ public class MenuService : IMenuService
 
     private static string GetPosMenuCacheKey(int businessId, int branchId) => $"pos-menu-{businessId}-{branchId}";
     private static string GetCategoryListVersionKey(int businessId, int branchId) => $"categories-version-{businessId}-{branchId}";
-    private static string GetCategoryListCacheKey(int businessId, int branchId, int version, int page, int pageSize, CategoryType? categoryType) =>
-        $"categories-{businessId}-{branchId}-{version}-{page}-{pageSize}-{categoryType?.ToString() ?? "all"}";
+    private static string GetCategoryListCacheKey(
+        int businessId,
+        int branchId,
+        int version,
+        int page,
+        int pageSize,
+        string? search,
+        string? sortBy,
+        string? sortDirection,
+        CategoryType? categoryType) =>
+        $"categories-{businessId}-{branchId}-{version}-{page}-{pageSize}-{search ?? ""}-{sortBy ?? ""}-{sortDirection ?? ""}-{categoryType?.ToString() ?? "all"}";
 
     private int GetCategoryListVersion(int businessId, int branchId)
     {
@@ -318,7 +327,15 @@ public class MenuService : IMenuService
         return categories.Select(MapCategoryDto).ToList();
     }
 
-    public async Task<PagedResultDto<MenuCategoryDto>> GetCategoriesPagedAsync(int businessId, int branchId, int page, int pageSize, CategoryType? categoryType = null)
+    public async Task<PagedResultDto<MenuCategoryDto>> GetCategoriesPagedAsync(
+        int businessId,
+        int branchId,
+        int page,
+        int pageSize,
+        string? search = null,
+        string? sortBy = null,
+        string? sortDirection = null,
+        CategoryType? categoryType = null)
     {
         if (businessId <= 0)
             throw new InvalidOperationException("BusinessId is required.");
@@ -331,19 +348,32 @@ public class MenuService : IMenuService
             await EnsureBranchExistsAsync(businessId, branchId);
         }
 
+        var normalizedPage = Math.Max(1, page);
+        var normalizedPageSize = Math.Clamp(pageSize, 1, 100);
         var cacheKey = GetCategoryListCacheKey(
             businessId,
             branchId,
             GetCategoryListVersion(businessId, branchId),
-            Math.Max(1, page),
-            Math.Clamp(pageSize, 1, 100),
+            normalizedPage,
+            normalizedPageSize,
+            search?.Trim(),
+            sortBy?.Trim(),
+            sortDirection?.Trim(),
             categoryType);
         if (_cache.TryGetValue(cacheKey, out PagedResultDto<MenuCategoryDto>? cached) && cached != null)
         {
             return cached;
         }
 
-        var result = await _repository.GetCategoriesPagedAsync(businessId, branchId, page, pageSize, categoryType);
+        var result = await _repository.GetCategoriesPagedAsync(
+            businessId,
+            branchId,
+            normalizedPage,
+            normalizedPageSize,
+            search,
+            sortBy,
+            sortDirection,
+            categoryType);
         var dto = new PagedResultDto<MenuCategoryDto>
         {
             Data = result.Data.Select(MapCategoryDto).ToList(),
@@ -517,7 +547,9 @@ public class MenuService : IMenuService
         int pageSize,
         string? search = null,
         int? categoryId = null,
-        bool? status = null)
+        bool? status = null,
+        string? sortBy = null,
+        string? sortDirection = null)
     {
         if (businessId <= 0)
             throw new InvalidOperationException("BusinessId is required.");
@@ -535,7 +567,16 @@ public class MenuService : IMenuService
             await ValidateSubCategoryContextAsync(categoryId.Value, businessId, branchId);
         }
 
-        var result = await _repository.GetSubCategoriesPagedAsync(businessId, branchId, page, pageSize, search, categoryId, status);
+        var result = await _repository.GetSubCategoriesPagedAsync(
+            businessId,
+            branchId,
+            page,
+            pageSize,
+            search,
+            categoryId,
+            status,
+            sortBy,
+            sortDirection);
 
         return new PagedResultDto<SubCategoryDto>
         {

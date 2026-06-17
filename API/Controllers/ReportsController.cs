@@ -102,7 +102,10 @@ public class ReportsController : ControllerBase
         [FromQuery] DateTime? fromDate,
         [FromQuery] DateTime? toDate,
         [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 25)
+        [FromQuery] int pageSize = 25,
+        [FromQuery] string? search = null,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null)
     {
         var biz    = this.ResolveBusinessId(businessId);
         var branch = this.ResolveBranchId(branchId);
@@ -134,10 +137,30 @@ public class ReportsController : ControllerBase
                 invoiceCount  = g.Select(x => x.SaleInvoiceId).Distinct().Count(),
             });
 
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim().ToLower();
+            grouped = grouped.Where(g =>
+                g.ProductName.ToLower().Contains(term) ||
+                g.ProductCode.ToLower().Contains(term));
+        }
+
         var totalRecords = await grouped.CountAsync();
 
-        var rows = await grouped
-            .OrderByDescending(g => g.totalAmount)
+        var descending = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase);
+        var orderedGrouped = (sortBy ?? "totalAmount").ToLowerInvariant() switch
+        {
+            "productname" or "product" => descending ? grouped.OrderByDescending(g => g.ProductName) : grouped.OrderBy(g => g.ProductName),
+            "productcode" or "code" => descending ? grouped.OrderByDescending(g => g.ProductCode) : grouped.OrderBy(g => g.ProductCode),
+            "totalquantity" or "quantity" or "qty" => descending ? grouped.OrderByDescending(g => g.totalQuantity) : grouped.OrderBy(g => g.totalQuantity),
+            "invoicecount" or "invoices" => descending ? grouped.OrderByDescending(g => g.invoiceCount) : grouped.OrderBy(g => g.invoiceCount),
+            _ => descending ? grouped.OrderByDescending(g => g.totalAmount) : grouped.OrderBy(g => g.totalAmount),
+        };
+
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+
+        var rows = await orderedGrouped
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();
@@ -164,7 +187,10 @@ public class ReportsController : ControllerBase
         [FromQuery] int? businessId,
         [FromQuery] int? warehouseId,
         [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 50)
+        [FromQuery] int pageSize = 50,
+        [FromQuery] string? search = null,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null)
     {
         var biz    = this.ResolveBusinessId(businessId);
         var branch = this.ResolveBranchId(branchId);
@@ -238,10 +264,46 @@ public class ReportsController : ControllerBase
                 costPrice,
                 stockValue,
             };
-        })
-        .OrderBy(i => i.productName)
-        .ThenBy(i => i.variantName)
-        .ToList();
+        }).ToList();
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim().ToLower();
+            items = items.Where(i =>
+                i.productName.ToLower().Contains(term) ||
+                i.productCode.ToLower().Contains(term) ||
+                (i.variantName ?? string.Empty).ToLower().Contains(term) ||
+                i.warehouseName.ToLower().Contains(term)).ToList();
+        }
+
+        var descending = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase);
+        items = (sortBy ?? "productName").ToLowerInvariant() switch
+        {
+            "productcode" or "code" => descending
+                ? items.OrderByDescending(i => i.productCode).ThenByDescending(i => i.productName).ToList()
+                : items.OrderBy(i => i.productCode).ThenBy(i => i.productName).ToList(),
+            "variantname" or "variant" => descending
+                ? items.OrderByDescending(i => i.variantName).ThenByDescending(i => i.productName).ToList()
+                : items.OrderBy(i => i.variantName).ThenBy(i => i.productName).ToList(),
+            "warehousename" or "warehouse" => descending
+                ? items.OrderByDescending(i => i.warehouseName).ThenByDescending(i => i.productName).ToList()
+                : items.OrderBy(i => i.warehouseName).ThenBy(i => i.productName).ToList(),
+            "quantity" or "qty" => descending
+                ? items.OrderByDescending(i => i.quantity).ToList()
+                : items.OrderBy(i => i.quantity).ToList(),
+            "costprice" or "cost" => descending
+                ? items.OrderByDescending(i => i.costPrice).ToList()
+                : items.OrderBy(i => i.costPrice).ToList(),
+            "stockvalue" or "value" => descending
+                ? items.OrderByDescending(i => i.stockValue).ToList()
+                : items.OrderBy(i => i.stockValue).ToList(),
+            _ => descending
+                ? items.OrderByDescending(i => i.productName).ThenByDescending(i => i.variantName).ToList()
+                : items.OrderBy(i => i.productName).ThenBy(i => i.variantName).ToList(),
+        };
+
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
 
         var totalRecords = items.Count;
         var paged = items.Skip((page - 1) * pageSize).Take(pageSize).ToList();

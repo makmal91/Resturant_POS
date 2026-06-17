@@ -1,3 +1,5 @@
+import { PagedListParams } from './pagedList';
+
 export interface ManagementEntity {
   id: number;
   name: string;
@@ -48,9 +50,11 @@ export const defaultManagementFormValues: ManagementFormValues = {
 };
 
 export interface CrudEntityService {
-  getAll: () => Promise<{ data: unknown }>;
-  getById: (id: number) => Promise<{ data: unknown }>;
+  getAll?: () => Promise<{ data: unknown }>;
+  getPaged?: (branchId: number, params: PagedListParams) => Promise<{ data: unknown }>;
+  getById: (id: number, branchId?: number) => Promise<{ data: unknown }>;
   create: (data: ManagementFormValues) => Promise<unknown>;
   update: (id: number, data: ManagementFormValues) => Promise<unknown>;
-  delete: (id: number) => Promise<unknown>;
+  delete: (id: number, branchId?: number) => Promise<unknown>;
+  listKey?: string;
 }

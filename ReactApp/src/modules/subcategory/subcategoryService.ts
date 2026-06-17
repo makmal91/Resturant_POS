@@ -48,7 +48,9 @@ export const subCategoryService = {
     pageSize = 25,
     search?: string,
     categoryId?: number,
-    status?: boolean | null
+    status?: boolean | null,
+    sortBy?: string,
+    sortDirection?: 'asc' | 'desc',
   ) =>
     apiClient.get<SubCategoryListResponse>('/subcategories', {
       params: {
@@ -58,6 +60,8 @@ export const subCategoryService = {
         ...(search ? { search } : {}),
         ...(categoryId ? { categoryId } : {}),
         ...(status !== null && status !== undefined ? { status } : {}),
+        ...(sortBy ? { sortBy } : {}),
+        ...(sortDirection ? { sortDirection } : {}),
       },
       ...branchRequestConfig(branchId),
     }),

@@ -19,14 +19,36 @@ public class InventoryController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetInventory([FromQuery] int branchId, [FromQuery] int? businessId = null)
+    public async Task<IActionResult> GetInventory(
+        [FromQuery] int branchId,
+        [FromQuery] int? businessId = null,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 25,
+        [FromQuery] string? search = null,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null)
     {
         try
         {
             var resolvedBusinessId = this.ResolveBusinessId(businessId);
             var resolvedBranchId = this.ResolveBranchId(branchId);
-            var items = await _inventoryService.GetInventoryItemsAsync(resolvedBusinessId, resolvedBranchId);
-            return Ok(new { items });
+            var result = await _inventoryService.GetInventoryItemsPagedAsync(
+                resolvedBusinessId,
+                resolvedBranchId,
+                page,
+                pageSize,
+                search,
+                sortBy,
+                sortDirection);
+
+            return Ok(new
+            {
+                items = result.Data,
+                totalRecords = result.TotalRecords,
+                totalPages = result.TotalPages,
+                currentPage = result.CurrentPage,
+                pageSize
+            });
         }
         catch (Exception ex)
         {

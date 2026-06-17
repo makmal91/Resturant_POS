@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using POSSystem.Application.Common.DTOs;
 using POSSystem.Application.Unit.Interfaces;
 using POSSystem.Infrastructure.Data;
 using MeasurementUnitEntity = POSSystem.Domain.MeasurementUnit;
@@ -7,6 +8,7 @@ namespace POSSystem.Infrastructure.Repositories;
 
 public class UnitRepository : IUnitRepository
 {
+    private const int MaxPageSize = 100;
     private readonly POSDbContext _context;
 
     public UnitRepository(POSDbContext context)
@@ -15,6 +17,59 @@ public class UnitRepository : IUnitRepository
     }
 
     public Task<List<MeasurementUnitEntity>> GetAllAsync(int businessId, int branchId, bool? status = null)
+    {
+        var query = BuildQuery(businessId, branchId, status, null);
+        return query.OrderBy(u => u.Name).ToListAsync();
+    }
+
+    public async Task<PagedResultDto<MeasurementUnitEntity>> GetPagedAsync(
+        int businessId,
+        int branchId,
+        int page,
+        int pageSize,
+        string? search = null,
+        bool? status = null,
+        string? sortBy = null,
+        string? sortDirection = null)
+    {
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, MaxPageSize);
+
+        var query = BuildQuery(businessId, branchId, status, search);
+        var totalRecords = await query.CountAsync();
+        var totalPages = totalRecords == 0 ? 0 : (int)Math.Ceiling(totalRecords / (double)pageSize);
+
+        if (totalPages > 0 && page > totalPages)
+            page = totalPages;
+
+        var descending = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase);
+        var orderedQuery = (sortBy ?? "name").ToLowerInvariant() switch
+        {
+            "code" => descending ? query.OrderByDescending(u => u.Code) : query.OrderBy(u => u.Code),
+            "description" => descending ? query.OrderByDescending(u => u.Description) : query.OrderBy(u => u.Description),
+            "conversionfactor" => descending ? query.OrderByDescending(u => u.ConversionFactor) : query.OrderBy(u => u.ConversionFactor),
+            "status" or "isactive" => descending ? query.OrderByDescending(u => u.Status) : query.OrderBy(u => u.Status),
+            "branchname" => descending
+                ? query.OrderByDescending(u => u.Branch!.Name).ThenByDescending(u => u.Name)
+                : query.OrderBy(u => u.Branch!.Name).ThenBy(u => u.Name),
+            _ => descending ? query.OrderByDescending(u => u.Name) : query.OrderBy(u => u.Name),
+        };
+
+        var data = await orderedQuery
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return new PagedResultDto<MeasurementUnitEntity>
+        {
+            Data = data,
+            TotalRecords = totalRecords,
+            TotalPages = totalPages,
+            CurrentPage = page
+        };
+    }
+
+    private IQueryable<MeasurementUnitEntity> BuildQuery(int businessId, int branchId, bool? status, string? search)
     {
         var query = _context.Units
             .IgnoreQueryFilters()
@@ -27,7 +82,16 @@ public class UnitRepository : IUnitRepository
         if (status.HasValue)
             query = query.Where(u => u.Status == status.Value);
 
-        return query.OrderBy(u => u.Name).ToListAsync();
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim().ToLower();
+            query = query.Where(u =>
+                u.Name.ToLower().Contains(term) ||
+                u.Code.ToLower().Contains(term) ||
+                u.Description.ToLower().Contains(term));
+        }
+
+        return query;
     }
 
     public Task<MeasurementUnitEntity?> GetByIdAsync(int id, int businessId, int branchId)

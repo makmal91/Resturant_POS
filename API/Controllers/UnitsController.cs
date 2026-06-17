@@ -19,7 +19,15 @@ public class UnitsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetUnits([FromQuery] int? branchId, [FromQuery] int? businessId, [FromQuery] bool? status = null)
+    public async Task<IActionResult> GetUnits(
+        [FromQuery] int? branchId,
+        [FromQuery] int? businessId,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 25,
+        [FromQuery] string? search = null,
+        [FromQuery] bool? status = null,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null)
     {
         var resolvedBusinessId = this.ResolveBusinessId(businessId);
         var resolvedBranchId = this.ResolveBranchId(branchId);
@@ -27,8 +35,24 @@ public class UnitsController : ControllerBase
         if (resolvedBranchId < 0)
             return BadRequest(new { message = "branchId is required." });
 
-        var units = await _unitService.GetUnitsAsync(resolvedBusinessId, resolvedBranchId, status);
-        return Ok(new { units });
+        var result = await _unitService.GetUnitsPagedAsync(
+            resolvedBusinessId,
+            resolvedBranchId,
+            page,
+            pageSize,
+            search,
+            status,
+            sortBy,
+            sortDirection);
+
+        return Ok(new
+        {
+            units = result.Data,
+            totalRecords = result.TotalRecords,
+            totalPages = result.TotalPages,
+            currentPage = result.CurrentPage,
+            pageSize
+        });
     }
 
     [HttpGet("{id:int}")]

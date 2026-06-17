@@ -117,7 +117,13 @@ export const reportService = {
 
   getSalesByProduct: (
     branchId: number,
-    params: ReportDateRange & { page?: number; pageSize?: number } = {},
+    params: ReportDateRange & {
+      page?: number;
+      pageSize?: number;
+      search?: string;
+      sortBy?: string;
+      sortDirection?: 'asc' | 'desc';
+    } = {},
   ) =>
     apiClient.get<SalesByProductResponse>('/reports/sales-by-product', {
       params: { branchId, ...params },
@@ -126,7 +132,14 @@ export const reportService = {
 
   getStockSummary: (
     branchId: number,
-    params: { warehouseId?: number; page?: number; pageSize?: number } = {},
+    params: {
+      warehouseId?: number;
+      page?: number;
+      pageSize?: number;
+      search?: string;
+      sortBy?: string;
+      sortDirection?: 'asc' | 'desc';
+    } = {},
   ) =>
     apiClient.get<StockSummaryResponse>('/reports/stock-summary', {
       params: { branchId, ...params },

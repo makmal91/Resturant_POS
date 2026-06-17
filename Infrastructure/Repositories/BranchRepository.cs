@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using POSSystem.Application.Branch.DTOs;
 using POSSystem.Application.Branch.Interfaces;
+using POSSystem.Application.Common.DTOs;
 using POSSystem.Infrastructure.Data;
 using BranchEntity = POSSystem.Domain.Branch;
 
@@ -8,6 +9,7 @@ namespace POSSystem.Infrastructure.Repositories;
 
 public class BranchRepository : IBranchRepository
 {
+    private const int MaxPageSize = 100;
     private readonly POSDbContext _context;
 
     public BranchRepository(POSDbContext context)
@@ -56,6 +58,87 @@ public class BranchRepository : IBranchRepository
             };
 
         return await query.ToListAsync();
+    }
+
+    public async Task<PagedResultDto<BranchListItemDto>> GetPagedAsync(
+        int businessId,
+        int page,
+        int pageSize,
+        string? search = null,
+        string? sortBy = null,
+        string? sortDirection = null)
+    {
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, MaxPageSize);
+
+        var query =
+            from branch in _context.Branches.AsNoTracking()
+            join business in _context.Businesses.AsNoTracking() on branch.BusinessId equals business.Id
+            join country in _context.Countries.AsNoTracking() on branch.CountryId equals country.Id
+            join city in _context.Cities.AsNoTracking() on branch.CityId equals city.Id
+            where branch.BusinessId == businessId && !branch.IsDeleted
+            select new BranchListItemDto
+            {
+                Id = branch.Id,
+                Name = branch.Name,
+                Code = branch.Code,
+                Address = branch.Address,
+                Phone = branch.Phone,
+                BusinessId = branch.BusinessId,
+                BusinessName = business.Name,
+                CountryId = branch.CountryId,
+                CountryName = country.Name,
+                CityId = branch.CityId,
+                CityName = city.Name,
+                IsActive = branch.IsActive,
+                CreatedAt = branch.CreatedAt
+            };
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim().ToLower();
+            query = query.Where(b =>
+                b.Name.ToLower().Contains(term) ||
+                b.Code.ToLower().Contains(term) ||
+                b.Address.ToLower().Contains(term) ||
+                b.Phone.Contains(term) ||
+                b.BusinessName.ToLower().Contains(term) ||
+                b.CountryName.ToLower().Contains(term) ||
+                b.CityName.ToLower().Contains(term));
+        }
+
+        var totalRecords = await query.CountAsync();
+        var totalPages = totalRecords == 0 ? 0 : (int)Math.Ceiling(totalRecords / (double)pageSize);
+
+        if (totalPages > 0 && page > totalPages)
+            page = totalPages;
+
+        var descending = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase);
+        var orderedQuery = (sortBy ?? "name").ToLowerInvariant() switch
+        {
+            "code" => descending ? query.OrderByDescending(b => b.Code) : query.OrderBy(b => b.Code),
+            "address" => descending ? query.OrderByDescending(b => b.Address) : query.OrderBy(b => b.Address),
+            "phone" => descending ? query.OrderByDescending(b => b.Phone) : query.OrderBy(b => b.Phone),
+            "businessname" => descending ? query.OrderByDescending(b => b.BusinessName) : query.OrderBy(b => b.BusinessName),
+            "countryname" => descending ? query.OrderByDescending(b => b.CountryName) : query.OrderBy(b => b.CountryName),
+            "cityname" => descending ? query.OrderByDescending(b => b.CityName) : query.OrderBy(b => b.CityName),
+            "status" or "isactive" => descending ? query.OrderByDescending(b => b.IsActive) : query.OrderBy(b => b.IsActive),
+            "createdat" => descending ? query.OrderByDescending(b => b.CreatedAt) : query.OrderBy(b => b.CreatedAt),
+            _ => descending ? query.OrderByDescending(b => b.Name) : query.OrderBy(b => b.Name),
+        };
+
+        var data = await orderedQuery
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return new PagedResultDto<BranchListItemDto>
+        {
+            Data = data,
+            TotalRecords = totalRecords,
+            TotalPages = totalPages,
+            CurrentPage = page
+        };
     }
 
     public async Task<BranchDetailDto?> GetDetailByIdAsync(int id, int businessId)

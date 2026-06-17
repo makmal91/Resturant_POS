@@ -74,6 +74,9 @@ const ReportsPage: React.FC = () => {
   const [salesProducts, setSalesProducts] = useState<SalesByProductRow[]>([]);
   const [salesPage, setSalesPage] = useState(1);
   const [salesPageSize, setSalesPageSize] = useState(10);
+  const [salesSearch, setSalesSearch] = useState('');
+  const [salesSortColumn, setSalesSortColumn] = useState('totalAmount');
+  const [salesSortDirection, setSalesSortDirection] = useState<'asc' | 'desc'>('desc');
   const [salesTotal, setSalesTotal] = useState(0);
   const [salesTotalPages, setSalesTotalPages] = useState(0);
 
@@ -82,6 +85,9 @@ const ReportsPage: React.FC = () => {
   const [stockMovement, setStockMovement] = useState<StockMovementResponse | null>(null);
   const [stockPage, setStockPage] = useState(1);
   const [stockPageSize, setStockPageSize] = useState(25);
+  const [stockSearch, setStockSearch] = useState('');
+  const [stockSortColumn, setStockSortColumn] = useState('productName');
+  const [stockSortDirection, setStockSortDirection] = useState<'asc' | 'desc'>('asc');
 
   const showNotification = useCallback((type: 'success' | 'error', message: string) => {
     setNotification({ type, message });
@@ -111,6 +117,9 @@ const ReportsPage: React.FC = () => {
           toDate,
           page: salesPage,
           pageSize: salesPageSize,
+          search: salesSearch.trim() || undefined,
+          sortBy: salesSortColumn,
+          sortDirection: salesSortDirection,
         }),
       ]);
       setSalesSummary(summaryRes.data);
@@ -124,7 +133,7 @@ const ReportsPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [branchId, fromDate, toDate, salesPage, salesPageSize, showNotification]);
+  }, [branchId, fromDate, toDate, salesPage, salesPageSize, salesSearch, salesSortColumn, salesSortDirection, showNotification]);
 
   const loadStockReport = useCallback(async () => {
     if (branchId <= 0) return;
@@ -136,6 +145,9 @@ const ReportsPage: React.FC = () => {
         warehouseId: wh,
         page: stockPage,
         pageSize: stockPageSize,
+        search: stockSearch.trim() || undefined,
+        sortBy: stockSortColumn,
+        sortDirection: stockSortDirection,
       });
       setStockSummary(summaryRes.data);
     } catch (err) {
@@ -156,7 +168,7 @@ const ReportsPage: React.FC = () => {
     }
 
     setLoading(false);
-  }, [branchId, fromDate, toDate, warehouseId, stockPage, stockPageSize, showNotification]);
+  }, [branchId, fromDate, toDate, warehouseId, stockPage, stockPageSize, stockSearch, stockSortColumn, stockSortDirection, showNotification]);
 
   useEffect(() => {
     if (tab === 'sales') void loadSalesReport();
@@ -166,26 +178,27 @@ const ReportsPage: React.FC = () => {
   useEffect(() => {
     setSalesPage(1);
     setStockPage(1);
-  }, [branchId, fromDate, toDate, warehouseId, tab]);
+  }, [branchId, fromDate, toDate, warehouseId, tab, salesSearch, stockSearch, salesSortColumn, salesSortDirection, stockSortColumn, stockSortDirection]);
 
   const handlePrint = () => window.print();
 
   const salesProductColumns: Column<SalesByProductRow>[] = useMemo(() => [
-    { key: 'productCode', header: 'Code', sortable: false, render: (v) => <span className="font-mono text-xs">{safeString(v) || '—'}</span> },
-    { key: 'productName', header: 'Product', sortable: false },
-    { key: 'totalQuantity', header: 'Qty Sold', sortable: false, render: (v) => fmtQty(Number(v ?? 0)) },
-    { key: 'invoiceCount', header: 'Invoices', sortable: false },
-    { key: 'totalAmount', header: 'Revenue', sortable: false, render: (v) => <span className="font-semibold text-emerald-700">{fmt(Number(v ?? 0))}</span> },
+    { key: 'productCode', header: 'Code', sortable: true, render: (v) => <span className="font-mono text-xs">{safeString(v) || '—'}</span> },
+    { key: 'productName', header: 'Product', sortable: true },
+    { key: 'totalQuantity', header: 'Qty Sold', sortable: true, render: (v) => fmtQty(Number(v ?? 0)) },
+    { key: 'invoiceCount', header: 'Invoices', sortable: true },
+    { key: 'totalAmount', header: 'Revenue', sortable: true, render: (v) => <span className="font-semibold text-emerald-700">{fmt(Number(v ?? 0))}</span> },
   ], []);
 
   const stockColumns: Column<StockSummaryItem>[] = useMemo(() => [
-    { key: 'productCode', header: 'Code', render: (v) => <span className="font-mono text-xs">{safeString(v) || '—'}</span> },
-    { key: 'productName', header: 'Product' },
-    { key: 'variantName', header: 'Variant', render: (v) => safeString(v) || '—' },
-    { key: 'warehouseName', header: 'Warehouse' },
+    { key: 'productCode', header: 'Code', sortable: true, render: (v) => <span className="font-mono text-xs">{safeString(v) || '—'}</span> },
+    { key: 'productName', header: 'Product', sortable: true },
+    { key: 'variantName', header: 'Variant', sortable: true, render: (v) => safeString(v) || '—' },
+    { key: 'warehouseName', header: 'Warehouse', sortable: true },
     {
       key: 'quantity',
       header: 'Qty',
+      sortable: true,
       render: (v) => {
         const q = Number(v ?? 0);
         return (
@@ -195,8 +208,8 @@ const ReportsPage: React.FC = () => {
         );
       },
     },
-    { key: 'costPrice', header: 'Cost', render: (v) => fmt(Number(v ?? 0)) },
-    { key: 'stockValue', header: 'Value', render: (v) => <span className="font-semibold">{fmt(Number(v ?? 0))}</span> },
+    { key: 'costPrice', header: 'Cost', sortable: true, render: (v) => fmt(Number(v ?? 0)) },
+    { key: 'stockValue', header: 'Value', sortable: true, render: (v) => <span className="font-semibold">{fmt(Number(v ?? 0))}</span> },
   ], []);
 
   if (!hasBranch) {
@@ -385,7 +398,8 @@ const ReportsPage: React.FC = () => {
               data={salesProducts}
               columns={salesProductColumns}
               loading={loading}
-              searchable={false}
+              searchable
+              searchPlaceholder="Search products..."
               pagination
               pageSize={salesPageSize}
               pageSizeOptions={[10, 25, 50]}
@@ -396,6 +410,11 @@ const ReportsPage: React.FC = () => {
               totalPages={salesTotalPages}
               currentPage={salesPage}
               onPageChange={setSalesPage}
+              searchTerm={salesSearch}
+              onSearchChange={(value) => { setSalesSearch(value); setSalesPage(1); }}
+              sortColumn={salesSortColumn}
+              sortDirection={salesSortDirection}
+              onSortChange={(column, direction) => { setSalesSortColumn(column); setSalesSortDirection(direction); setSalesPage(1); }}
             />
           </div>
         </div>
@@ -467,7 +486,8 @@ const ReportsPage: React.FC = () => {
               data={stockSummary?.items ?? []}
               columns={stockColumns}
               loading={loading}
-              searchable={false}
+              searchable
+              searchPlaceholder="Search stock items..."
               pagination
               pageSize={stockPageSize}
               pageSizeOptions={[25, 50, 100]}
@@ -478,6 +498,11 @@ const ReportsPage: React.FC = () => {
               totalPages={stockSummary?.totalPages ?? 0}
               currentPage={stockPage}
               onPageChange={setStockPage}
+              searchTerm={stockSearch}
+              onSearchChange={(value) => { setStockSearch(value); setStockPage(1); }}
+              sortColumn={stockSortColumn}
+              sortDirection={stockSortDirection}
+              onSortChange={(column, direction) => { setStockSortColumn(column); setStockSortDirection(direction); setStockPage(1); }}
             />
           </div>
         </div>
