@@ -1,8 +1,47 @@
 import axios, { AxiosError, AxiosHeaders, InternalAxiosRequestConfig } from 'axios';
 import { authStorage } from '../utils/storage';
+import { useRouteContextStore } from '../stores/useRouteContextStore';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim() || '/api';
 const API_TIMEOUT_MS = Number(import.meta.env.VITE_API_TIMEOUT_MS ?? 15000);
+
+const methodToAction = (method?: string): string | null => {
+  switch (method?.toUpperCase()) {
+    case 'GET':
+      return 'view';
+    case 'POST':
+      return 'create';
+    case 'PUT':
+    case 'PATCH':
+      return 'edit';
+    case 'DELETE':
+      return 'delete';
+    default:
+      return null;
+  }
+};
+
+const setHeaderIfMissing = (
+  headers: InternalAxiosRequestConfig['headers'],
+  name: string,
+  value: string | null | undefined,
+) => {
+  if (!value) {
+    return;
+  }
+
+  if (headers instanceof AxiosHeaders) {
+    if (!headers.has(name)) {
+      headers.set(name, value);
+    }
+    return;
+  }
+
+  const record = headers as Record<string, string>;
+  if (!record[name]) {
+    record[name] = value;
+  }
+};
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -81,6 +120,20 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   if (user?.roleName) {
     config.headers['X-User-Role'] = user.roleName;
   }
+
+  const routeContext = useRouteContextStore.getState();
+  setHeaderIfMissing(config.headers, 'x-module', routeContext.module);
+  setHeaderIfMissing(config.headers, 'x-form', routeContext.form);
+
+  const explicitAction =
+    (config.headers instanceof AxiosHeaders
+      ? config.headers.get('x-action')
+      : (config.headers as Record<string, unknown>)?.['x-action']) ?? null;
+  const action =
+    typeof explicitAction === 'string' && explicitAction.trim().length > 0
+      ? explicitAction
+      : methodToAction(config.method);
+  setHeaderIfMissing(config.headers, 'x-action', action);
 
   const method = config.method?.toUpperCase() ?? 'GET';
   const requestUrl = `${config.baseURL ?? ''}${config.url ?? ''}`;

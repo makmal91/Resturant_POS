@@ -6,7 +6,7 @@ public static class MiddlewareExtensions
 {
     public static IApplicationBuilder UseGlobalExceptionMiddleware(this IApplicationBuilder app)
     {
-        return app.UseMiddleware<GlobalExceptionMiddleware>();
+        return app.UseMiddleware<ExceptionMiddleware>();
     }
 
     public static IApplicationBuilder UseBranchAccessMiddleware(this IApplicationBuilder app)

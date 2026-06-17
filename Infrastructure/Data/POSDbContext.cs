@@ -71,6 +71,9 @@ public class POSDbContext : DbContext
 
     // Code generation
     public DbSet<CodeSequence> CodeSequences { get; set; } = null!;
+
+    // Exception logging
+    public DbSet<ExceptionLog> ExceptionLogs { get; set; } = null!;
     #endregion
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -123,6 +126,7 @@ public class POSDbContext : DbContext
         modelBuilder.ApplyConfiguration(new ExpenseCategoryConfiguration());
         modelBuilder.ApplyConfiguration(new ExpenseConfiguration());
         modelBuilder.ApplyConfiguration(new CodeSequenceConfiguration());
+        modelBuilder.ApplyConfiguration(new ExceptionLogConfiguration());
 
         // Configure BaseEntity default values
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())

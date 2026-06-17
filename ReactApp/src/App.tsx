@@ -4,6 +4,7 @@ import Layout from './components/Layout';
 import FormModal from './components/FormModal';
 import ConfirmDialog from './components/ConfirmDialog';
 import ProtectedRoute from './components/ProtectedRoute';
+import RouteContextSync from './components/RouteContextSync';
 import { FormModalProvider } from './contexts/FormModalContext';
 import { ConfirmDialogProvider } from './contexts/ConfirmDialogContext';
 import { AuthProvider } from './contexts/AuthContext';
@@ -19,6 +20,7 @@ function App() {
   return (
     <AuthProvider>
       <Router>
+        <RouteContextSync />
         <FormModalProvider>
           <ConfirmDialogProvider>
             <Routes>

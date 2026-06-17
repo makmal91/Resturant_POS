@@ -84,6 +84,8 @@ public static class ServiceRegistration
         services.AddScoped<ICodeGeneratorService, CodeGeneratorService>();
         services.AddScoped<ICodeSequenceService, CodeSequenceService>();
 
+        services.AddScoped<IExceptionLogService, ExceptionLogService>();
+
         // Add other infrastructure services here
 
         return services;

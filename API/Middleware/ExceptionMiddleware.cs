@@ -1,21 +1,23 @@
 using System.Net;
+using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using POSSystem.Application.Common.Interfaces;
 
 namespace POSSystem.API.Middleware;
 
-public class GlobalExceptionMiddleware
+public class ExceptionMiddleware
 {
     private readonly RequestDelegate _next;
-    private readonly ILogger<GlobalExceptionMiddleware> _logger;
+    private readonly ILogger<ExceptionMiddleware> _logger;
 
-    public GlobalExceptionMiddleware(RequestDelegate next, ILogger<GlobalExceptionMiddleware> logger)
+    public ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionMiddleware> logger)
     {
         _next = next;
         _logger = logger;
     }
 
-    public async Task InvokeAsync(HttpContext context)
+    public async Task InvokeAsync(HttpContext context, IExceptionLogService exceptionLogService)
     {
         try
         {
@@ -24,8 +26,38 @@ public class GlobalExceptionMiddleware
         catch (Exception ex)
         {
             _logger.LogError(ex, "An unhandled exception occurred.");
+            await exceptionLogService.LogAsync(
+                ex,
+                GetUserId(context),
+                GetBranchId(context),
+                context.Request.Headers["x-module"].FirstOrDefault(),
+                context.Request.Headers["x-form"].FirstOrDefault(),
+                context.Request.Headers["x-action"].FirstOrDefault());
             await HandleExceptionAsync(context, ex);
         }
+    }
+
+    private static long? GetUserId(HttpContext context)
+    {
+        var value =
+            context.User?.FindFirstValue(ClaimTypes.NameIdentifier) ??
+            context.User?.FindFirstValue("userId") ??
+            context.User?.FindFirstValue("UserId");
+
+        return long.TryParse(value, out var parsed) && parsed > 0 ? parsed : null;
+    }
+
+    private static long? GetBranchId(HttpContext context)
+    {
+        var headerValue = context.Request.Headers["X-Branch-Id"].FirstOrDefault();
+        if (long.TryParse(headerValue, out var headerBranchId) && headerBranchId > 0)
+            return headerBranchId;
+
+        var claimValue =
+            context.User?.FindFirstValue("branchId") ??
+            context.User?.FindFirstValue("BranchId");
+
+        return long.TryParse(claimValue, out var parsed) && parsed > 0 ? parsed : null;
     }
 
     private static async Task HandleExceptionAsync(HttpContext context, Exception exception)

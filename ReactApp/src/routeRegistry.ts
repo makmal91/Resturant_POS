@@ -3,6 +3,7 @@ export interface RouteDefinition {
   label: string;
   component: React.ComponentType;
   module?: string;
+  form?: string;
 }
 
 import DashboardPage from './modules/dashboard/DashboardPage';
@@ -71,3 +72,45 @@ export const routeRegistry: RouteDefinition[] = [
 const routeMap = new Map(routeRegistry.map((route) => [route.path, route]));
 
 export const getRouteDefinition = (path: string): RouteDefinition | undefined => routeMap.get(path);
+
+const extraRouteContext: Record<string, { module: string; form: string }> = {
+  '/pos': { module: 'POS Billing', form: 'POSBilling' },
+  '/sales-invoices/edit': { module: 'Sales', form: 'EditInvoice' },
+  '/cashflow/opening': { module: 'Cash Flow', form: 'OpeningCash' },
+  '/cashflow/closing': { module: 'Cash Flow', form: 'ClosingCash' },
+};
+
+export const resolveRouteContext = (
+  pathname: string,
+): { module: string | null; form: string | null } => {
+  const exact = getRouteDefinition(pathname);
+  if (exact) {
+    return {
+      module: exact.module ?? null,
+      form: exact.form ?? exact.label.replace(/\s+/g, '') ?? null,
+    };
+  }
+
+  for (const [prefix, context] of Object.entries(extraRouteContext)) {
+    if (pathname === prefix || pathname.startsWith(`${prefix}/`)) {
+      return { module: context.module, form: context.form };
+    }
+  }
+
+  const sortedRoutes = [...routeRegistry]
+    .filter((route) => route.path !== '/')
+    .sort((a, b) => b.path.length - a.path.length);
+
+  const prefixMatch = sortedRoutes.find(
+    (route) => pathname.startsWith(`${route.path}/`) || pathname === route.path,
+  );
+
+  if (prefixMatch) {
+    return {
+      module: prefixMatch.module ?? null,
+      form: prefixMatch.form ?? prefixMatch.label.replace(/\s+/g, '') ?? null,
+    };
+  }
+
+  return { module: null, form: null };
+};
