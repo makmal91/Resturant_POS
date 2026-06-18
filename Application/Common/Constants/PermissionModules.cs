@@ -36,6 +36,9 @@ public static class PermissionModules
     public const string SalesReports = "Sales Reports";
     public const string PurchaseReports = "Purchase Reports";
     public const string StockReports = "Stock Reports";
+    public const string CustomerOutstandingReport = "Customer Outstanding Report";
+    public const string SupplierPayableReport = "Supplier Payable Report";
+    public const string ProfitLossReport = "Profit & Loss Report";
     public const string SystemSettings = "System Settings";
     public const string CodeSequences = "Code Sequences";
 
@@ -75,6 +78,9 @@ public static class PermissionModules
         SalesReports,
         PurchaseReports,
         StockReports,
+        CustomerOutstandingReport,
+        SupplierPayableReport,
+        ProfitLossReport,
         SystemSettings,
         CodeSequences,
     ];

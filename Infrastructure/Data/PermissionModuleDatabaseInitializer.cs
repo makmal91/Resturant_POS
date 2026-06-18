@@ -204,9 +204,12 @@ public static class PermissionModuleSeeder
         new("Supplier Ledger", "PartyLedger.SupplierLedger", "Finance", 9, "/ledger/suppliers", "SL"),
 
         // Reports
-        new("Sales Reports", PermissionModules.SalesReports, "Reports", 1, "/reports", "Rp"),
-        new("Purchase Reports", PermissionModules.PurchaseReports, "Reports", 2, "/reports", "Rp"),
-        new("Stock Reports", PermissionModules.StockReports, "Reports", 3, "/reports", "Rp"),
+        new("Sales Report", PermissionModules.SalesReports, "Reports", 1, "/reports/sales", "SR"),
+        new("Purchase Report", PermissionModules.PurchaseReports, "Reports", 2, "/reports/purchases", "PR"),
+        new("Customer Outstanding", PermissionModules.CustomerOutstandingReport, "Reports", 3, "/reports/customer-outstanding", "CO"),
+        new("Supplier Payable", PermissionModules.SupplierPayableReport, "Reports", 4, "/reports/supplier-payable", "SP"),
+        new("Profit & Loss", PermissionModules.ProfitLossReport, "Reports", 5, "/reports/profit-loss", "PL"),
+        new("Stock Report", PermissionModules.StockReports, "Reports", 6, "/reports/stock", "StR"),
 
         // Settings
         new("System Settings", PermissionModules.SystemSettings, "Settings", 1, "/settings", "settings"),
@@ -237,6 +240,7 @@ public static class PermissionModuleSeeder
         }
 
         await DeactivateLegacyModulesAsync(context, logger);
+        await DeactivateOldReportSubMenuItemsAsync(context, logger);
         await DeactivateEmptyMasterDataGroupAsync(context, logger);
         await BackfillRolePermissionModuleIdsAsync(context, logger);
         await ModuleFormSeeder.SeedDefaultFormsAsync(context, logger);
@@ -248,7 +252,7 @@ public static class PermissionModuleSeeder
         {
             "Catalog", "Operations", "Accounts", "Administration",
             "Master Data", "Menu", "Inventory", "Purchase", "POS Billing",
-            "Reports", "Orders", "Taxes", "Discounts",
+            "Orders", "Taxes", "Discounts",
             "Record Transaction"
         };
 
@@ -271,6 +275,35 @@ public static class PermissionModuleSeeder
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to deactivate legacy modules.");
+        }
+    }
+
+    /// <summary>
+    /// Deactivate legacy standalone Reports menu entry (replaced by per-report modules).
+    /// </summary>
+    private static async Task DeactivateOldReportSubMenuItemsAsync(POSDbContext context, ILogger logger)
+    {
+        try
+        {
+            var modules = await context.PermissionModules
+                .IgnoreQueryFilters()
+                .Where(m => m.ModuleKey == PermissionModules.Reports
+                         && m.ParentModuleId == null
+                         && m.IsActive)
+                .ToListAsync();
+
+            foreach (var module in modules)
+            {
+                module.IsActive = false;
+                module.UpdatedDate = DateTime.UtcNow;
+            }
+
+            if (modules.Count > 0)
+                await context.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to deactivate legacy standalone Reports module.");
         }
     }
 

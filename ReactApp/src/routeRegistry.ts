@@ -38,7 +38,12 @@ import ColorPage from './modules/master/ColorPage';
 import ExpenseCategoryPage from './modules/master/ExpenseCategoryPage';
 import CountryPage from './modules/master/CountryPage';
 import CityPage from './modules/master/CityPage';
-import ReportsPage from './modules/reports/ReportsPage';
+import CustomerOutstandingReportPage from './modules/reports/CustomerOutstandingReportPage';
+import ProfitLossReportPage from './modules/reports/ProfitLossReportPage';
+import PurchaseReportPage from './modules/reports/PurchaseReportPage';
+import SalesReportPage from './modules/reports/SalesReportPage';
+import StockReportPage from './modules/reports/StockReportPage';
+import SupplierPayableReportPage from './modules/reports/SupplierPayableReportPage';
 import SettingsPage from './modules/settings/SettingsPage';
 import CodeSequencePage from './modules/settings/CodeSequencePage';
 import LicensePage from './modules/settings/LicensePage';
@@ -69,7 +74,12 @@ export const routeRegistry: RouteDefinition[] = [
   { path: '/warehouses', label: 'Warehouses', component: WarehousePage, module: 'Warehouses' },
   { path: '/purchase', label: 'Purchase', component: PurchasePage, module: 'Purchase' },
   { path: '/stock', label: 'Stock', component: StockLedgerPage, module: 'Stock' },
-  { path: '/reports', label: 'Reports', component: ReportsPage, module: 'Reports' },
+  { path: '/reports/sales', label: 'Sales Report', component: SalesReportPage, module: 'Sales Reports' },
+  { path: '/reports/purchases', label: 'Purchase Report', component: PurchaseReportPage, module: 'Purchase Reports' },
+  { path: '/reports/customer-outstanding', label: 'Customer Outstanding', component: CustomerOutstandingReportPage, module: 'Customer Outstanding Report' },
+  { path: '/reports/supplier-payable', label: 'Supplier Payable', component: SupplierPayableReportPage, module: 'Supplier Payable Report' },
+  { path: '/reports/profit-loss', label: 'Profit & Loss', component: ProfitLossReportPage, module: 'Profit & Loss Report' },
+  { path: '/reports/stock', label: 'Stock Report', component: StockReportPage, module: 'Stock Reports' },
   { path: '/sales-invoices', label: 'Invoice History', component: SaleInvoicesPage, module: 'Sales' },
   { path: '/expenses',          label: 'Expenses',        component: ExpensePage,           module: 'Expenses' },
   { path: '/expenses/categories', label: 'Expense Categories', component: ExpenseCategoryPage, module: 'Expense Categories' },

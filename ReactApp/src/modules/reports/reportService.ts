@@ -1,6 +1,98 @@
 import apiClient from '../../services/api';
 
-// ─── Sales Report Types ───────────────────────────────────────────────────────
+// ─── Shared paged response ────────────────────────────────────────────────────
+
+export interface ReportPagedResponse<T> {
+  data: T[];
+  totalRecords: number;
+  pageNumber: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+export interface ReportQueryParams {
+  fromDate?: string;
+  toDate?: string;
+  pageNumber?: number;
+  pageSize?: number;
+  search?: string;
+  sortColumn?: string;
+  sortDirection?: 'asc' | 'desc';
+  customerId?: number;
+  supplierId?: number;
+}
+
+// ─── Report row types ─────────────────────────────────────────────────────────
+
+export interface SalesReportRow {
+  id: number;
+  invoiceNo: string;
+  saleDate: string;
+  customerId?: number | null;
+  customerName: string;
+  subTotal: number;
+  discountAmount: number;
+  taxAmount: number;
+  grandTotal: number;
+  paidAmount: number;
+  balanceDue: number;
+  paymentMethod: string;
+  isCreditSale: boolean;
+  cashAmount: number;
+  cardAmount: number;
+  status: string;
+  cashierName?: string | null;
+}
+
+export interface PurchaseReportRow {
+  id: number;
+  invoiceNo: string;
+  purchaseDate: string;
+  supplierId: number;
+  supplierName: string;
+  totalAmount: number;
+  paidAmount: number;
+  balanceDue: number;
+  status: string;
+  isCreditPurchase: boolean;
+}
+
+export interface CustomerOutstandingRow {
+  customerId: number;
+  customerCode: string;
+  customerName: string;
+  phone?: string | null;
+  openingBalance: number;
+  outstandingInvoices: number;
+  invoiceOutstanding: number;
+  outstandingAmount: number;
+  lastSaleDate?: string | null;
+}
+
+export interface SupplierPayableRow {
+  supplierId: number;
+  supplierCode: string;
+  supplierName: string;
+  phone: string;
+  outstandingInvoices: number;
+  invoicePayable: number;
+  payableAmount: number;
+  lastPurchaseDate?: string | null;
+}
+
+export interface ProfitLossRow {
+  date: string;
+  revenue: number;
+  discounts: number;
+  tax: number;
+  costOfGoodsSold: number;
+  grossProfit: number;
+  expenses: number;
+  netProfit: number;
+  salesCount: number;
+}
+
+// ─── Legacy report types (stock / summary) ────────────────────────────────────
 
 export interface SalesDailyTrend {
   date: string;
@@ -35,18 +127,6 @@ export interface SalesByProductRow {
   invoiceCount: number;
 }
 
-export interface SalesByProductResponse {
-  products: SalesByProductRow[];
-  totalRecords: number;
-  totalPages: number;
-  currentPage: number;
-  pageSize: number;
-  fromDate: string;
-  toDate: string;
-}
-
-// ─── Stock Report Types ───────────────────────────────────────────────────────
-
 export interface StockSummaryItem {
   productId: number;
   productName: string;
@@ -66,35 +146,53 @@ export interface StockSummaryResponse {
   totalClosingBalance: number;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-const bh = (branchId: number) => ({ headers: { 'X-Branch-Id': String(branchId) } });
-
 export interface ReportDateRange {
   fromDate?: string;
   toDate?: string;
 }
 
+const bh = (branchId: number) => ({ headers: { 'X-Branch-Id': String(branchId) } });
+
+const reportParams = (branchId: number, params: ReportQueryParams = {}) => ({
+  branchId,
+  ...params,
+});
+
 // ─── Service ──────────────────────────────────────────────────────────────────
 
 export const reportService = {
-  getSalesSummary: (branchId: number, params: ReportDateRange = {}) =>
-    apiClient.get<SalesSummaryDto>('/reports/sales-summary', {
-      params: { branchId, ...params },
+  getSalesReport: (branchId: number, params: ReportQueryParams = {}) =>
+    apiClient.get<ReportPagedResponse<SalesReportRow>>('/reports/sales', {
+      params: reportParams(branchId, params),
       ...bh(branchId),
     }),
 
-  getSalesByProduct: (
-    branchId: number,
-    params: ReportDateRange & {
-      page?: number;
-      pageSize?: number;
-      search?: string;
-      sortBy?: string;
-      sortDirection?: 'asc' | 'desc';
-    } = {},
-  ) =>
-    apiClient.get<SalesByProductResponse>('/reports/sales-by-product', {
+  getPurchaseReport: (branchId: number, params: ReportQueryParams = {}) =>
+    apiClient.get<ReportPagedResponse<PurchaseReportRow>>('/reports/purchases', {
+      params: reportParams(branchId, params),
+      ...bh(branchId),
+    }),
+
+  getCustomerOutstandingReport: (branchId: number, params: ReportQueryParams = {}) =>
+    apiClient.get<ReportPagedResponse<CustomerOutstandingRow>>('/reports/customer-outstanding', {
+      params: reportParams(branchId, params),
+      ...bh(branchId),
+    }),
+
+  getSupplierPayableReport: (branchId: number, params: ReportQueryParams = {}) =>
+    apiClient.get<ReportPagedResponse<SupplierPayableRow>>('/reports/supplier-payable', {
+      params: reportParams(branchId, params),
+      ...bh(branchId),
+    }),
+
+  getProfitLossReport: (branchId: number, params: ReportQueryParams = {}) =>
+    apiClient.get<ReportPagedResponse<ProfitLossRow>>('/reports/profit-loss', {
+      params: reportParams(branchId, params),
+      ...bh(branchId),
+    }),
+
+  getSalesSummary: (branchId: number, params: ReportDateRange = {}) =>
+    apiClient.get<SalesSummaryDto>('/reports/sales-summary', {
       params: { branchId, ...params },
       ...bh(branchId),
     }),

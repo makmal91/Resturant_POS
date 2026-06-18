@@ -4,6 +4,8 @@ using Microsoft.EntityFrameworkCore;
 using POSSystem.API.Authorization;
 using POSSystem.API.Extensions;
 using POSSystem.Application.Common.Constants;
+using POSSystem.Application.Reports.Interfaces;
+using POSSystem.Application.Reports.DTOs;
 using POSSystem.Domain;
 using POSSystem.Infrastructure.Data;
 
@@ -15,8 +17,76 @@ namespace POSSystem.API.Controllers;
 public class ReportsController : ControllerBase
 {
     private readonly POSDbContext _db;
+    private readonly IReportService _reportService;
 
-    public ReportsController(POSDbContext db) => _db = db;
+    public ReportsController(POSDbContext db, IReportService reportService)
+    {
+        _db = db;
+        _reportService = reportService;
+    }
+
+    // ─── Paginated Reports (server-side) ───────────────────────────────────────
+
+    [HttpGet("sales")]
+    [RequirePermission(PermissionModules.SalesReports, PermissionActions.View)]
+    public async Task<IActionResult> GetSalesReport([FromQuery] ReportQueryParams q)
+        => Ok(await _reportService.GetSalesReportAsync(BuildFilter(q)));
+
+    [HttpGet("purchases")]
+    [RequirePermission(PermissionModules.PurchaseReports, PermissionActions.View)]
+    public async Task<IActionResult> GetPurchaseReport([FromQuery] ReportQueryParams q)
+        => Ok(await _reportService.GetPurchaseReportAsync(BuildFilter(q)));
+
+    [HttpGet("customer-outstanding")]
+    [RequirePermission(PermissionModules.CustomerOutstandingReport, PermissionActions.View)]
+    public async Task<IActionResult> GetCustomerOutstandingReport([FromQuery] ReportQueryParams q)
+        => Ok(await _reportService.GetCustomerOutstandingReportAsync(BuildFilter(q)));
+
+    [HttpGet("supplier-payable")]
+    [RequirePermission(PermissionModules.SupplierPayableReport, PermissionActions.View)]
+    public async Task<IActionResult> GetSupplierPayableReport([FromQuery] ReportQueryParams q)
+        => Ok(await _reportService.GetSupplierPayableReportAsync(BuildFilter(q)));
+
+    [HttpGet("profit-loss")]
+    [RequirePermission(PermissionModules.ProfitLossReport, PermissionActions.View)]
+    public async Task<IActionResult> GetProfitLossReport([FromQuery] ReportQueryParams q)
+        => Ok(await _reportService.GetProfitLossReportAsync(BuildFilter(q)));
+
+    private ReportFilterDto BuildFilter(ReportQueryParams q)
+    {
+        var pageNumber = q.PageNumber ?? q.Page ?? 1;
+        return new ReportFilterDto
+        {
+            BusinessId = this.ResolveBusinessId(q.BusinessId),
+            BranchId = this.ResolveBranchId(q.BranchId),
+            PageNumber = pageNumber,
+            PageSize = q.PageSize ?? 25,
+            Search = q.Search,
+            SortColumn = q.SortColumn ?? q.SortBy,
+            SortDirection = q.SortDirection,
+            FromDate = q.FromDate,
+            ToDate = q.ToDate,
+            CustomerId = q.CustomerId,
+            SupplierId = q.SupplierId
+        };
+    }
+
+    public class ReportQueryParams
+    {
+        public int? BranchId { get; set; }
+        public int? BusinessId { get; set; }
+        public int? PageNumber { get; set; }
+        public int? Page { get; set; }
+        public int? PageSize { get; set; }
+        public string? Search { get; set; }
+        public string? SortColumn { get; set; }
+        public string? SortBy { get; set; }
+        public string? SortDirection { get; set; }
+        public DateTime? FromDate { get; set; }
+        public DateTime? ToDate { get; set; }
+        public int? CustomerId { get; set; }
+        public int? SupplierId { get; set; }
+    }
 
     // ─── Sales Report (SaleInvoices) ───────────────────────────────────────────
 
@@ -181,7 +251,7 @@ public class ReportsController : ControllerBase
 
     /// <summary>Aggregated closing stock balance per product (Opening + In − Out from ledger).</summary>
     [HttpGet("stock-summary")]
-    [RequirePermission(PermissionModules.Reports, PermissionActions.View)]
+    [RequirePermission(PermissionModules.StockReports, PermissionActions.View)]
     public async Task<IActionResult> GetStockSummary(
         [FromQuery] int? branchId,
         [FromQuery] int? businessId,
@@ -294,9 +364,9 @@ public class ReportsController : ControllerBase
 
     // ─── Legacy endpoints (Orders / InventoryItems) ────────────────────────────
 
-    [HttpGet("sales")]
+    [HttpGet("orders-sales")]
     [RequirePermission(PermissionModules.Reports, PermissionActions.View)]
-    public async Task<IActionResult> GetSalesReport(
+    public async Task<IActionResult> GetOrdersSalesReport(
         [FromQuery] int branchId,
         [FromQuery] int? businessId = null,
         [FromQuery] DateTime? from = null,
