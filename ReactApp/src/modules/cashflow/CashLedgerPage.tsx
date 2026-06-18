@@ -2,7 +2,9 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DataTable, { type Column } from '../../components/DataTable';
 import { useFormModal } from '../../contexts/FormModalContext';
+import { useGridExport } from '../../hooks/useGridExport';
 import { getApiErrorMessage } from '../../services/api';
+import { cashLedgerExportColumns } from '../../utils/gridExportColumns';
 import { useBranchStore } from '../../stores/useBranchStore';
 import {
   cashFlowService,
@@ -205,6 +207,31 @@ export default function CashLedgerPage() {
     }
   }, [branchId, fromDate, toDate, typeFilter, methodFilter, currentPage, pageSize]);
 
+  const fetchExportPage = useCallback(async (pageNumber: number, exportPageSize: number) => {
+    const res = await cashFlowService.getLedger(branchId, {
+      fromDate,
+      toDate,
+      transactionType: typeFilter || null,
+      paymentMethod: methodFilter || null,
+      page: pageNumber,
+      pageSize: exportPageSize,
+    });
+    return { data: res.data.transactions, totalRecords: res.data.totalRecords };
+  }, [branchId, fromDate, toDate, typeFilter, methodFilter]);
+
+  const exportFilename = useMemo(() => {
+    const typePart = typeFilter ? `-${typeFilter.toLowerCase()}` : '';
+    const methodPart = methodFilter ? `-${methodFilter.toLowerCase()}` : '';
+    return `cash-ledger-${fromDate}-${toDate}${typePart}${methodPart}`;
+  }, [fromDate, toDate, typeFilter, methodFilter]);
+
+  const { exporting, onExport } = useGridExport(
+    exportFilename,
+    cashLedgerExportColumns,
+    fetchExportPage,
+    branchId > 0,
+  );
+
   useEffect(() => {
     void fetchLedger();
   }, [fetchLedger]);
@@ -231,6 +258,14 @@ export default function CashLedgerPage() {
           <p className="text-sm text-gray-500 mt-0.5">All cash movements for the selected filters</p>
         </div>
         <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => void onExport()}
+            disabled={loading || exporting}
+            className="px-4 py-2 bg-emerald-50 border border-emerald-300 text-emerald-800 text-sm font-medium rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-60"
+          >
+            {exporting ? 'Exporting…' : 'Export CSV'}
+          </button>
           <button
             type="button"
             onClick={() => openForm('cashTransaction')}

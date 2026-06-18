@@ -25,6 +25,7 @@ export interface ReportQueryParams {
   subCategoryId?: number;
   brandId?: number;
   agingBucket?: string;
+  groupBy?: 'day' | 'month' | 'year';
 }
 
 // ─── Report row types ─────────────────────────────────────────────────────────
@@ -110,6 +111,21 @@ export interface ProfitLossReportSummary {
 
 export interface ProfitLossReportPagedResponse extends ReportPagedResponse<ProfitLossRow> {
   summary: ProfitLossReportSummary;
+}
+
+export interface ProfitLossExpenseLine {
+  categoryId: number;
+  categoryName: string;
+  amount: number;
+}
+
+export interface ProfitLossStatement {
+  branchId: number;
+  branchName: string;
+  fromDate: string;
+  toDate: string;
+  summary: ProfitLossReportSummary;
+  expenseLines: ProfitLossExpenseLine[];
 }
 
 export interface ReceivableAgingRow {
@@ -288,6 +304,12 @@ export const reportService = {
 
   getProfitLossReport: (branchId: number, params: ReportQueryParams = {}) =>
     apiClient.get<ProfitLossReportPagedResponse>('/reports/profit-loss', {
+      params: reportParams(branchId, params),
+      ...bh(branchId),
+    }),
+
+  getProfitLossStatement: (branchId: number, params: ReportQueryParams = {}) =>
+    apiClient.get<ProfitLossStatement>('/reports/profit-loss-statement', {
       params: reportParams(branchId, params),
       ...bh(branchId),
     }),

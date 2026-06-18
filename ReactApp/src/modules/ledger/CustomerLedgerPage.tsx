@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import DataTable, { type Column } from '../../components/DataTable';
 import { useFormModal } from '../../contexts/FormModalContext';
+import { useGridExport } from '../../hooks/useGridExport';
 import { getApiErrorMessage } from '../../services/api';
+import { partyLedgerExportColumns } from '../../utils/gridExportColumns';
 import { useBranchStore } from '../../stores/useBranchStore';
 import { useBusinessCurrency } from '../../hooks/useBusinessCurrency';
 import { customerService, type CustomerListItem } from '../customer/customerService';
@@ -27,6 +29,7 @@ export default function CustomerLedgerPage() {
   const branchId = selectedBranchId ?? 0;
 
   const [customers, setCustomers] = useState<CustomerListItem[]>([]);
+  const [customerSearch, setCustomerSearch] = useState('');
   const [customerId, setCustomerId] = useState(0);
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
@@ -41,12 +44,20 @@ export default function CustomerLedgerPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (branchId <= 0) return;
-    customerService
-      .getAll({ branchId, page: 1, pageSize: 500 })
-      .then((res) => setCustomers((res.data as { customers?: CustomerListItem[] }).customers ?? []))
-      .catch(() => setCustomers([]));
-  }, [branchId]);
+    if (branchId <= 0) {
+      setCustomers([]);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      void customerService
+        .getForLedgerFilter(branchId, customerSearch)
+        .then(setCustomers)
+        .catch(() => setCustomers([]));
+    }, customerSearch ? 300 : 0);
+
+    return () => window.clearTimeout(timer);
+  }, [branchId, customerSearch]);
 
   const fetchLedger = useCallback(async () => {
     if (branchId <= 0 || customerId <= 0) {
@@ -78,6 +89,31 @@ export default function CustomerLedgerPage() {
       setLoading(false);
     }
   }, [branchId, customerId, currentPage, pageSize, fromDate, toDate]);
+
+  const fetchExportPage = useCallback(async (pageNumber: number, exportPageSize: number) => {
+    const res = await partyLedgerService.getCustomerLedger(
+      branchId,
+      customerId,
+      pageNumber,
+      exportPageSize,
+      fromDate || undefined,
+      toDate || undefined,
+    );
+    return { data: res.data.entries, totalRecords: res.data.totalRecords };
+  }, [branchId, customerId, fromDate, toDate]);
+
+  const exportFilename = useMemo(() => {
+    const slug = partyName.trim().replace(/\s+/g, '-').toLowerCase() || 'customer';
+    const range = fromDate || toDate ? `-${fromDate || 'start'}-${toDate || 'end'}` : '';
+    return `customer-ledger-${slug}${range}`;
+  }, [partyName, fromDate, toDate]);
+
+  const { exporting, onExport } = useGridExport(
+    exportFilename,
+    partyLedgerExportColumns,
+    fetchExportPage,
+    branchId > 0 && customerId > 0,
+  );
 
   useEffect(() => {
     void fetchLedger();
@@ -149,16 +185,38 @@ export default function CustomerLedgerPage() {
           <h1 className="text-2xl font-bold text-gray-800">Customer Ledger</h1>
           <p className="text-sm text-gray-500 mt-0.5">Receivable transactions and running balance</p>
         </div>
-        <button
-          type="button"
-          onClick={() => openForm('receivePayment', customerId > 0 ? { customerId } : undefined)}
-          className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          + Receive Payment
-        </button>
+        <div className="flex flex-wrap gap-2">
+          {customerId > 0 && (
+            <button
+              type="button"
+              onClick={() => void onExport()}
+              disabled={loading || exporting}
+              className="px-4 py-2 bg-emerald-50 border border-emerald-300 text-emerald-800 text-sm font-medium rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-60"
+            >
+              {exporting ? 'Exporting…' : 'Export CSV'}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => openForm('receivePayment', customerId > 0 ? { customerId } : undefined)}
+            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            + Receive Payment
+          </button>
+        </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-100 p-4 grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="bg-white rounded-xl border border-gray-100 p-4 grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div>
+          <label className="text-xs text-gray-500 font-medium mb-1 block">Search Customer</label>
+          <input
+            type="text"
+            value={customerSearch}
+            onChange={(e) => setCustomerSearch(e.target.value)}
+            placeholder="Name, code, or phone"
+            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+          />
+        </div>
         <div>
           <label className="text-xs text-gray-500 font-medium mb-1 block">Customer</label>
           <select
@@ -168,7 +226,9 @@ export default function CustomerLedgerPage() {
           >
             <option value="">Select customer</option>
             {customers.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
+              <option key={c.id} value={c.id}>
+                {c.customerCode ? `${c.customerCode} — ` : ''}{c.name}{c.isWalkIn ? ' (Walk-in)' : ''}
+              </option>
             ))}
           </select>
         </div>

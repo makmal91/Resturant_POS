@@ -9,6 +9,7 @@ public interface IReportService
     Task<ReportPagedResultDto<CustomerOutstandingRowDto>> GetCustomerOutstandingReportAsync(ReportFilterDto filter);
     Task<ReportPagedResultDto<SupplierPayableRowDto>> GetSupplierPayableReportAsync(ReportFilterDto filter);
     Task<ProfitLossReportPagedResultDto> GetProfitLossReportAsync(ReportFilterDto filter);
+    Task<ProfitLossStatementDto> GetProfitLossStatementAsync(ReportFilterDto filter);
     Task<AgingReportPagedResultDto<ReceivableAgingRowDto>> GetReceivableAgingReportAsync(ReportFilterDto filter);
     Task<AgingReportPagedResultDto<PayableAgingRowDto>> GetPayableAgingReportAsync(ReportFilterDto filter);
     Task<ProductWiseSalesReportPagedResultDto> GetProductWiseSalesReportAsync(ReportFilterDto filter);

@@ -21,6 +21,9 @@ public class ReportFilterDto
     /// <summary>Aging bucket filter: 0-30, 31-60, 61-90, 90+</summary>
     public string? AgingBucket { get; set; }
 
+    /// <summary>Profit &amp; loss detail grouping: day, month, or year.</summary>
+    public string? GroupBy { get; set; }
+
     public (int PageNumber, int PageSize) Normalize(int maxPageSize = 100)
     {
         var pageNumber = Math.Max(1, PageNumber);
@@ -153,6 +156,23 @@ public class ProfitLossReportSummaryDto
 public class ProfitLossReportPagedResultDto : ReportPagedResultDto<ProfitLossRowDto>
 {
     public ProfitLossReportSummaryDto Summary { get; set; } = new();
+}
+
+public class ProfitLossExpenseLineDto
+{
+    public int CategoryId { get; set; }
+    public string CategoryName { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
+}
+
+public class ProfitLossStatementDto
+{
+    public int BranchId { get; set; }
+    public string BranchName { get; set; } = string.Empty;
+    public DateTime FromDate { get; set; }
+    public DateTime ToDate { get; set; }
+    public ProfitLossReportSummaryDto Summary { get; set; } = new();
+    public IReadOnlyList<ProfitLossExpenseLineDto> ExpenseLines { get; set; } = Array.Empty<ProfitLossExpenseLineDto>();
 }
 
 public class ReceivableAgingRowDto

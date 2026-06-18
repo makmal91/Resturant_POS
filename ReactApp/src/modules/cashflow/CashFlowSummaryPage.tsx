@@ -4,6 +4,8 @@ import MenuIcon, { type MenuIconKey } from '../../components/MenuIcon';
 import { getApiErrorMessage } from '../../services/api';
 import { useBranchWriteAccess } from '../../hooks/useBranchWriteAccess';
 import { hasBranchContext } from '../../types/permissions';
+import { exportGridData } from '../../utils/gridExport';
+import { cashDailyTrendExportColumns } from '../../utils/gridExportColumns';
 import { cashFlowService, type MonthlyCashSummaryDto } from './cashFlowService';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -107,6 +109,15 @@ export default function CashFlowSummaryPage() {
     else setMonth((m) => m + 1);
   };
 
+  const onExportDaily = () => {
+    if (!summary?.dailyTrend.length) return;
+    exportGridData(
+      `cash-summary-${year}-${String(month).padStart(2, '0')}`,
+      cashDailyTrendExportColumns,
+      summary.dailyTrend,
+    );
+  };
+
   if (!hasBranch) {
     return (
       <div className="p-4 md:p-6">
@@ -132,12 +143,23 @@ export default function CashFlowSummaryPage() {
             {summary?.branchName ? ` — ${summary.branchName}` : ''}
           </p>
         </div>
-        <button
-          onClick={() => navigate('/cashflow')}
-          className="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition-colors self-start"
-        >
-          ← Dashboard
-        </button>
+        <div className="flex flex-wrap gap-2 self-start">
+          {summary && summary.dailyTrend.length > 0 && (
+            <button
+              type="button"
+              onClick={onExportDaily}
+              className="inline-flex items-center rounded-md border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 shadow-sm hover:bg-emerald-100 transition-colors"
+            >
+              Export CSV
+            </button>
+          )}
+          <button
+            onClick={() => navigate('/cashflow')}
+            className="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition-colors"
+          >
+            ← Dashboard
+          </button>
+        </div>
       </div>
 
       {/* Month navigation */}

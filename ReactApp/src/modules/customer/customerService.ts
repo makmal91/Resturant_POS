@@ -53,6 +53,35 @@ export interface QuickCreatePayload {
 const bh = (branchId?: number) =>
   branchId ? { headers: { 'X-Branch-Id': String(branchId) } } : {};
 
+const normalizeCustomerListItem = (raw: Record<string, unknown>): CustomerListItem => ({
+  id: Number(raw.id ?? raw.Id ?? 0),
+  customerCode: String(raw.customerCode ?? raw.CustomerCode ?? ''),
+  name: String(raw.name ?? raw.Name ?? ''),
+  phone: (raw.phone ?? raw.Phone ?? null) as string | null,
+  email: (raw.email ?? raw.Email ?? null) as string | null,
+  cityName: (raw.cityName ?? raw.CityName ?? null) as string | null,
+  countryId: raw.countryId != null || raw.CountryId != null
+    ? Number(raw.countryId ?? raw.CountryId)
+    : null,
+  cityId: raw.cityId != null || raw.CityId != null
+    ? Number(raw.cityId ?? raw.CityId)
+    : null,
+  customerType: (raw.customerType ?? raw.CustomerType ?? 'Retail') as CustomerType,
+  status: Boolean(raw.status ?? raw.Status ?? true),
+  creditLimit: Number(raw.creditLimit ?? raw.CreditLimit ?? 0),
+  isWalkIn: Boolean(raw.isWalkIn ?? raw.IsWalkIn ?? false),
+  createdDate: String(raw.createdDate ?? raw.CreatedAt ?? raw.createdAt ?? ''),
+});
+
+const mergeWalkInCustomer = (
+  customers: CustomerListItem[],
+  walkIn: CustomerListItem | null
+): CustomerListItem[] => {
+  if (!walkIn?.id) return customers;
+  const others = customers.filter((c) => c.id !== walkIn.id);
+  return [walkIn, ...others];
+};
+
 export const customerService = {
   getAll: (params: {
     branchId: number;
@@ -73,6 +102,32 @@ export const customerService = {
       },
       ...bh(params.branchId),
     }),
+
+  getForLedgerFilter: async (branchId: number, search?: string) => {
+    const [listRes, walkInRes] = await Promise.all([
+      apiClient.get('/customers', {
+        params: {
+          branchId,
+          page: 1,
+          pageSize: 100,
+          ...(search?.trim() ? { search: search.trim() } : {}),
+        },
+        ...bh(branchId),
+      }),
+      apiClient.get('/customers/walk-in', {
+        params: { branchId },
+        ...bh(branchId),
+      }).catch(() => null),
+    ]);
+
+    const payload = listRes.data as { customers?: Record<string, unknown>[] };
+    const customers = (payload.customers ?? []).map(normalizeCustomerListItem);
+    const walkIn = walkInRes?.data
+      ? normalizeCustomerListItem(walkInRes.data as Record<string, unknown>)
+      : null;
+
+    return mergeWalkInCustomer(customers, walkIn);
+  },
 
   getById: (id: number, branchId: number) =>
     apiClient.get<CustomerDetail>(`/customers/${id}`, {

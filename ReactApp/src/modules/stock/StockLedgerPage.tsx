@@ -2,8 +2,11 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import DataTable, { type Column } from '../../components/DataTable';
 import Badge from '../../components/Badge';
 import { useBranchWriteAccess } from '../../hooks/useBranchWriteAccess';
+import { useGridExport } from '../../hooks/useGridExport';
 import { hasBranchContext } from '../../types/permissions';
 import { getApiErrorMessage } from '../../services/api';
+import { exportGridData } from '../../utils/gridExport';
+import { stockBalanceExportColumns, stockLedgerExportColumns } from '../../utils/gridExportColumns';
 import { safeString } from '../../utils/safeValues';
 import { stockService, type StockBalance, type StockLedgerEntry, type StockLedgerType, getStockStatus, stockStatusBadgeVariant, stockStatusLabel, stockStatusQtyColor } from './stockService';
 import { warehouseService, type WarehouseItem } from '../warehouse/warehouseService';
@@ -257,6 +260,83 @@ const StockLedgerPage: React.FC = () => {
       setBalanceLoading(false);
     }
   }, [hasBranchSelection, selectedBranchId, selectedWarehouse, selectedProductId, variantWise]);
+
+  const mapLedgerEntry = useCallback((row: Record<string, unknown>, branchId: number): StockLedgerEntry => ({
+    id: Number(row.id ?? row.Id ?? 0),
+    productId: Number(row.productId ?? row.ProductId ?? 0),
+    productName: safeString(row.productName ?? row.ProductName),
+    variantId: row.variantId ?? row.VariantId ?? null,
+    variantName: safeString(row.variantName ?? row.VariantName) || null,
+    warehouseId: Number(row.warehouseId ?? row.WarehouseId ?? 0),
+    warehouseName: safeString(row.warehouseName ?? row.WarehouseName),
+    type: safeString(row.type ?? row.Type) as StockLedgerType,
+    referenceId: row.referenceId != null ? Number(row.referenceId ?? row.ReferenceId) : null,
+    quantityInBaseUnit: Number(row.quantityInBaseUnit ?? row.QuantityInBaseUnit ?? 0),
+    unitPrice: Number(row.unitPrice ?? row.UnitPrice ?? 0),
+    totalAmount: Number(row.totalAmount ?? row.TotalAmount ?? 0),
+    date: safeString(row.date ?? row.Date),
+    remarks: safeString(row.remarks ?? row.Remarks),
+    branchId: Number(row.branchId ?? row.BranchId ?? branchId),
+    branchName: safeString(row.branchName ?? row.BranchName),
+  }), []);
+
+  const fetchExportPage = useCallback(async (pageNumber: number, exportPageSize: number) => {
+    if (!hasBranchSelection || selectedBranchId === null) {
+      return { data: [], totalRecords: 0 };
+    }
+    const res = await stockService.getLedger({
+      branchId: selectedBranchId,
+      warehouseId: selectedWarehouse ?? undefined,
+      productId: selectedProductId ?? undefined,
+      type: typeFilter ?? undefined,
+      dateFrom: dateFrom || undefined,
+      dateTo: dateTo || undefined,
+      page: pageNumber,
+      pageSize: exportPageSize,
+    });
+    const rows = Array.isArray(res.data?.entries) ? res.data.entries : [];
+    return {
+      data: rows.map((r: unknown) => mapLedgerEntry(r as Record<string, unknown>, selectedBranchId)),
+      totalRecords: Number(res.data?.totalRecords ?? 0),
+    };
+  }, [
+    hasBranchSelection,
+    selectedBranchId,
+    selectedWarehouse,
+    selectedProductId,
+    typeFilter,
+    dateFrom,
+    dateTo,
+    mapLedgerEntry,
+  ]);
+
+  const ledgerExportFilename = useMemo(() => {
+    const range = dateFrom || dateTo ? `-${dateFrom || 'start'}-${dateTo || 'end'}` : '';
+    const typePart = typeFilter ? `-${typeFilter.toLowerCase()}` : '';
+    return `stock-ledger${range}${typePart}`;
+  }, [dateFrom, dateTo, typeFilter]);
+
+  const { exporting: exportingLedger, onExport: onExportLedger } = useGridExport(
+    ledgerExportFilename,
+    stockLedgerExportColumns,
+    fetchExportPage,
+    hasBranchSelection && viewMode === 'ledger',
+  );
+
+  const [exportingBalances, setExportingBalances] = useState(false);
+
+  const onExportBalances = useCallback(() => {
+    if (!balances.length) return;
+    setExportingBalances(true);
+    try {
+      exportGridData('stock-balances', stockBalanceExportColumns, balances);
+    } finally {
+      setExportingBalances(false);
+    }
+  }, [balances]);
+
+  const onExport = viewMode === 'ledger' ? onExportLedger : onExportBalances;
+  const exporting = viewMode === 'ledger' ? exportingLedger : exportingBalances;
 
   useEffect(() => {
     if (!hasBranchSelection) return;
@@ -660,6 +740,17 @@ const StockLedgerPage: React.FC = () => {
                 </div>
               </>
             )}
+
+            <button
+              onClick={() => void onExport()}
+              disabled={
+                (viewMode === 'ledger' && (ledgerLoading || exportingLedger || ledgerTotal === 0))
+                || (viewMode === 'balances' && (balanceLoading || exportingBalances || balances.length === 0))
+              }
+              className="flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 transition-colors hover:bg-emerald-100 disabled:opacity-60"
+            >
+              {exporting ? 'Exporting…' : 'Export CSV'}
+            </button>
 
             <button
               onClick={() => {

@@ -52,6 +52,11 @@ public class ReportsController : ControllerBase
     public async Task<IActionResult> GetProfitLossReport([FromQuery] ReportQueryParams q)
         => Ok(await _reportService.GetProfitLossReportAsync(BuildFilter(q)));
 
+    [HttpGet("profit-loss-statement")]
+    [RequirePermission(PermissionModules.ProfitLossReport, PermissionActions.View)]
+    public async Task<IActionResult> GetProfitLossStatement([FromQuery] ReportQueryParams q)
+        => Ok(await _reportService.GetProfitLossStatementAsync(BuildFilter(q)));
+
     [HttpGet("receivable-aging")]
     [RequirePermission(PermissionModules.CustomerReceivableAgingReport, PermissionActions.View)]
     public async Task<IActionResult> GetReceivableAgingReport([FromQuery] ReportQueryParams q)
@@ -87,7 +92,8 @@ public class ReportsController : ControllerBase
             CategoryId = q.CategoryId,
             SubCategoryId = q.SubCategoryId,
             BrandId = q.BrandId,
-            AgingBucket = q.AgingBucket
+            AgingBucket = q.AgingBucket,
+            GroupBy = q.GroupBy
         };
     }
 
@@ -111,6 +117,7 @@ public class ReportsController : ControllerBase
         public int? SubCategoryId { get; set; }
         public int? BrandId { get; set; }
         public string? AgingBucket { get; set; }
+        public string? GroupBy { get; set; }
     }
 
     // ─── Sales Report (SaleInvoices) ───────────────────────────────────────────

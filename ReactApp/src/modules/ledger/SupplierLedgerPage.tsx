@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import DataTable, { type Column } from '../../components/DataTable';
 import { useFormModal } from '../../contexts/FormModalContext';
+import { useGridExport } from '../../hooks/useGridExport';
 import { getApiErrorMessage } from '../../services/api';
+import { partyLedgerExportColumns } from '../../utils/gridExportColumns';
 import { useBranchStore } from '../../stores/useBranchStore';
 import { useBusinessCurrency } from '../../hooks/useBusinessCurrency';
 import { supplierService, type SupplierItem } from '../supplier/supplierService';
@@ -79,6 +81,31 @@ export default function SupplierLedgerPage() {
     }
   }, [branchId, supplierId, currentPage, pageSize, fromDate, toDate]);
 
+  const fetchExportPage = useCallback(async (pageNumber: number, exportPageSize: number) => {
+    const res = await partyLedgerService.getSupplierLedger(
+      branchId,
+      supplierId,
+      pageNumber,
+      exportPageSize,
+      fromDate || undefined,
+      toDate || undefined,
+    );
+    return { data: res.data.entries, totalRecords: res.data.totalRecords };
+  }, [branchId, supplierId, fromDate, toDate]);
+
+  const exportFilename = useMemo(() => {
+    const slug = partyName.trim().replace(/\s+/g, '-').toLowerCase() || 'supplier';
+    const range = fromDate || toDate ? `-${fromDate || 'start'}-${toDate || 'end'}` : '';
+    return `supplier-ledger-${slug}${range}`;
+  }, [partyName, fromDate, toDate]);
+
+  const { exporting, onExport } = useGridExport(
+    exportFilename,
+    partyLedgerExportColumns,
+    fetchExportPage,
+    branchId > 0 && supplierId > 0,
+  );
+
   useEffect(() => {
     void fetchLedger();
   }, [fetchLedger]);
@@ -149,13 +176,25 @@ export default function SupplierLedgerPage() {
           <h1 className="text-2xl font-bold text-gray-800">Supplier Ledger</h1>
           <p className="text-sm text-gray-500 mt-0.5">Payable transactions and running balance</p>
         </div>
-        <button
-          type="button"
-          onClick={() => openForm('paySupplier', supplierId > 0 ? { supplierId } : undefined)}
-          className="px-4 py-2 bg-orange-600 text-white text-sm font-medium rounded-lg hover:bg-orange-700 transition-colors"
-        >
-          + Pay Supplier
-        </button>
+        <div className="flex flex-wrap gap-2">
+          {supplierId > 0 && (
+            <button
+              type="button"
+              onClick={() => void onExport()}
+              disabled={loading || exporting}
+              className="px-4 py-2 bg-emerald-50 border border-emerald-300 text-emerald-800 text-sm font-medium rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-60"
+            >
+              {exporting ? 'Exporting…' : 'Export CSV'}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => openForm('paySupplier', supplierId > 0 ? { supplierId } : undefined)}
+            className="px-4 py-2 bg-orange-600 text-white text-sm font-medium rounded-lg hover:bg-orange-700 transition-colors"
+          >
+            + Pay Supplier
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-100 p-4 grid grid-cols-1 md:grid-cols-4 gap-4">

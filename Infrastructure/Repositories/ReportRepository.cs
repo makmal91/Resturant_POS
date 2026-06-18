@@ -317,6 +317,89 @@ public class ReportRepository : IReportRepository
         var (pageNumber, pageSize) = filter.Normalize();
         var (from, toExclusive) = filter.ResolveDateRange();
 
+        var rows = await BuildProfitLossDailyRowsAsync(filter, from, toExclusive);
+        rows = ApplyProfitLossGroupBy(rows, filter.GroupBy);
+
+        if (!string.IsNullOrWhiteSpace(filter.Search))
+        {
+            var term = filter.Search.Trim();
+            rows = rows.Where(r => r.Date.ToString("yyyy-MM-dd").Contains(term)
+                              || r.Date.ToString("yyyy-MM").Contains(term)).ToList();
+        }
+
+        rows = ApplyProfitLossSort(rows, filter.SortColumn, filter.IsDescending());
+
+        var summary = BuildProfitLossSummary(rows);
+
+        var totalRecords = rows.Count;
+        var paged = rows
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
+            .ToList();
+
+        var result = ReportPagedResultDto<ProfitLossRowDto>.Create(paged, totalRecords, pageNumber, pageSize);
+        return new ProfitLossReportPagedResultDto
+        {
+            Data = result.Data,
+            TotalRecords = result.TotalRecords,
+            PageNumber = result.PageNumber,
+            PageSize = result.PageSize,
+            TotalPages = result.TotalPages,
+            Summary = summary,
+        };
+    }
+
+    public async Task<ProfitLossStatementDto> GetProfitLossStatementAsync(ReportFilterDto filter)
+    {
+        var (from, toExclusive) = filter.ResolveDateRange();
+        var toInclusive = toExclusive.AddDays(-1);
+
+        var rows = await BuildProfitLossDailyRowsAsync(filter, from, toExclusive);
+        var summary = BuildProfitLossSummary(rows);
+
+        var expenseQuery = _db.Expenses
+            .AsNoTracking()
+            .Where(e => e.BusinessId == filter.BusinessId
+                     && !e.IsDeleted
+                     && e.ExpenseDate >= from
+                     && e.ExpenseDate < toExclusive);
+
+        if (filter.BranchId > 0)
+            expenseQuery = expenseQuery.Where(e => e.BranchId == filter.BranchId);
+
+        var expenseLines = await expenseQuery
+            .GroupBy(e => new { e.ExpenseCategoryId, CategoryName = e.ExpenseCategory.Name })
+            .Select(g => new ProfitLossExpenseLineDto
+            {
+                CategoryId = g.Key.ExpenseCategoryId,
+                CategoryName = g.Key.CategoryName,
+                Amount = g.Sum(x => x.Amount),
+            })
+            .OrderByDescending(x => x.Amount)
+            .ThenBy(x => x.CategoryName)
+            .ToListAsync();
+
+        var branchName = filter.BranchId > 0
+            ? await _db.Branches.AsNoTracking()
+                .Where(b => b.Id == filter.BranchId)
+                .Select(b => b.Name)
+                .FirstOrDefaultAsync() ?? "Unknown"
+            : "All Branches";
+
+        return new ProfitLossStatementDto
+        {
+            BranchId = filter.BranchId,
+            BranchName = branchName,
+            FromDate = from,
+            ToDate = toInclusive,
+            Summary = summary,
+            ExpenseLines = expenseLines,
+        };
+    }
+
+    private async Task<List<ProfitLossRowDto>> BuildProfitLossDailyRowsAsync(
+        ReportFilterDto filter, DateTime from, DateTime toExclusive)
+    {
         var salesQuery = _db.SaleInvoices
             .AsNoTracking()
             .Where(i => i.BusinessId == filter.BusinessId
@@ -431,15 +514,11 @@ public class ReportRepository : IReportRepository
                 }))
             .ToList();
 
-        if (!string.IsNullOrWhiteSpace(filter.Search))
-        {
-            var term = filter.Search.Trim();
-            rows = rows.Where(r => r.Date.ToString("yyyy-MM-dd").Contains(term)).ToList();
-        }
+        return rows;
+    }
 
-        rows = ApplyProfitLossSort(rows, filter.SortColumn, filter.IsDescending());
-
-        var summary = new ProfitLossReportSummaryDto
+    private static ProfitLossReportSummaryDto BuildProfitLossSummary(List<ProfitLossRowDto> rows) =>
+        new()
         {
             TotalRevenue = rows.Sum(r => r.Revenue),
             TotalDiscounts = rows.Sum(r => r.Discounts),
@@ -451,21 +530,41 @@ public class ReportRepository : IReportRepository
             TotalSalesCount = rows.Sum(r => r.SalesCount),
         };
 
-        var totalRecords = rows.Count;
-        var paged = rows
-            .Skip((pageNumber - 1) * pageSize)
-            .Take(pageSize)
-            .ToList();
-
-        var result = ReportPagedResultDto<ProfitLossRowDto>.Create(paged, totalRecords, pageNumber, pageSize);
-        return new ProfitLossReportPagedResultDto
+    private static List<ProfitLossRowDto> ApplyProfitLossGroupBy(List<ProfitLossRowDto> rows, string? groupBy)
+    {
+        return (groupBy ?? "day").ToLowerInvariant() switch
         {
-            Data = result.Data,
-            TotalRecords = result.TotalRecords,
-            PageNumber = result.PageNumber,
-            PageSize = result.PageSize,
-            TotalPages = result.TotalPages,
-            Summary = summary,
+            "month" => rows
+                .GroupBy(r => new DateTime(r.Date.Year, r.Date.Month, 1))
+                .Select(g => new ProfitLossRowDto
+                {
+                    Date = g.Key,
+                    Revenue = g.Sum(r => r.Revenue),
+                    Discounts = g.Sum(r => r.Discounts),
+                    Tax = g.Sum(r => r.Tax),
+                    CostOfGoodsSold = g.Sum(r => r.CostOfGoodsSold),
+                    GrossProfit = g.Sum(r => r.GrossProfit),
+                    Expenses = g.Sum(r => r.Expenses),
+                    NetProfit = g.Sum(r => r.NetProfit),
+                    SalesCount = g.Sum(r => r.SalesCount),
+                })
+                .ToList(),
+            "year" => rows
+                .GroupBy(r => new DateTime(r.Date.Year, 1, 1))
+                .Select(g => new ProfitLossRowDto
+                {
+                    Date = g.Key,
+                    Revenue = g.Sum(r => r.Revenue),
+                    Discounts = g.Sum(r => r.Discounts),
+                    Tax = g.Sum(r => r.Tax),
+                    CostOfGoodsSold = g.Sum(r => r.CostOfGoodsSold),
+                    GrossProfit = g.Sum(r => r.GrossProfit),
+                    Expenses = g.Sum(r => r.Expenses),
+                    NetProfit = g.Sum(r => r.NetProfit),
+                    SalesCount = g.Sum(r => r.SalesCount),
+                })
+                .ToList(),
+            _ => rows,
         };
     }
 

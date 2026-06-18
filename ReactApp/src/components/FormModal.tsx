@@ -261,12 +261,11 @@ const FormModal: React.FC = () => {
       setIsLedgerMetaLoading(true);
       try {
         if (formType === 'receivePayment') {
-          const res = await apiCustomerService.getAll({ branchId, page: 1, pageSize: 500 });
-          const customers = (res.data as { customers?: Array<{ id?: number; name?: string }> }).customers ?? [];
+          const customers = await apiCustomerService.getForLedgerFilter(branchId);
           if (!isCancelled) {
             setLedgerCustomers(
               customers
-                .map((item) => ({ id: Number(item.id ?? 0), name: String(item.name ?? '') }))
+                .map((item) => ({ id: item.id, name: item.isWalkIn ? `${item.name} (Walk-in)` : item.name }))
                 .filter((item) => item.id > 0)
             );
           }

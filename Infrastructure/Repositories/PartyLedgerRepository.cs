@@ -65,7 +65,12 @@ public class PartyLedgerRepository : IPartyLedgerRepository
     {
         return _db.Customers
             .AsNoTracking()
-            .FirstOrDefaultAsync(c => c.Id == customerId && c.BusinessId == businessId && c.BranchId == branchId);
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(c =>
+                c.Id == customerId &&
+                !c.IsDeleted &&
+                c.BusinessId == businessId &&
+                c.BranchId == branchId);
     }
 
     public Task<Supplier?> GetSupplierAsync(int supplierId, int businessId, int branchId)
@@ -188,7 +193,8 @@ public class PartyLedgerRepository : IPartyLedgerRepository
 
         var openingBalance = await _db.Customers
             .AsNoTracking()
-            .Where(c => c.Id == customerId && c.BusinessId == businessId && c.BranchId == branchId)
+            .IgnoreQueryFilters()
+            .Where(c => c.Id == customerId && !c.IsDeleted && c.BusinessId == businessId && c.BranchId == branchId)
             .Select(c => (decimal?)c.OpeningBalance)
             .FirstOrDefaultAsync();
 

@@ -36,6 +36,7 @@ interface ReportPageShellProps<T extends Record<string, unknown>> {
   onExport?: () => Promise<void>;
   exporting?: boolean;
   exportLabel?: string;
+  onPrint?: () => void;
 }
 
 export default function ReportPageShell<T extends Record<string, unknown>>({
@@ -70,6 +71,7 @@ export default function ReportPageShell<T extends Record<string, unknown>>({
   onExport,
   exporting = false,
   exportLabel = 'Export CSV',
+  onPrint,
 }: ReportPageShellProps<T>) {
   return (
     <div className="print-area">
@@ -85,6 +87,16 @@ export default function ReportPageShell<T extends Record<string, unknown>>({
           <p className="text-gray-600">{description}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 self-start print:hidden">
+          {onPrint && (
+            <button
+              type="button"
+              onClick={onPrint}
+              disabled={loading}
+              className="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-60"
+            >
+              Print
+            </button>
+          )}
           {onExport && (
             <button
               type="button"
