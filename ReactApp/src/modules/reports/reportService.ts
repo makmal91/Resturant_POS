@@ -20,6 +20,7 @@ export interface ReportQueryParams {
   sortDirection?: 'asc' | 'desc';
   customerId?: number;
   supplierId?: number;
+  agingBucket?: string;
 }
 
 // ─── Report row types ─────────────────────────────────────────────────────────
@@ -90,6 +91,45 @@ export interface ProfitLossRow {
   expenses: number;
   netProfit: number;
   salesCount: number;
+}
+
+export interface ReceivableAgingRow {
+  invoiceId: number;
+  customerId: number;
+  customerName: string;
+  invoiceNo: string;
+  invoiceDate: string;
+  totalAmount: number;
+  paidAmount: number;
+  outstanding: number;
+  daysOverdue: number;
+  agingBucket: string;
+}
+
+export interface PayableAgingRow {
+  invoiceId: number;
+  supplierId: number;
+  supplierName: string;
+  invoiceNo: string;
+  invoiceDate: string;
+  totalAmount: number;
+  paidAmount: number;
+  outstanding: number;
+  daysOverdue: number;
+  agingBucket: string;
+}
+
+export interface AgingReportSummary {
+  totalOutstanding: number;
+  bucket0To30: number;
+  bucket31To60: number;
+  bucket61To90: number;
+  bucket90Plus: number;
+  asOfDate: string;
+}
+
+export interface AgingReportPagedResponse<T> extends ReportPagedResponse<T> {
+  summary: AgingReportSummary;
 }
 
 // ─── Legacy report types (stock / summary) ────────────────────────────────────
@@ -187,6 +227,18 @@ export const reportService = {
 
   getProfitLossReport: (branchId: number, params: ReportQueryParams = {}) =>
     apiClient.get<ReportPagedResponse<ProfitLossRow>>('/reports/profit-loss', {
+      params: reportParams(branchId, params),
+      ...bh(branchId),
+    }),
+
+  getReceivableAgingReport: (branchId: number, params: ReportQueryParams = {}) =>
+    apiClient.get<AgingReportPagedResponse<ReceivableAgingRow>>('/reports/receivable-aging', {
+      params: reportParams(branchId, params),
+      ...bh(branchId),
+    }),
+
+  getPayableAgingReport: (branchId: number, params: ReportQueryParams = {}) =>
+    apiClient.get<AgingReportPagedResponse<PayableAgingRow>>('/reports/payable-aging', {
       params: reportParams(branchId, params),
       ...bh(branchId),
     }),

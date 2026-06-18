@@ -52,6 +52,16 @@ public class ReportsController : ControllerBase
     public async Task<IActionResult> GetProfitLossReport([FromQuery] ReportQueryParams q)
         => Ok(await _reportService.GetProfitLossReportAsync(BuildFilter(q)));
 
+    [HttpGet("receivable-aging")]
+    [RequirePermission(PermissionModules.CustomerReceivableAgingReport, PermissionActions.View)]
+    public async Task<IActionResult> GetReceivableAgingReport([FromQuery] ReportQueryParams q)
+        => Ok(await _reportService.GetReceivableAgingReportAsync(BuildFilter(q)));
+
+    [HttpGet("payable-aging")]
+    [RequirePermission(PermissionModules.SupplierPayableAgingReport, PermissionActions.View)]
+    public async Task<IActionResult> GetPayableAgingReport([FromQuery] ReportQueryParams q)
+        => Ok(await _reportService.GetPayableAgingReportAsync(BuildFilter(q)));
+
     private ReportFilterDto BuildFilter(ReportQueryParams q)
     {
         var pageNumber = q.PageNumber ?? q.Page ?? 1;
@@ -67,7 +77,8 @@ public class ReportsController : ControllerBase
             FromDate = q.FromDate,
             ToDate = q.ToDate,
             CustomerId = q.CustomerId,
-            SupplierId = q.SupplierId
+            SupplierId = q.SupplierId,
+            AgingBucket = q.AgingBucket
         };
     }
 
@@ -86,6 +97,7 @@ public class ReportsController : ControllerBase
         public DateTime? ToDate { get; set; }
         public int? CustomerId { get; set; }
         public int? SupplierId { get; set; }
+        public string? AgingBucket { get; set; }
     }
 
     // ─── Sales Report (SaleInvoices) ───────────────────────────────────────────

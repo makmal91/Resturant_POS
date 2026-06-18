@@ -39,6 +39,8 @@ import ExpenseCategoryPage from './modules/master/ExpenseCategoryPage';
 import CountryPage from './modules/master/CountryPage';
 import CityPage from './modules/master/CityPage';
 import CustomerOutstandingReportPage from './modules/reports/CustomerOutstandingReportPage';
+import PayableAgingReportPage from './modules/reports/PayableAgingReportPage';
+import ReceivableAgingReportPage from './modules/reports/ReceivableAgingReportPage';
 import ProfitLossReportPage from './modules/reports/ProfitLossReportPage';
 import PurchaseReportPage from './modules/reports/PurchaseReportPage';
 import SalesReportPage from './modules/reports/SalesReportPage';
@@ -80,6 +82,8 @@ export const routeRegistry: RouteDefinition[] = [
   { path: '/reports/supplier-payable', label: 'Supplier Payable', component: SupplierPayableReportPage, module: 'Supplier Payable Report' },
   { path: '/reports/profit-loss', label: 'Profit & Loss', component: ProfitLossReportPage, module: 'Profit & Loss Report' },
   { path: '/reports/stock', label: 'Stock Report', component: StockReportPage, module: 'Stock Reports' },
+  { path: '/reports/receivable-aging', label: 'Receivable Aging', component: ReceivableAgingReportPage, module: 'Customer Receivable Aging' },
+  { path: '/reports/payable-aging', label: 'Payable Aging', component: PayableAgingReportPage, module: 'Supplier Payable Aging' },
   { path: '/sales-invoices', label: 'Invoice History', component: SaleInvoicesPage, module: 'Sales' },
   { path: '/expenses',          label: 'Expenses',        component: ExpensePage,           module: 'Expenses' },
   { path: '/expenses/categories', label: 'Expense Categories', component: ExpenseCategoryPage, module: 'Expense Categories' },

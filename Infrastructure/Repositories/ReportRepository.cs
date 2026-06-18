@@ -116,19 +116,6 @@ public class ReportRepository : IReportRepository
     {
         var (pageNumber, pageSize) = filter.Normalize();
 
-        var paidByInvoice = _db.InvoicePayments
-            .AsNoTracking()
-            .Where(p => p.BusinessId == filter.BusinessId
-                     && p.Module == InvoicePaymentModule.Sale
-                     && p.SaleInvoiceId != null);
-
-        if (filter.BranchId > 0)
-            paidByInvoice = paidByInvoice.Where(p => p.BranchId == filter.BranchId);
-
-        var paidTotals = paidByInvoice
-            .GroupBy(p => p.SaleInvoiceId!.Value)
-            .Select(g => new { InvoiceId = g.Key, Paid = g.Sum(x => x.Amount) });
-
         var invoiceQuery = _db.SaleInvoices
             .AsNoTracking()
             .Where(i => i.BusinessId == filter.BusinessId
@@ -142,29 +129,34 @@ public class ReportRepository : IReportRepository
         if (filter.CustomerId is > 0)
             invoiceQuery = invoiceQuery.Where(i => i.CustomerId == filter.CustomerId);
 
-        var invoiceBalances = invoiceQuery
-            .GroupJoin(
-                paidTotals,
-                inv => inv.Id,
-                paid => paid.InvoiceId,
-                (inv, paidGroup) => new { inv, paidGroup })
-            .SelectMany(
-                x => x.paidGroup.DefaultIfEmpty(),
-                (x, paid) => new
-                {
-                    x.inv.CustomerId,
-                    Balance = x.inv.GrandTotal - (paid != null ? paid.Paid : 0m),
-                    x.inv.SaleDate
-                })
-            .Where(x => x.Balance > 0)
-            .GroupBy(x => x.CustomerId!.Value)
-            .Select(g => new
+        var invoiceRows = await invoiceQuery
+            .Select(inv => new
             {
-                CustomerId = g.Key,
-                InvoiceOutstanding = g.Sum(x => x.Balance),
-                OutstandingInvoices = g.Count(),
-                LastSaleDate = g.Max(x => x.SaleDate)
-            });
+                CustomerId = inv.CustomerId!.Value,
+                Balance = inv.GrandTotal - (
+                    _db.InvoicePayments
+                        .AsNoTracking()
+                        .Where(p => p.BusinessId == filter.BusinessId
+                                 && p.Module == InvoicePaymentModule.Sale
+                                 && p.SaleInvoiceId == inv.Id
+                                 && (filter.BranchId <= 0 || p.BranchId == filter.BranchId))
+                        .Sum(p => (decimal?)p.Amount) ?? 0m),
+                inv.SaleDate
+            })
+            .Where(x => x.Balance > 0)
+            .ToListAsync();
+
+        var balanceByCustomer = invoiceRows
+            .GroupBy(x => x.CustomerId)
+            .ToDictionary(
+                g => g.Key,
+                g => new PartyInvoiceBalanceAgg
+                {
+                    PartyId = g.Key,
+                    InvoiceBalance = g.Sum(x => x.Balance),
+                    OutstandingInvoices = g.Count(),
+                    LastDate = g.Max(x => x.SaleDate)
+                });
 
         var customerQuery = _db.Customers
             .AsNoTracking()
@@ -185,49 +177,46 @@ public class ReportRepository : IReportRepository
                 (c.Phone != null && c.Phone.Contains(filter.Search!.Trim())));
         }
 
-        var projected = customerQuery
-            .GroupJoin(
-                invoiceBalances,
-                c => c.Id,
-                b => b.CustomerId,
-                (c, balanceGroup) => new { c, balanceGroup })
-            .SelectMany(
-                x => x.balanceGroup.DefaultIfEmpty(),
-                (x, balance) => new CustomerOutstandingRowDto
+        var customers = await customerQuery
+            .Select(c => new
+            {
+                c.Id,
+                c.CustomerCode,
+                c.Name,
+                c.Phone,
+                c.OpeningBalance
+            })
+            .ToListAsync();
+
+        var rows = customers
+            .Select(c =>
+            {
+                balanceByCustomer.TryGetValue(c.Id, out var agg);
+                var invoiceOutstanding = agg?.InvoiceBalance ?? 0m;
+                return new CustomerOutstandingRowDto
                 {
-                    CustomerId = x.c.Id,
-                    CustomerCode = x.c.CustomerCode,
-                    CustomerName = x.c.Name,
-                    Phone = x.c.Phone,
-                    OpeningBalance = x.c.OpeningBalance,
-                    OutstandingInvoices = balance != null ? balance.OutstandingInvoices : 0,
-                    InvoiceOutstanding = balance != null ? balance.InvoiceOutstanding : 0m,
-                    OutstandingAmount = x.c.OpeningBalance + (balance != null ? balance.InvoiceOutstanding : 0m),
-                    LastSaleDate = balance != null ? balance.LastSaleDate : null
-                })
-            .Where(r => r.OutstandingAmount > 0 || r.OpeningBalance > 0);
+                    CustomerId = c.Id,
+                    CustomerCode = c.CustomerCode,
+                    CustomerName = c.Name,
+                    Phone = c.Phone,
+                    OpeningBalance = c.OpeningBalance,
+                    OutstandingInvoices = agg?.OutstandingInvoices ?? 0,
+                    InvoiceOutstanding = invoiceOutstanding,
+                    OutstandingAmount = c.OpeningBalance + invoiceOutstanding,
+                    LastSaleDate = agg?.LastDate
+                };
+            })
+            .Where(r => r.OutstandingAmount > 0 || r.OpeningBalance > 0)
+            .AsQueryable();
 
-        projected = ApplyCustomerOutstandingSort(projected, filter.SortColumn, filter.IsDescending());
+        rows = ApplyCustomerOutstandingSort(rows, filter.SortColumn, filter.IsDescending());
 
-        return await PaginateAsync(projected, pageNumber, pageSize);
+        return PaginateList(rows.ToList(), pageNumber, pageSize);
     }
 
     public async Task<ReportPagedResultDto<SupplierPayableRowDto>> GetSupplierPayableReportAsync(ReportFilterDto filter)
     {
         var (pageNumber, pageSize) = filter.Normalize();
-
-        var paidByPurchase = _db.InvoicePayments
-            .AsNoTracking()
-            .Where(p => p.BusinessId == filter.BusinessId
-                     && p.Module == InvoicePaymentModule.Purchase
-                     && p.PurchaseId != null);
-
-        if (filter.BranchId > 0)
-            paidByPurchase = paidByPurchase.Where(p => p.BranchId == filter.BranchId);
-
-        var paidTotals = paidByPurchase
-            .GroupBy(p => p.PurchaseId!.Value)
-            .Select(g => new { PurchaseId = g.Key, Paid = g.Sum(x => x.Amount) });
 
         var purchaseQuery = _db.Purchases
             .AsNoTracking()
@@ -241,29 +230,34 @@ public class ReportRepository : IReportRepository
         if (filter.SupplierId is > 0)
             purchaseQuery = purchaseQuery.Where(p => p.SupplierId == filter.SupplierId);
 
-        var purchaseBalances = purchaseQuery
-            .GroupJoin(
-                paidTotals,
-                pur => pur.Id,
-                paid => paid.PurchaseId,
-                (pur, paidGroup) => new { pur, paidGroup })
-            .SelectMany(
-                x => x.paidGroup.DefaultIfEmpty(),
-                (x, paid) => new
-                {
-                    x.pur.SupplierId,
-                    Balance = x.pur.TotalAmount - (paid != null ? paid.Paid : 0m),
-                    x.pur.PurchaseDate
-                })
-            .Where(x => x.Balance > 0)
-            .GroupBy(x => x.SupplierId)
-            .Select(g => new
+        var purchaseRows = await purchaseQuery
+            .Select(pur => new
             {
-                SupplierId = g.Key,
-                InvoicePayable = g.Sum(x => x.Balance),
-                OutstandingInvoices = g.Count(),
-                LastPurchaseDate = g.Max(x => x.PurchaseDate)
-            });
+                pur.SupplierId,
+                Balance = pur.TotalAmount - (
+                    _db.InvoicePayments
+                        .AsNoTracking()
+                        .Where(p => p.BusinessId == filter.BusinessId
+                                 && p.Module == InvoicePaymentModule.Purchase
+                                 && p.PurchaseId == pur.Id
+                                 && (filter.BranchId <= 0 || p.BranchId == filter.BranchId))
+                        .Sum(p => (decimal?)p.Amount) ?? 0m),
+                pur.PurchaseDate
+            })
+            .Where(x => x.Balance > 0)
+            .ToListAsync();
+
+        var balanceBySupplier = purchaseRows
+            .GroupBy(x => x.SupplierId)
+            .ToDictionary(
+                g => g.Key,
+                g => new PartyInvoiceBalanceAgg
+                {
+                    PartyId = g.Key,
+                    InvoiceBalance = g.Sum(x => x.Balance),
+                    OutstandingInvoices = g.Count(),
+                    LastDate = g.Max(x => x.PurchaseDate)
+                });
 
         var supplierQuery = _db.Suppliers
             .AsNoTracking()
@@ -284,30 +278,38 @@ public class ReportRepository : IReportRepository
                 s.Phone.Contains(filter.Search!.Trim()));
         }
 
-        var projected = supplierQuery
-            .GroupJoin(
-                purchaseBalances,
-                s => s.Id,
-                b => b.SupplierId,
-                (s, balanceGroup) => new { s, balanceGroup })
-            .SelectMany(
-                x => x.balanceGroup.DefaultIfEmpty(),
-                (x, balance) => new SupplierPayableRowDto
+        var suppliers = await supplierQuery
+            .Select(s => new
+            {
+                s.Id,
+                s.SupplierCode,
+                s.Name,
+                s.Phone
+            })
+            .ToListAsync();
+
+        var rows = suppliers
+            .Where(s => balanceBySupplier.ContainsKey(s.Id))
+            .Select(s =>
+            {
+                var agg = balanceBySupplier[s.Id];
+                return new SupplierPayableRowDto
                 {
-                    SupplierId = x.s.Id,
-                    SupplierCode = x.s.SupplierCode,
-                    SupplierName = x.s.Name,
-                    Phone = x.s.Phone,
-                    OutstandingInvoices = balance != null ? balance.OutstandingInvoices : 0,
-                    InvoicePayable = balance != null ? balance.InvoicePayable : 0m,
-                    PayableAmount = balance != null ? balance.InvoicePayable : 0m,
-                    LastPurchaseDate = balance != null ? balance.LastPurchaseDate : null
-                })
-            .Where(r => r.PayableAmount > 0);
+                    SupplierId = s.Id,
+                    SupplierCode = s.SupplierCode,
+                    SupplierName = s.Name,
+                    Phone = s.Phone,
+                    OutstandingInvoices = agg.OutstandingInvoices,
+                    InvoicePayable = agg.InvoiceBalance,
+                    PayableAmount = agg.InvoiceBalance,
+                    LastPurchaseDate = agg.LastDate
+                };
+            })
+            .AsQueryable();
 
-        projected = ApplySupplierPayableSort(projected, filter.SortColumn, filter.IsDescending());
+        rows = ApplySupplierPayableSort(rows, filter.SortColumn, filter.IsDescending());
 
-        return await PaginateAsync(projected, pageNumber, pageSize);
+        return PaginateList(rows.ToList(), pageNumber, pageSize);
     }
 
     public async Task<ReportPagedResultDto<ProfitLossRowDto>> GetProfitLossReportAsync(ReportFilterDto filter)
@@ -444,6 +446,309 @@ public class ReportRepository : IReportRepository
             .ToList();
 
         return ReportPagedResultDto<ProfitLossRowDto>.Create(paged, totalRecords, pageNumber, pageSize);
+    }
+
+    public async Task<AgingReportPagedResultDto<ReceivableAgingRowDto>> GetReceivableAgingReportAsync(ReportFilterDto filter)
+    {
+        var (pageNumber, pageSize) = filter.Normalize();
+        var asOfDate = DateTime.UtcNow.Date;
+
+        var invoiceQuery = _db.SaleInvoices
+            .AsNoTracking()
+            .Where(i => i.BusinessId == filter.BusinessId
+                     && !i.IsDeleted
+                     && i.Status == SaleInvoiceStatus.Completed
+                     && i.CustomerId != null);
+
+        if (filter.BranchId > 0)
+            invoiceQuery = invoiceQuery.Where(i => i.BranchId == filter.BranchId);
+
+        if (filter.CustomerId is > 0)
+            invoiceQuery = invoiceQuery.Where(i => i.CustomerId == filter.CustomerId);
+
+        if (!string.IsNullOrWhiteSpace(filter.Search))
+        {
+            var term = filter.Search.Trim().ToLower();
+            invoiceQuery = invoiceQuery.Where(i =>
+                i.InvoiceNo.ToLower().Contains(term) ||
+                (i.Customer != null && i.Customer.Name.ToLower().Contains(term)));
+        }
+
+        var invoiceRows = await invoiceQuery
+            .Select(inv => new
+            {
+                inv.Id,
+                inv.InvoiceNo,
+                InvoiceDate = inv.SaleDate,
+                CustomerId = inv.CustomerId!.Value,
+                CustomerName = inv.Customer != null ? inv.Customer.Name : "Unknown",
+                TotalAmount = inv.GrandTotal,
+                PaidAmount = _db.InvoicePayments
+                    .AsNoTracking()
+                    .Where(p => p.BusinessId == filter.BusinessId
+                             && p.Module == InvoicePaymentModule.Sale
+                             && p.SaleInvoiceId == inv.Id
+                             && (filter.BranchId <= 0 || p.BranchId == filter.BranchId))
+                    .Sum(p => (decimal?)p.Amount) ?? 0m
+            })
+            .ToListAsync();
+
+        var allRows = invoiceRows
+            .Select(r => BuildReceivableAgingRow(r.Id, r.CustomerId, r.CustomerName, r.InvoiceNo, r.InvoiceDate, r.TotalAmount, r.PaidAmount, asOfDate))
+            .Where(r => r.Outstanding > 0)
+            .ToList();
+
+        var summary = BuildAgingSummary(allRows.Select(r => (r.Outstanding, r.AgingBucket)), asOfDate);
+
+        var filtered = allRows
+            .Where(r => MatchesAgingBucketFilter(r.DaysOverdue, filter.AgingBucket))
+            .AsQueryable();
+
+        filtered = ApplyReceivableAgingSort(filtered, filter.SortColumn, filter.IsDescending());
+        var paged = PaginateList(filtered.ToList(), pageNumber, pageSize);
+
+        return new AgingReportPagedResultDto<ReceivableAgingRowDto>
+        {
+            Data = paged.Data,
+            TotalRecords = paged.TotalRecords,
+            PageNumber = paged.PageNumber,
+            PageSize = paged.PageSize,
+            TotalPages = paged.TotalPages,
+            Summary = summary
+        };
+    }
+
+    public async Task<AgingReportPagedResultDto<PayableAgingRowDto>> GetPayableAgingReportAsync(ReportFilterDto filter)
+    {
+        var (pageNumber, pageSize) = filter.Normalize();
+        var asOfDate = DateTime.UtcNow.Date;
+
+        var purchaseQuery = _db.Purchases
+            .AsNoTracking()
+            .Where(p => p.BusinessId == filter.BusinessId
+                     && !p.IsDeleted
+                     && p.Status == PurchaseStatus.Posted);
+
+        if (filter.BranchId > 0)
+            purchaseQuery = purchaseQuery.Where(p => p.BranchId == filter.BranchId);
+
+        if (filter.SupplierId is > 0)
+            purchaseQuery = purchaseQuery.Where(p => p.SupplierId == filter.SupplierId);
+
+        if (!string.IsNullOrWhiteSpace(filter.Search))
+        {
+            var term = filter.Search.Trim().ToLower();
+            purchaseQuery = purchaseQuery.Where(p =>
+                p.InvoiceNo.ToLower().Contains(term) ||
+                p.Supplier.Name.ToLower().Contains(term));
+        }
+
+        var purchaseRows = await purchaseQuery
+            .Select(pur => new
+            {
+                pur.Id,
+                pur.InvoiceNo,
+                InvoiceDate = pur.PurchaseDate,
+                pur.SupplierId,
+                SupplierName = pur.Supplier.Name,
+                TotalAmount = pur.TotalAmount,
+                PaidAmount = _db.InvoicePayments
+                    .AsNoTracking()
+                    .Where(p => p.BusinessId == filter.BusinessId
+                             && p.Module == InvoicePaymentModule.Purchase
+                             && p.PurchaseId == pur.Id
+                             && (filter.BranchId <= 0 || p.BranchId == filter.BranchId))
+                    .Sum(p => (decimal?)p.Amount) ?? 0m
+            })
+            .ToListAsync();
+
+        var allRows = purchaseRows
+            .Select(r => BuildPayableAgingRow(r.Id, r.SupplierId, r.SupplierName, r.InvoiceNo, r.InvoiceDate, r.TotalAmount, r.PaidAmount, asOfDate))
+            .Where(r => r.Outstanding > 0)
+            .ToList();
+
+        var summary = BuildAgingSummary(allRows.Select(r => (r.Outstanding, r.AgingBucket)), asOfDate);
+
+        var filtered = allRows
+            .Where(r => MatchesAgingBucketFilter(r.DaysOverdue, filter.AgingBucket))
+            .AsQueryable();
+
+        filtered = ApplyPayableAgingSort(filtered, filter.SortColumn, filter.IsDescending());
+        var paged = PaginateList(filtered.ToList(), pageNumber, pageSize);
+
+        return new AgingReportPagedResultDto<PayableAgingRowDto>
+        {
+            Data = paged.Data,
+            TotalRecords = paged.TotalRecords,
+            PageNumber = paged.PageNumber,
+            PageSize = paged.PageSize,
+            TotalPages = paged.TotalPages,
+            Summary = summary
+        };
+    }
+
+    private static ReceivableAgingRowDto BuildReceivableAgingRow(
+        int invoiceId, int customerId, string customerName, string invoiceNo,
+        DateTime invoiceDate, decimal totalAmount, decimal paidAmount, DateTime asOfDate)
+    {
+        var outstanding = totalAmount - paidAmount;
+        var daysOverdue = CalculateDaysOverdue(invoiceDate, asOfDate);
+        return new ReceivableAgingRowDto
+        {
+            InvoiceId = invoiceId,
+            CustomerId = customerId,
+            CustomerName = customerName,
+            InvoiceNo = invoiceNo,
+            InvoiceDate = invoiceDate,
+            TotalAmount = totalAmount,
+            PaidAmount = paidAmount,
+            Outstanding = outstanding,
+            DaysOverdue = daysOverdue,
+            AgingBucket = ResolveAgingBucket(daysOverdue)
+        };
+    }
+
+    private static PayableAgingRowDto BuildPayableAgingRow(
+        int invoiceId, int supplierId, string supplierName, string invoiceNo,
+        DateTime invoiceDate, decimal totalAmount, decimal paidAmount, DateTime asOfDate)
+    {
+        var outstanding = totalAmount - paidAmount;
+        var daysOverdue = CalculateDaysOverdue(invoiceDate, asOfDate);
+        return new PayableAgingRowDto
+        {
+            InvoiceId = invoiceId,
+            SupplierId = supplierId,
+            SupplierName = supplierName,
+            InvoiceNo = invoiceNo,
+            InvoiceDate = invoiceDate,
+            TotalAmount = totalAmount,
+            PaidAmount = paidAmount,
+            Outstanding = outstanding,
+            DaysOverdue = daysOverdue,
+            AgingBucket = ResolveAgingBucket(daysOverdue)
+        };
+    }
+
+    private static int CalculateDaysOverdue(DateTime invoiceDate, DateTime asOfDate)
+    {
+        var days = (asOfDate - invoiceDate.Date).Days;
+        return Math.Max(0, days);
+    }
+
+    private static string ResolveAgingBucket(int daysOverdue) => daysOverdue switch
+    {
+        <= 30 => "0-30",
+        <= 60 => "31-60",
+        <= 90 => "61-90",
+        _ => "90+"
+    };
+
+    private static bool MatchesAgingBucketFilter(int daysOverdue, string? bucketFilter)
+    {
+        if (string.IsNullOrWhiteSpace(bucketFilter))
+            return true;
+
+        var normalized = bucketFilter.Trim().ToLowerInvariant();
+        var bucket = ResolveAgingBucket(daysOverdue);
+        return normalized switch
+        {
+            "0-30" or "0to30" or "030" => bucket == "0-30",
+            "31-60" or "31to60" or "3160" => bucket == "31-60",
+            "61-90" or "61to90" or "6190" => bucket == "61-90",
+            "90+" or "90plus" or "90 plus" => bucket == "90+",
+            _ => bucket.Equals(bucketFilter, StringComparison.OrdinalIgnoreCase)
+        };
+    }
+
+    private static AgingReportSummaryDto BuildAgingSummary(
+        IEnumerable<(decimal Outstanding, string Bucket)> rows, DateTime asOfDate)
+    {
+        var list = rows.ToList();
+        return new AgingReportSummaryDto
+        {
+            AsOfDate = asOfDate,
+            TotalOutstanding = list.Sum(r => r.Outstanding),
+            Bucket0To30 = list.Where(r => r.Bucket == "0-30").Sum(r => r.Outstanding),
+            Bucket31To60 = list.Where(r => r.Bucket == "31-60").Sum(r => r.Outstanding),
+            Bucket61To90 = list.Where(r => r.Bucket == "61-90").Sum(r => r.Outstanding),
+            Bucket90Plus = list.Where(r => r.Bucket == "90+").Sum(r => r.Outstanding)
+        };
+    }
+
+    private static IQueryable<ReceivableAgingRowDto> ApplyReceivableAgingSort(
+        IQueryable<ReceivableAgingRowDto> query, string? sortColumn, bool descending)
+    {
+        return (sortColumn ?? "daysOverdue").ToLowerInvariant() switch
+        {
+            "customername" or "customer" => descending
+                ? query.OrderByDescending(r => r.CustomerName).ThenByDescending(r => r.DaysOverdue)
+                : query.OrderBy(r => r.CustomerName).ThenBy(r => r.DaysOverdue),
+            "invoiceno" or "invoice" => descending
+                ? query.OrderByDescending(r => r.InvoiceNo)
+                : query.OrderBy(r => r.InvoiceNo),
+            "invoicedate" or "date" => descending
+                ? query.OrderByDescending(r => r.InvoiceDate)
+                : query.OrderBy(r => r.InvoiceDate),
+            "totalamount" or "total" => descending
+                ? query.OrderByDescending(r => r.TotalAmount)
+                : query.OrderBy(r => r.TotalAmount),
+            "paidamount" or "paid" => descending
+                ? query.OrderByDescending(r => r.PaidAmount)
+                : query.OrderBy(r => r.PaidAmount),
+            "outstanding" or "balance" => descending
+                ? query.OrderByDescending(r => r.Outstanding)
+                : query.OrderBy(r => r.Outstanding),
+            "agingbucket" or "bucket" => descending
+                ? query.OrderByDescending(r => r.DaysOverdue)
+                : query.OrderBy(r => r.DaysOverdue),
+            _ => descending
+                ? query.OrderByDescending(r => r.DaysOverdue).ThenByDescending(r => r.InvoiceDate)
+                : query.OrderBy(r => r.DaysOverdue).ThenBy(r => r.InvoiceDate)
+        };
+    }
+
+    private static IQueryable<PayableAgingRowDto> ApplyPayableAgingSort(
+        IQueryable<PayableAgingRowDto> query, string? sortColumn, bool descending)
+    {
+        return (sortColumn ?? "daysOverdue").ToLowerInvariant() switch
+        {
+            "suppliername" or "supplier" => descending
+                ? query.OrderByDescending(r => r.SupplierName).ThenByDescending(r => r.DaysOverdue)
+                : query.OrderBy(r => r.SupplierName).ThenBy(r => r.DaysOverdue),
+            "invoiceno" or "invoice" => descending
+                ? query.OrderByDescending(r => r.InvoiceNo)
+                : query.OrderBy(r => r.InvoiceNo),
+            "invoicedate" or "date" => descending
+                ? query.OrderByDescending(r => r.InvoiceDate)
+                : query.OrderBy(r => r.InvoiceDate),
+            "totalamount" or "total" => descending
+                ? query.OrderByDescending(r => r.TotalAmount)
+                : query.OrderBy(r => r.TotalAmount),
+            "paidamount" or "paid" => descending
+                ? query.OrderByDescending(r => r.PaidAmount)
+                : query.OrderBy(r => r.PaidAmount),
+            "outstanding" or "balance" => descending
+                ? query.OrderByDescending(r => r.Outstanding)
+                : query.OrderBy(r => r.Outstanding),
+            "agingbucket" or "bucket" => descending
+                ? query.OrderByDescending(r => r.DaysOverdue)
+                : query.OrderBy(r => r.DaysOverdue),
+            _ => descending
+                ? query.OrderByDescending(r => r.DaysOverdue).ThenByDescending(r => r.InvoiceDate)
+                : query.OrderBy(r => r.DaysOverdue).ThenBy(r => r.InvoiceDate)
+        };
+    }
+
+    private static ReportPagedResultDto<T> PaginateList<T>(
+        List<T> rows, int pageNumber, int pageSize)
+    {
+        var totalRecords = rows.Count;
+        var paged = rows
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
+            .ToList();
+
+        return ReportPagedResultDto<T>.Create(paged, totalRecords, pageNumber, pageSize);
     }
 
     private static async Task<ReportPagedResultDto<T>> PaginateAsync<T>(
@@ -595,5 +900,13 @@ public class ReportRepository : IReportRepository
                 ? rows.OrderByDescending(r => r.Date).ToList()
                 : rows.OrderBy(r => r.Date).ToList()
         };
+    }
+
+    private sealed class PartyInvoiceBalanceAgg
+    {
+        public int PartyId { get; init; }
+        public decimal InvoiceBalance { get; init; }
+        public int OutstandingInvoices { get; init; }
+        public DateTime LastDate { get; init; }
     }
 }

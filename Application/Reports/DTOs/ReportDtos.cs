@@ -14,6 +14,9 @@ public class ReportFilterDto
     public int? CustomerId { get; set; }
     public int? SupplierId { get; set; }
 
+    /// <summary>Aging bucket filter: 0-30, 31-60, 61-90, 90+</summary>
+    public string? AgingBucket { get; set; }
+
     public (int PageNumber, int PageSize) Normalize(int maxPageSize = 100)
     {
         var pageNumber = Math.Max(1, PageNumber);
@@ -129,4 +132,47 @@ public class ProfitLossRowDto
     public decimal Expenses { get; set; }
     public decimal NetProfit { get; set; }
     public int SalesCount { get; set; }
+}
+
+public class ReceivableAgingRowDto
+{
+    public int InvoiceId { get; set; }
+    public int CustomerId { get; set; }
+    public string CustomerName { get; set; } = string.Empty;
+    public string InvoiceNo { get; set; } = string.Empty;
+    public DateTime InvoiceDate { get; set; }
+    public decimal TotalAmount { get; set; }
+    public decimal PaidAmount { get; set; }
+    public decimal Outstanding { get; set; }
+    public int DaysOverdue { get; set; }
+    public string AgingBucket { get; set; } = string.Empty;
+}
+
+public class PayableAgingRowDto
+{
+    public int InvoiceId { get; set; }
+    public int SupplierId { get; set; }
+    public string SupplierName { get; set; } = string.Empty;
+    public string InvoiceNo { get; set; } = string.Empty;
+    public DateTime InvoiceDate { get; set; }
+    public decimal TotalAmount { get; set; }
+    public decimal PaidAmount { get; set; }
+    public decimal Outstanding { get; set; }
+    public int DaysOverdue { get; set; }
+    public string AgingBucket { get; set; } = string.Empty;
+}
+
+public class AgingReportSummaryDto
+{
+    public decimal TotalOutstanding { get; set; }
+    public decimal Bucket0To30 { get; set; }
+    public decimal Bucket31To60 { get; set; }
+    public decimal Bucket61To90 { get; set; }
+    public decimal Bucket90Plus { get; set; }
+    public DateTime AsOfDate { get; set; }
+}
+
+public class AgingReportPagedResultDto<T> : ReportPagedResultDto<T>
+{
+    public AgingReportSummaryDto Summary { get; set; } = new();
 }

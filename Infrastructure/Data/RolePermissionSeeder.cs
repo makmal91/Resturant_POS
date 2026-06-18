@@ -106,7 +106,8 @@ public static class RolePermissionSeeder
                     PermissionModules.Reports or PermissionModules.Dashboard or
                     PermissionModules.SalesReports or PermissionModules.PurchaseReports or
                     PermissionModules.StockReports or PermissionModules.CustomerOutstandingReport or
-                    PermissionModules.SupplierPayableReport or PermissionModules.ProfitLossReport =>
+                    PermissionModules.SupplierPayableReport or PermissionModules.ProfitLossReport or
+                    PermissionModules.CustomerReceivableAgingReport or PermissionModules.SupplierPayableAgingReport =>
                         (module, true, false, false, false, true, false),
                     PermissionModules.PosBilling =>
                         (module, true, false, false, false, false, false),

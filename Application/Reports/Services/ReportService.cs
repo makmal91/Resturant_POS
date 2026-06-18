@@ -23,4 +23,10 @@ public class ReportService : IReportService
 
     public Task<ReportPagedResultDto<ProfitLossRowDto>> GetProfitLossReportAsync(ReportFilterDto filter)
         => _repository.GetProfitLossReportAsync(filter);
+
+    public Task<AgingReportPagedResultDto<ReceivableAgingRowDto>> GetReceivableAgingReportAsync(ReportFilterDto filter)
+        => _repository.GetReceivableAgingReportAsync(filter);
+
+    public Task<AgingReportPagedResultDto<PayableAgingRowDto>> GetPayableAgingReportAsync(ReportFilterDto filter)
+        => _repository.GetPayableAgingReportAsync(filter);
 }
