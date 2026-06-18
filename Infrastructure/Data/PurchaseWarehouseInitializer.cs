@@ -181,6 +181,7 @@ public static class PurchaseWarehouseInitializer
             IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_ledger_reference' AND object_id = OBJECT_ID(N'[dbo].[StockLedger]'))
                 CREATE INDEX [idx_ledger_reference] ON [dbo].[StockLedger]([ReferenceId], [BusinessId], [BranchId], [Type]);
             """,
+            SyncStockLedgerUnitColumnsSql(),
             """
             IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[Purchases]') AND name = N'VoidedAt')
                 ALTER TABLE [dbo].[Purchases] ADD [VoidedAt] DATETIME2 NULL;
@@ -329,6 +330,26 @@ public static class PurchaseWarehouseInitializer
 
             IF COL_LENGTH(N'dbo.PurchaseItems', N'ModifiedByName') IS NULL
                 ALTER TABLE [dbo].[PurchaseItems] ADD [ModifiedByName] NVARCHAR(MAX) NULL;
+        END
+        """;
+
+    private static string SyncStockLedgerUnitColumnsSql() => """
+        IF OBJECT_ID(N'[dbo].[StockLedger]', N'U') IS NOT NULL
+        BEGIN
+            IF COL_LENGTH(N'dbo.StockLedger', N'UnitId') IS NULL
+                ALTER TABLE [dbo].[StockLedger] ADD [UnitId] INT NULL;
+
+            IF COL_LENGTH(N'dbo.StockLedger', N'UnitQuantity') IS NULL
+                ALTER TABLE [dbo].[StockLedger] ADD [UnitQuantity] DECIMAL(18,4) NULL;
+
+            IF NOT EXISTS (
+                SELECT 1 FROM sys.foreign_keys
+                WHERE name = N'FK_StockLedger_ProductUnits_UnitId'
+                  AND parent_object_id = OBJECT_ID(N'[dbo].[StockLedger]'))
+               AND COL_LENGTH(N'dbo.StockLedger', N'UnitId') IS NOT NULL
+                ALTER TABLE [dbo].[StockLedger]
+                    ADD CONSTRAINT [FK_StockLedger_ProductUnits_UnitId]
+                    FOREIGN KEY ([UnitId]) REFERENCES [dbo].[ProductUnits]([Id]);
         END
         """;
 }

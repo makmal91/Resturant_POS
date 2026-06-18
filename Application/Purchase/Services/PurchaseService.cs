@@ -4,6 +4,7 @@ using POSSystem.Application.Common.Interfaces;
 using POSSystem.Application.Ledger.Interfaces;
 using POSSystem.Application.Payments.DTOs;
 using POSSystem.Application.Payments.Interfaces;
+using POSSystem.Application.Product.Interfaces;
 using POSSystem.Application.Purchase.DTOs;
 using POSSystem.Application.Purchase.Interfaces;
 using POSSystem.Application.Sales.DTOs;
@@ -15,6 +16,7 @@ namespace POSSystem.Application.Purchase.Services;
 public class PurchaseService : IPurchaseService
 {
     private readonly IPurchaseRepository _purchaseRepository;
+    private readonly IProductRepository _productRepository;
     private readonly IStockLedgerRepository _stockLedgerRepository;
     private readonly ILowStockAlertService _lowStockAlertService;
     private readonly IPartyLedgerService _partyLedgerService;
@@ -23,6 +25,7 @@ public class PurchaseService : IPurchaseService
 
     public PurchaseService(
         IPurchaseRepository purchaseRepository,
+        IProductRepository productRepository,
         IStockLedgerRepository stockLedgerRepository,
         ILowStockAlertService lowStockAlertService,
         IPartyLedgerService partyLedgerService,
@@ -30,6 +33,7 @@ public class PurchaseService : IPurchaseService
         ICodeGeneratorService codeGenerator)
     {
         _purchaseRepository = purchaseRepository;
+        _productRepository = productRepository;
         _stockLedgerRepository = stockLedgerRepository;
         _lowStockAlertService = lowStockAlertService;
         _partyLedgerService = partyLedgerService;
@@ -85,7 +89,7 @@ public class PurchaseService : IPurchaseService
             BranchId = dto.BranchId
         };
 
-        BuildItems(purchase, dto.Items, dto.BusinessId, dto.BranchId);
+        await BuildItemsAsync(purchase, dto.Items, dto.BusinessId, dto.BranchId);
 
         await _purchaseRepository.AddAsync(purchase);
         await _purchaseRepository.SaveChangesAsync();
@@ -118,7 +122,9 @@ public class PurchaseService : IPurchaseService
                 WarehouseId        = e.WarehouseId,
                 Type               = StockLedgerType.PurchaseReversal,
                 ReferenceId        = id,
-                QuantityInBaseUnit = -e.QuantityInBaseUnit,   // flip: was +, now -
+                QuantityInBaseUnit = -e.QuantityInBaseUnit,
+                UnitId             = e.UnitId,
+                UnitQuantity       = e.UnitQuantity.HasValue ? -e.UnitQuantity.Value : null,
                 UnitPrice          = e.UnitPrice,
                 TotalAmount        = e.TotalAmount,
                 Date               = DateTime.UtcNow,
@@ -139,7 +145,7 @@ public class PurchaseService : IPurchaseService
         foreach (var item in entity.Items)
             item.IsDeleted = true;
 
-        BuildItems(entity, dto.Items, dto.BusinessId, dto.BranchId);
+        await BuildItemsAsync(entity, dto.Items, dto.BusinessId, dto.BranchId);
 
         // If was Posted, re-apply new stock entries and keep Posted status
         if (entity.Status == PurchaseStatus.Posted)
@@ -147,21 +153,9 @@ public class PurchaseService : IPurchaseService
             var activeItems = entity.Items.Where(i => !i.IsDeleted).ToList();
             foreach (var item in activeItems)
             {
-                await _stockLedgerRepository.AddAsync(new StockLedger
-                {
-                    ProductId          = item.ProductId,
-                    VariantId          = item.VariantId,
-                    WarehouseId        = entity.WarehouseId,
-                    Type               = StockLedgerType.PurchaseEntry,
-                    ReferenceId        = entity.Id,
-                    QuantityInBaseUnit = item.BaseQuantity,
-                    UnitPrice          = item.CostPrice,
-                    TotalAmount        = item.TotalCost,
-                    Date               = entity.PurchaseDate,
-                    Remarks            = $"Purchase (Corrected) — Invoice: {entity.InvoiceNo}",
-                    BusinessId         = dto.BusinessId,
-                    BranchId           = dto.BranchId
-                });
+                await _stockLedgerRepository.AddAsync(CreatePurchaseStockLedgerEntry(
+                    item, entity.WarehouseId, entity.Id, entity.InvoiceNo, entity.PurchaseDate,
+                    dto.BusinessId, dto.BranchId, corrected: true));
             }
         }
 
@@ -198,26 +192,11 @@ public class PurchaseService : IPurchaseService
 
         foreach (var item in activeItems)
         {
-            var baseQty = item.Quantity * item.ConversionFactor;
-            item.BaseQuantity = baseQty;
+            item.BaseQuantity = ConvertToBase(item.Quantity, item.ConversionFactor);
 
-            var ledgerEntry = new StockLedger
-            {
-                ProductId = item.ProductId,
-                VariantId = item.VariantId,
-                WarehouseId = entity.WarehouseId,
-                Type = StockLedgerType.PurchaseEntry,
-                ReferenceId = entity.Id,
-                QuantityInBaseUnit = baseQty,
-                UnitPrice = item.CostPrice,
-                TotalAmount = item.TotalCost,
-                Date = entity.PurchaseDate,
-                Remarks = $"Purchase Entry — Invoice: {entity.InvoiceNo}",
-                BusinessId = dto.BusinessId,
-                BranchId = dto.BranchId
-            };
-
-            await _stockLedgerRepository.AddAsync(ledgerEntry);
+            await _stockLedgerRepository.AddAsync(CreatePurchaseStockLedgerEntry(
+                item, entity.WarehouseId, entity.Id, entity.InvoiceNo, entity.PurchaseDate,
+                dto.BusinessId, dto.BranchId));
         }
 
         entity.TotalAmount = activeItems.Sum(i => i.TotalCost);
@@ -267,35 +246,97 @@ public class PurchaseService : IPurchaseService
             if (item.ProductId <= 0) throw new InvalidOperationException("ProductId is required for all items.");
             if (item.UnitId <= 0) throw new InvalidOperationException("UnitId is required for all items.");
             if (item.Quantity <= 0) throw new InvalidOperationException("Quantity must be greater than zero.");
-            if (item.ConversionFactor <= 0) throw new InvalidOperationException("ConversionFactor must be greater than zero.");
-            if (item.CostPrice < 0) throw new InvalidOperationException("CostPrice cannot be negative.");
         }
     }
 
-    private static void BuildItems(Domain.Purchase purchase, List<CreatePurchaseItemDto> dtoItems, int businessId, int branchId)
+    private static decimal ConvertToBase(decimal qty, decimal rate) => qty * rate;
+
+    private async Task BuildItemsAsync(
+        Domain.Purchase purchase, List<CreatePurchaseItemDto> dtoItems, int businessId, int branchId)
     {
+        var productCache = new Dictionary<int, Domain.Product>();
         decimal total = 0;
+
         foreach (var i in dtoItems)
         {
-            var baseQty = i.Quantity * i.ConversionFactor;
-            var totalCost = i.Quantity * i.CostPrice;
+            if (!productCache.TryGetValue(i.ProductId, out var product))
+            {
+                product = await _productRepository.GetByIdAsync(i.ProductId, businessId, branchId)
+                    ?? throw new InvalidOperationException($"Product {i.ProductId} not found.");
+                productCache[i.ProductId] = product;
+            }
+
+            var unit = product.Units.FirstOrDefault(u => u.Id == i.UnitId && !u.IsDeleted)
+                ?? throw new InvalidOperationException(
+                    $"Unit {i.UnitId} is not valid for product '{product.ProductName}'.");
+
+            var conversionFactor = unit.ConversionFactor > 0 ? unit.ConversionFactor : 1m;
+            var costPrice = ResolveUnitCostPrice(product, unit, i.VariantId);
+            var baseQty = ConvertToBase(i.Quantity, conversionFactor);
+            var totalCost = i.Quantity * costPrice;
             total += totalCost;
 
             purchase.Items.Add(new PurchaseItem
             {
                 ProductId = i.ProductId,
                 VariantId = i.VariantId,
-                UnitId = i.UnitId,
+                UnitId = unit.Id,
                 Quantity = i.Quantity,
-                ConversionFactor = i.ConversionFactor,
+                ConversionFactor = conversionFactor,
                 BaseQuantity = baseQty,
-                CostPrice = i.CostPrice,
+                CostPrice = costPrice,
                 TotalCost = totalCost,
                 BusinessId = businessId,
                 BranchId = branchId
             });
         }
+
         purchase.TotalAmount = total;
+    }
+
+    private static decimal ResolveUnitCostPrice(Domain.Product product, ProductUnit unit, int? variantId)
+    {
+        if (unit.CostPrice.HasValue && unit.CostPrice.Value >= 0)
+            return unit.CostPrice.Value;
+
+        ProductVariant? variant = null;
+        if (variantId.HasValue)
+            variant = product.Variants.FirstOrDefault(v => v.Id == variantId && !v.IsDeleted);
+
+        var baseCost = variant?.CostPriceOverride ?? product.CostPrice;
+        var factor = unit.ConversionFactor > 0 ? unit.ConversionFactor : 1m;
+        return baseCost * factor;
+    }
+
+    private static StockLedger CreatePurchaseStockLedgerEntry(
+        PurchaseItem item,
+        int warehouseId,
+        int purchaseId,
+        string invoiceNo,
+        DateTime purchaseDate,
+        int businessId,
+        int branchId,
+        bool corrected = false)
+    {
+        return new StockLedger
+        {
+            ProductId = item.ProductId,
+            VariantId = item.VariantId,
+            WarehouseId = warehouseId,
+            Type = StockLedgerType.PurchaseEntry,
+            ReferenceId = purchaseId,
+            QuantityInBaseUnit = item.BaseQuantity,
+            UnitId = item.UnitId,
+            UnitQuantity = item.Quantity,
+            UnitPrice = item.CostPrice,
+            TotalAmount = item.TotalCost,
+            Date = purchaseDate,
+            Remarks = corrected
+                ? $"Purchase (Corrected) — Invoice: {invoiceNo}"
+                : $"Purchase Entry — Invoice: {invoiceNo}",
+            BusinessId = businessId,
+            BranchId = branchId
+        };
     }
 
     public async Task<PurchaseDetailDto> VoidPurchaseAsync(int id, VoidPurchaseDto dto)
@@ -318,7 +359,9 @@ public class PurchaseService : IPurchaseService
             WarehouseId        = e.WarehouseId,
             Type               = StockLedgerType.PurchaseReversal,
             ReferenceId        = id,
-            QuantityInBaseUnit = -e.QuantityInBaseUnit,   // was positive, now negative → stock out
+            QuantityInBaseUnit = -e.QuantityInBaseUnit,
+            UnitId             = e.UnitId,
+            UnitQuantity       = e.UnitQuantity.HasValue ? -e.UnitQuantity.Value : null,
             UnitPrice          = e.UnitPrice,
             TotalAmount        = e.TotalAmount,
             Date               = DateTime.UtcNow,

@@ -43,6 +43,7 @@ public class StockLedgerRepository : IStockLedgerRepository
         var data = await query
             .Include(e => e.Product)
             .Include(e => e.Variant)
+            .Include(e => e.Unit)
             .Include(e => e.Warehouse)
             .Include(e => e.Branch)
             .OrderByDescending(e => e.Date)

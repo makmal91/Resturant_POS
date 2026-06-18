@@ -71,6 +71,29 @@ interface ItemRow {
   productCostPrice: number;
 }
 
+const mapProductUnits = (d: Record<string, unknown>): UnitOption[] =>
+  ((d.units ?? d.Units) as Record<string, unknown>[] | undefined ?? []).map((u) => ({
+    id: Number(u.id ?? u.Id ?? 0),
+    unitName: String(u.unitName ?? u.UnitName ?? ''),
+    conversionFactor: Number(u.conversionFactor ?? u.ConversionFactor ?? 1),
+    isBaseUnit: Boolean(u.isBaseUnit ?? u.IsBaseUnit ?? false),
+    costPrice:
+      u.costPrice != null || u.CostPrice != null
+        ? Number(u.costPrice ?? u.CostPrice ?? 0)
+        : null,
+  }));
+
+const mapProductVariants = (d: Record<string, unknown>): VariantOption[] =>
+  ((d.variants ?? d.Variants) as Record<string, unknown>[] | undefined ?? []).map((v) => ({
+    id: Number(v.id ?? v.Id ?? 0),
+    variantName: String(v.variantName ?? v.VariantName ?? ''),
+    sku: String(v.sku ?? v.SKU ?? ''),
+    costPriceOverride:
+      v.costPriceOverride != null || v.CostPriceOverride != null
+        ? Number(v.costPriceOverride ?? v.CostPriceOverride ?? 0)
+        : null,
+  }));
+
 const resolvePurchaseCostPrice = (
   productCostPrice: number,
   units: UnitOption[],
@@ -81,7 +104,7 @@ const resolvePurchaseCostPrice = (
   const unit = units.find((u) => u.id === unitId);
   const variant = variantId != null ? variants.find((v) => v.id === variantId) : undefined;
 
-  if (unit?.costPrice != null && unit.costPrice > 0) {
+  if (unit?.costPrice != null) {
     return unit.costPrice;
   }
 
@@ -217,6 +240,85 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     setErrors({});
   }, [initialData]);
 
+  // Hydrate product units/variants when editing an existing purchase
+  useEffect(() => {
+    if (branchId <= 0 || !initialData?.items?.length) return;
+
+    const productIds = [
+      ...new Set(
+        initialData.items
+          .map((item) => Number(item.productId ?? 0))
+          .filter((id) => id > 0)
+      ),
+    ];
+    if (productIds.length === 0) return;
+
+    let cancelled = false;
+
+    void (async () => {
+      const productMap = new Map<
+        number,
+        { units: UnitOption[]; variants: VariantOption[]; productCostPrice: number; isVariantEnabled: boolean }
+      >();
+
+      await Promise.all(
+        productIds.map(async (productId) => {
+          try {
+            const res = await apiClient.get(`/products/${productId}`, {
+              params: { branchId },
+              headers: { 'X-Branch-Id': String(branchId) },
+            });
+            const d = res.data as Record<string, unknown>;
+            const variants = mapProductVariants(d);
+            productMap.set(productId, {
+              units: mapProductUnits(d),
+              variants,
+              productCostPrice: Number(d.costPrice ?? d.CostPrice ?? 0),
+              isVariantEnabled:
+                Boolean(d.isVariantEnabled ?? d.IsVariantEnabled ?? false) || variants.length > 0,
+            });
+          } catch {
+            /* keep row as-is */
+          }
+        })
+      );
+
+      if (cancelled) return;
+
+      setRows((prev) =>
+        prev.map((row) => {
+          if (row.productId <= 0) return row;
+          const meta = productMap.get(row.productId);
+          if (!meta) return row;
+
+          const costPrice = resolvePurchaseCostPrice(
+            meta.productCostPrice,
+            meta.units,
+            row.unitId,
+            row.variantId,
+            meta.variants
+          );
+
+          return {
+            ...row,
+            units: meta.units,
+            variants: meta.variants,
+            isVariantEnabled: meta.isVariantEnabled,
+            productCostPrice: meta.productCostPrice,
+            costPrice,
+            totalCost: row.quantity * costPrice,
+            unitName:
+              meta.units.find((u) => u.id === row.unitId)?.unitName ?? row.unitName,
+          };
+        })
+      );
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [initialData?.items, branchId]);
+
   // Search products whenever term changes
   useEffect(() => {
     if (!searchTerm.trim() || branchId <= 0) {
@@ -304,25 +406,8 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       isVariantEnabledFromDetail = Boolean(d.isVariantEnabled ?? d.IsVariantEnabled ?? false);
       productCostPrice = Number(d.costPrice ?? d.CostPrice ?? 0);
 
-      units = ((d.units ?? d.Units) as Record<string, unknown>[] | undefined ?? []).map((u) => ({
-        id: Number(u.id ?? u.Id ?? 0),
-        unitName: String(u.unitName ?? u.UnitName ?? ''),
-        conversionFactor: Number(u.conversionFactor ?? u.ConversionFactor ?? 1),
-        isBaseUnit: Boolean(u.isBaseUnit ?? u.IsBaseUnit ?? false),
-        costPrice:
-          u.costPrice != null || u.CostPrice != null
-            ? Number(u.costPrice ?? u.CostPrice ?? 0)
-            : null,
-      }));
-      variants = ((d.variants ?? d.Variants) as Record<string, unknown>[] | undefined ?? []).map((v) => ({
-        id: Number(v.id ?? v.Id ?? 0),
-        variantName: String(v.variantName ?? v.VariantName ?? ''),
-        sku: String(v.sku ?? v.SKU ?? ''),
-        costPriceOverride:
-          v.costPriceOverride != null || v.CostPriceOverride != null
-            ? Number(v.costPriceOverride ?? v.CostPriceOverride ?? 0)
-            : null,
-      }));
+      units = mapProductUnits(d);
+      variants = mapProductVariants(d);
     } catch {
       /* keep empty */
     }
@@ -748,7 +833,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
 
                   {/* Unit */}
                   <div className="px-1">
-                    {row.units.length > 0 ? (
+                    {row.units.length > 1 ? (
                       <select
                         value={row.unitId}
                         onChange={(e) => updateRow(row.key, { unitId: Number(e.target.value) })}
@@ -762,7 +847,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                         ))}
                       </select>
                     ) : (
-                      <span className="text-sm text-gray-400">{row.unitName || '—'}</span>
+                      <span className="text-sm text-gray-700">{row.unitName || '—'}</span>
                     )}
                   </div>
 
@@ -790,19 +875,14 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                     </span>
                   </div>
 
-                  {/* Cost */}
-                  <div className="px-1">
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={row.costPrice}
-                      onChange={(e) =>
-                        updateRow(row.key, { costPrice: parseFloat(e.target.value) || 0 })
-                      }
-                      disabled={isPosted || row.productId <= 0}
-                      className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-right text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
-                    />
+                  {/* Cost — auto from ProductUnit, not editable */}
+                  <div className="px-1 text-right">
+                    <span
+                      className="inline-block w-full rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5 text-sm text-gray-700"
+                      title="Auto-filled from product unit purchase price"
+                    >
+                      {row.productId > 0 ? row.costPrice.toFixed(2) : '—'}
+                    </span>
                   </div>
 
                   {/* Total */}

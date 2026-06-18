@@ -12,6 +12,7 @@ public class StockLedgerConfiguration : IEntityTypeConfiguration<StockLedger>
         builder.HasKey(s => s.Id);
 
         builder.Property(s => s.QuantityInBaseUnit).HasPrecision(18, 4);
+        builder.Property(s => s.UnitQuantity).HasPrecision(18, 4);
         builder.Property(s => s.UnitPrice).HasPrecision(18, 2).HasDefaultValue(0);
         builder.Property(s => s.TotalAmount).HasPrecision(18, 2).HasDefaultValue(0);
         builder.Property(s => s.Remarks).HasMaxLength(500);
@@ -34,6 +35,11 @@ public class StockLedgerConfiguration : IEntityTypeConfiguration<StockLedger>
         builder.HasOne(s => s.Variant)
             .WithMany()
             .HasForeignKey(s => s.VariantId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(s => s.Unit)
+            .WithMany()
+            .HasForeignKey(s => s.UnitId)
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne(s => s.Warehouse)
