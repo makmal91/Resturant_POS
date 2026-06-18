@@ -263,13 +263,75 @@ export const computeLineTotal = (item: Pick<CartItem, 'quantity' | 'unitPrice' |
   return Math.round((net + tax) * 100) / 100;
 };
 
+// ─── Helper: resolve unit selling price from ProductUnit ────────────────────
+
+export const resolveSaleUnitPrice = (
+  pricingType: 'Retail' | 'Wholesale',
+  unit: PosProductUnit | undefined,
+  variant: PosProductVariant | null | undefined,
+  productRetail: number,
+  productWholesale: number
+): number => {
+  if (pricingType === 'Wholesale') {
+    return unit?.wholesalePrice ?? productWholesale;
+  }
+  if (unit?.sellingPrice != null) {
+    return unit.sellingPrice;
+  }
+  if (variant?.sellingPriceOverride != null && variant.sellingPriceOverride > 0) {
+    return variant.sellingPriceOverride;
+  }
+  return productRetail + (variant?.additionalPrice ?? 0);
+};
+
+export const applyUnitToCartItem = (
+  item: CartItem,
+  unitId: number,
+  pricingType: 'Retail' | 'Wholesale'
+): CartItem => {
+  const unit = item.availableUnits.find((u) => u.unitId === unitId);
+  if (!unit) return item;
+
+  const variant =
+    item.variantId != null
+      ? item.availableVariants.find((v) => v.variantId === item.variantId) ?? null
+      : null;
+  const baseUnit = item.availableUnits.find((u) => u.isBaseUnit) ?? item.availableUnits[0];
+  const productRetail = baseUnit?.sellingPrice ?? item.unitPrice;
+  const productWholesale = baseUnit?.wholesalePrice ?? item.unitPrice;
+  const unitPrice = resolveSaleUnitPrice(pricingType, unit, variant, productRetail, productWholesale);
+
+  const updated: CartItem = {
+    ...item,
+    cartKey: cartKey(item.productId, item.variantId, unitId),
+    unitId,
+    unitName: unit.unitName,
+    conversionFactor: unit.conversionFactor,
+    unitPrice,
+    lineTotal: 0,
+  };
+  updated.lineTotal = computeLineTotal(updated);
+  return updated;
+};
+
 // ─── Helper: build CartItem from lookup ─────────────────────────────────────
 
 export const lookupToCartItem = (lookup: PosProductLookup, pricingType: 'Retail' | 'Wholesale'): CartItem => {
-  const unitId = lookup.matchedUnitId ?? lookup.availableUnits.find(u => u.isBaseUnit)?.unitId ?? 0;
-  const unitName = lookup.matchedUnitName ?? lookup.availableUnits.find(u => u.isBaseUnit)?.unitName ?? '';
-  const conversionFactor = lookup.matchedUnitConversionFactor > 0 ? lookup.matchedUnitConversionFactor : 1;
-  const basePrice = pricingType === 'Wholesale' ? lookup.wholesalePrice : lookup.retailPrice;
+  const unitId = lookup.matchedUnitId ?? lookup.availableUnits.find((u) => u.isBaseUnit)?.unitId ?? 0;
+  const unit = lookup.availableUnits.find((u) => u.unitId === unitId);
+  const unitName = unit?.unitName ?? lookup.matchedUnitName ?? '';
+  const conversionFactor = unit?.conversionFactor ?? lookup.matchedUnitConversionFactor ?? 1;
+  const variant =
+    lookup.matchedVariantId != null
+      ? lookup.availableVariants.find((v) => v.variantId === lookup.matchedVariantId) ?? null
+      : null;
+  const basePrice = resolveSaleUnitPrice(
+    pricingType,
+    unit,
+    variant,
+    lookup.retailPrice,
+    lookup.wholesalePrice
+  );
 
   const item: CartItem = {
     cartKey: cartKey(lookup.productId, lookup.matchedVariantId ?? null, unitId),
@@ -305,10 +367,13 @@ export const groupRowToLookup = (
   variant: PosSearchVariantRow | null,
   pricingType: 'Retail' | 'Wholesale'
 ): PosProductLookup => {
-  const baseUnit = group.units.find(u => u.isBaseUnit) ?? group.units[0];
-  const price = pricingType === 'Wholesale'
-    ? (variant?.wholesalePrice ?? group.wholesalePrice)
-    : (variant?.retailPrice   ?? group.retailPrice);
+  const baseUnit = group.units.find((u) => u.isBaseUnit) ?? group.units[0];
+  const variantLookup = variant
+    ? group.variants.find((v) => v.variantId === variant.variantId) ?? variant
+    : null;
+  const productRetail = variant?.retailPrice ?? baseUnit?.sellingPrice ?? group.retailPrice;
+  const productWholesale = variant?.wholesalePrice ?? baseUnit?.wholesalePrice ?? group.wholesalePrice;
+  const price = pricingType === 'Wholesale' ? productWholesale : productRetail;
 
   return {
     productId: group.productId,
@@ -320,8 +385,8 @@ export const groupRowToLookup = (
     discountType: group.discountType,
     discountValue: group.discountValue,
     barcode: variant?.barcode ?? '',
-    retailPrice: variant?.retailPrice ?? group.retailPrice,
-    wholesalePrice: variant?.wholesalePrice ?? group.wholesalePrice,
+    retailPrice: productRetail,
+    wholesalePrice: productWholesale,
     matchedUnitId: baseUnit?.unitId ?? null,
     matchedUnitName: baseUnit?.unitName ?? '',
     matchedUnitConversionFactor: baseUnit?.conversionFactor ?? 1,
@@ -329,7 +394,7 @@ export const groupRowToLookup = (
     matchedVariantName: variant?.variantName ?? null,
     matchedVariantSize: variant?.size ?? null,
     matchedVariantColor: variant?.color ?? null,
-    matchedVariantSellingPrice: variant ? price : null,
+    matchedVariantSellingPrice: variantLookup ? price : null,
     availableUnits: group.units,
     availableVariants: group.variants.map(v => ({
       variantId: v.variantId,

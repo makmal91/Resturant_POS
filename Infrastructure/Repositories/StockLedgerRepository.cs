@@ -191,6 +191,8 @@ public class StockLedgerRepository : IStockLedgerRepository
 
         if (variantId.HasValue)
             query = query.Where(e => e.VariantId == variantId.Value);
+        else
+            query = query.Where(e => e.VariantId == null);
 
         return await query.SumAsync(e => (decimal?)e.QuantityInBaseUnit) ?? 0m;
     }

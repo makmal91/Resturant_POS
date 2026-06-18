@@ -6,6 +6,7 @@ import { useBranchWriteAccess } from '../../hooks/useBranchWriteAccess';
 import { useBranchStore } from '../../stores/useBranchStore';
 import { salesService } from './salesService';
 import type { SaleInvoiceDto, SaleInvoiceItemResult } from '../pos/posService';
+import { resolveSaleUnitPrice } from '../pos/posService';
 import { ReceiptPrintModal } from '../../components/receipt';
 
 // ─── types ────────────────────────────────────────────────────────────────────
@@ -21,6 +22,8 @@ interface VariantOption {
   id: number;
   variantName: string;
   sku: string;
+  sellingPriceOverride?: number | null;
+  additionalPrice?: number;
 }
 
 interface UnitOption {
@@ -28,6 +31,8 @@ interface UnitOption {
   unitName: string;
   conversionFactor: number;
   isBaseUnit: boolean;
+  sellingPrice?: number | null;
+  wholesalePrice?: number | null;
 }
 
 interface ItemRow {
@@ -48,12 +53,57 @@ interface ItemRow {
   variants: VariantOption[];
   units: UnitOption[];
   isVariantEnabled: boolean;
+  productRetailPrice: number;
+  productWholesalePrice: number;
 }
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+
+const mapVariantsFromProduct = (d: Record<string, unknown>): VariantOption[] =>
+  ((d.variants ?? d.Variants) as Record<string, unknown>[] | undefined ?? []).map((v) => ({
+    id: Number(v.id ?? v.Id ?? 0),
+    variantName: String(v.variantName ?? v.VariantName ?? ''),
+    sku: String(v.sku ?? v.SKU ?? ''),
+    sellingPriceOverride:
+      v.sellingPriceOverride != null || v.SellingPriceOverride != null
+        ? Number(v.sellingPriceOverride ?? v.SellingPriceOverride ?? 0)
+        : null,
+    additionalPrice: Number(v.additionalPrice ?? v.AdditionalPrice ?? 0),
+  }));
+
+const resolveRowUnitPrice = (row: ItemRow, pricingType: 'Retail' | 'Wholesale'): number => {
+  const unit = row.units.find((u) => u.id === row.unitId);
+  const variant = row.variantId != null ? row.variants.find((v) => v.id === row.variantId) : undefined;
+  return resolveSaleUnitPrice(
+    pricingType,
+    unit
+      ? {
+          unitId: unit.id,
+          unitName: unit.unitName,
+          sellingPrice: unit.sellingPrice ?? row.productRetailPrice,
+          wholesalePrice: unit.wholesalePrice ?? row.productWholesalePrice,
+          conversionFactor: unit.conversionFactor,
+          isBaseUnit: unit.isBaseUnit,
+        }
+      : undefined,
+    variant
+      ? {
+          variantId: variant.id,
+          variantName: variant.variantName,
+          size: '',
+          color: '',
+          sku: variant.sku,
+          sellingPriceOverride: variant.sellingPriceOverride ?? 0,
+          additionalPrice: variant.additionalPrice ?? 0,
+        }
+      : null,
+    row.productRetailPrice,
+    row.productWholesalePrice
+  );
+};
 
 const emptyRow = (): ItemRow => ({
   key: crypto.randomUUID(),
@@ -73,6 +123,8 @@ const emptyRow = (): ItemRow => ({
   variants: [],
   units: [],
   isVariantEnabled: false,
+  productRetailPrice: 0,
+  productWholesalePrice: 0,
 });
 
 const rowFromItem = (item: SaleInvoiceItemResult): ItemRow => ({
@@ -93,6 +145,8 @@ const rowFromItem = (item: SaleInvoiceItemResult): ItemRow => ({
   variants: [],
   units: [],
   isVariantEnabled: !!item.variantId,
+  productRetailPrice: item.unitPrice,
+  productWholesalePrice: item.unitPrice,
 });
 
 const inputCls =
@@ -169,20 +223,78 @@ const EditInvoicePage: React.FC = () => {
         const res = await salesService.getById(invoiceId, navBranchId);
         const inv = res.data;
         setInvoice(inv);
-        setRows(inv.items.map(rowFromItem));
+        const initialRows = inv.items.map(rowFromItem);
+        setRows(initialRows);
         // derive bill-level discount (total minus sum of line discounts)
         const lineDiscSum = inv.items.reduce((s, i) => s + i.discountAmount, 0);
         setBillDiscount(Math.max(0, inv.discountAmount - lineDiscSum));
         setPaidAmount(inv.paidAmount);
         setPaymentMethod(inv.paymentMethod);
         setNotes(inv.notes ?? '');
+
+        const branchId = resolveEntityBranchId(inv.branchId);
+        const productIds = [...new Set(initialRows.map((r) => r.productId).filter((pid) => pid > 0))];
+        if (productIds.length > 0 && branchId > 0) {
+          const productMap = new Map<number, { units: UnitOption[]; variants: VariantOption[]; retail: number; wholesale: number; isVariantEnabled: boolean }>();
+          await Promise.all(
+            productIds.map(async (productId) => {
+              try {
+                const detail = await apiClient.get(`/products/${productId}`, {
+                  params: { branchId },
+                  headers: { 'X-Branch-Id': String(branchId) },
+                });
+                const d = detail.data as Record<string, unknown>;
+                const variants = mapVariantsFromProduct(d);
+                const units = ((d.units ?? d.Units) as Record<string, unknown>[] | undefined ?? []).map((u) => ({
+                  id: Number(u.id ?? u.Id ?? 0),
+                  unitName: String(u.unitName ?? u.UnitName ?? ''),
+                  conversionFactor: Number(u.conversionFactor ?? u.ConversionFactor ?? 1),
+                  isBaseUnit: Boolean(u.isBaseUnit ?? u.IsBaseUnit ?? false),
+                  sellingPrice: u.sellingPrice != null || u.SellingPrice != null ? Number(u.sellingPrice ?? u.SellingPrice ?? 0) : null,
+                  wholesalePrice: u.wholesalePrice != null || u.WholesalePrice != null ? Number(u.wholesalePrice ?? u.WholesalePrice ?? 0) : null,
+                }));
+                productMap.set(productId, {
+                  units,
+                  variants,
+                  retail: Number(d.sellingPrice ?? d.SellingPrice ?? 0),
+                  wholesale: Number(d.wholesalePrice ?? d.WholesalePrice ?? 0),
+                  isVariantEnabled: Boolean(d.isVariantEnabled ?? d.IsVariantEnabled ?? false) || variants.length > 0,
+                });
+              } catch {
+                /* keep row as-is */
+              }
+            })
+          );
+
+          const pricingType = inv.pricingType ?? 'Retail';
+          setRows(
+            initialRows.map((row) => {
+              const meta = productMap.get(row.productId);
+              if (!meta) return row;
+              const posUnit = meta.units.find((u) => u.id === row.unitId);
+              const hydratedRow = {
+                ...row,
+                units: meta.units,
+                variants: meta.variants,
+                isVariantEnabled: meta.isVariantEnabled,
+                productRetailPrice: meta.retail,
+                productWholesalePrice: meta.wholesale,
+                conversionFactor: posUnit?.conversionFactor ?? row.conversionFactor,
+              };
+              return {
+                ...hydratedRow,
+                unitPrice: resolveRowUnitPrice(hydratedRow, pricingType),
+              };
+            })
+          );
+        }
       } catch (err) {
         setPageError(getApiErrorMessage(err, 'Failed to load invoice.'));
       } finally {
         setPageLoading(false);
       }
     })();
-  }, [id]);
+  }, [id, navBranchId, resolveEntityBranchId]);
 
   // ── product search ────────────────────────────────────────────────────────
   const openSearch = (rowKey: string) => {
@@ -233,33 +345,72 @@ const EditInvoicePage: React.FC = () => {
 
     const branchId = resolveEntityBranchId(invoice.branchId);
 
-    const [unitsRes, variantsRes] = await Promise.allSettled([
-      apiClient.get<UnitOption[]>(`/products/${product.id}/units`, { params: { branchId } }),
-      product.isVariantEnabled
-        ? apiClient.get<VariantOption[]>(`/products/${product.id}/variants`, { params: { branchId } })
-        : Promise.resolve({ data: [] as VariantOption[] }),
-    ]);
+    const detailRes = await apiClient.get(`/products/${product.id}`, {
+      params: { branchId },
+      headers: { 'X-Branch-Id': String(branchId) },
+    });
+    const d = detailRes.data as Record<string, unknown>;
 
-    const units    = unitsRes.status === 'fulfilled' ? unitsRes.value.data : [];
-    const variants = variantsRes.status === 'fulfilled' ? variantsRes.value.data : [];
+    const productRetailPrice = Number(d.sellingPrice ?? d.SellingPrice ?? 0);
+    const productWholesalePrice = Number(d.wholesalePrice ?? d.WholesalePrice ?? 0);
+    const units = ((d.units ?? d.Units) as Record<string, unknown>[] | undefined ?? []).map((u) => ({
+      id: Number(u.id ?? u.Id ?? 0),
+      unitName: String(u.unitName ?? u.UnitName ?? ''),
+      conversionFactor: Number(u.conversionFactor ?? u.ConversionFactor ?? 1),
+      isBaseUnit: Boolean(u.isBaseUnit ?? u.IsBaseUnit ?? false),
+      sellingPrice: u.sellingPrice != null || u.SellingPrice != null ? Number(u.sellingPrice ?? u.SellingPrice ?? 0) : null,
+      wholesalePrice: u.wholesalePrice != null || u.WholesalePrice != null ? Number(u.wholesalePrice ?? u.WholesalePrice ?? 0) : null,
+    }));
+    const variants = mapVariantsFromProduct(d);
+
     const baseUnit = units.find((u) => u.isBaseUnit) ?? units[0];
+    const hasVariants = product.isVariantEnabled || variants.length > 0;
+    const selectedVariant = hasVariants && variants.length > 0 ? variants[0] : null;
+    const selectedVariantId = selectedVariant?.id ?? null;
+    const pricingType = invoice.pricingType ?? 'Retail';
+
+    const draftRow: ItemRow = {
+      key: searchRowKey ?? '',
+      productId: product.id,
+      productName: product.productName,
+      productCode: product.productCode,
+      variantId: selectedVariantId,
+      variantName: selectedVariant?.variantName ?? '',
+      unitId: baseUnit?.id ?? 0,
+      unitName: baseUnit?.unitName ?? '',
+      conversionFactor: baseUnit?.conversionFactor ?? 1,
+      quantity: 1,
+      unitPrice: 0,
+      discountPercent: 0,
+      discountAmount: 0,
+      taxPercent: 0,
+      variants,
+      units,
+      isVariantEnabled: hasVariants,
+      productRetailPrice,
+      productWholesalePrice,
+    };
+    draftRow.unitPrice = resolveRowUnitPrice(draftRow, pricingType);
 
     setRows((prev) =>
       prev.map((r) =>
         r.key === searchRowKey
           ? {
               ...r,
-              productId: product.id,
-              productName: product.productName,
-              productCode: product.productCode,
-              variantId: null,
-              variantName: '',
-              unitId: baseUnit?.id ?? 0,
-              unitName: baseUnit?.unitName ?? '',
-              conversionFactor: baseUnit?.conversionFactor ?? 1,
-              variants,
-              units,
-              isVariantEnabled: product.isVariantEnabled,
+              productId: draftRow.productId,
+              productName: draftRow.productName,
+              productCode: draftRow.productCode,
+              variantId: draftRow.variantId,
+              variantName: draftRow.variantName,
+              unitId: draftRow.unitId,
+              unitName: draftRow.unitName,
+              conversionFactor: draftRow.conversionFactor,
+              unitPrice: draftRow.unitPrice,
+              variants: draftRow.variants,
+              units: draftRow.units,
+              isVariantEnabled: draftRow.isVariantEnabled,
+              productRetailPrice: draftRow.productRetailPrice,
+              productWholesalePrice: draftRow.productWholesalePrice,
             }
           : r
       )
@@ -267,7 +418,37 @@ const EditInvoicePage: React.FC = () => {
   }, [searchRowKey, invoice, resolveEntityBranchId]);
 
   const updateRow = (key: string, patch: Partial<ItemRow>) => {
-    setRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+    if (!invoice) return;
+    setRows((prev) =>
+      prev.map((r) => {
+        if (r.key !== key) return r;
+        const updated = { ...r, ...patch };
+        if ('unitId' in patch) {
+          const unit = updated.units.find((u) => u.id === updated.unitId);
+          if (unit) {
+            updated.unitName = unit.unitName;
+            updated.conversionFactor = unit.conversionFactor;
+          }
+        }
+        if ('variantId' in patch) {
+          const variant = updated.variants.find((v) => v.id === updated.variantId);
+          updated.variantName = variant?.variantName ?? '';
+        }
+        if ('unitId' in patch || 'variantId' in patch) {
+          if (
+            'unitId' in patch &&
+            updated.variantId == null &&
+            updated.isVariantEnabled &&
+            updated.variants.length > 0
+          ) {
+            updated.variantId = updated.variants[0].id;
+            updated.variantName = updated.variants[0].variantName;
+          }
+          updated.unitPrice = resolveRowUnitPrice(updated, invoice.pricingType ?? 'Retail');
+        }
+        return updated;
+      })
+    );
   };
 
   const removeRow = (key: string) => {
@@ -278,6 +459,14 @@ const EditInvoicePage: React.FC = () => {
   const handleSave = async () => {
     if (!invoice) return;
     if (validRows.length === 0) { setSaveError('At least one item is required.'); return; }
+
+    const missingVariant = validRows.find(
+      (r) => r.isVariantEnabled && r.variants.length > 0 && (r.variantId == null || r.variantId <= 0)
+    );
+    if (missingVariant) {
+      setSaveError(`"${missingVariant.productName}" requires a variant selection.`);
+      return;
+    }
 
     setSaving(true);
     setSaveError('');
@@ -471,8 +660,9 @@ const EditInvoicePage: React.FC = () => {
           </div>
 
           {/* Table header */}
-          <div className="grid grid-cols-[2.5fr_1.2fr_80px_90px_80px_80px_85px_32px] gap-0 border-b border-gray-100 bg-gray-50 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-gray-500">
+          <div className="grid grid-cols-[2fr_1.5fr_1.2fr_80px_90px_80px_80px_85px_32px] gap-0 border-b border-gray-100 bg-gray-50 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-gray-500">
             <div>Product</div>
+            <div>Variant</div>
             <div>Unit</div>
             <div className="text-right">Qty</div>
             <div className="text-right">Unit Price</div>
@@ -493,7 +683,7 @@ const EditInvoicePage: React.FC = () => {
               return (
                 <div
                   key={row.key}
-                  className="grid grid-cols-[2.5fr_1.2fr_80px_90px_80px_80px_85px_32px] items-center gap-0 px-4 py-2 hover:bg-gray-50/60 transition-colors"
+                  className="grid grid-cols-[2fr_1.5fr_1.2fr_80px_90px_80px_80px_85px_32px] items-center gap-0 px-4 py-2 hover:bg-gray-50/60 transition-colors"
                 >
                   {/* Product */}
                   <div className="pr-2">
@@ -501,8 +691,8 @@ const EditInvoicePage: React.FC = () => {
                       <div className="flex items-start gap-1.5">
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-medium text-gray-900">{row.productName}</p>
-                          {row.variantName && (
-                            <p className="text-xs text-gray-400">{row.variantName}</p>
+                          {row.productCode && (
+                            <p className="text-xs text-gray-400">{row.productCode}</p>
                           )}
                         </div>
                         <button
@@ -580,19 +770,37 @@ const EditInvoicePage: React.FC = () => {
                     )}
                   </div>
 
+                  {/* Variant */}
+                  <div className="px-1">
+                    {row.isVariantEnabled && row.variants.length > 0 ? (
+                      <select
+                        value={row.variantId ?? ''}
+                        onChange={(e) =>
+                          updateRow(row.key, {
+                            variantId: e.target.value ? Number(e.target.value) : null,
+                          })
+                        }
+                        disabled={row.productId <= 0}
+                        className={inputCls}
+                      >
+                        <option value="">— Select —</option>
+                        {row.variants.map((v) => (
+                          <option key={v.id} value={v.id}>
+                            {v.variantName}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className="text-gray-300">—</span>
+                    )}
+                  </div>
+
                   {/* Unit */}
                   <div className="px-1">
-                    {row.units.length > 0 ? (
+                    {row.units.length > 1 ? (
                       <select
                         value={row.unitId}
-                        onChange={(e) => {
-                          const u = row.units.find((x) => x.id === Number(e.target.value));
-                          updateRow(row.key, {
-                            unitId: Number(e.target.value),
-                            unitName: u?.unitName ?? '',
-                            conversionFactor: u?.conversionFactor ?? 1,
-                          });
-                        }}
+                        onChange={(e) => updateRow(row.key, { unitId: Number(e.target.value) })}
                         className={inputCls}
                       >
                         {row.units.map((u) => (
@@ -600,7 +808,7 @@ const EditInvoicePage: React.FC = () => {
                         ))}
                       </select>
                     ) : (
-                      <span className="text-sm text-gray-500">{row.unitName || '—'}</span>
+                      <span className="text-sm text-gray-700">{row.unitName || '—'}</span>
                     )}
                   </div>
 
@@ -614,14 +822,11 @@ const EditInvoicePage: React.FC = () => {
                     />
                   </div>
 
-                  {/* Unit Price */}
-                  <div className="px-1">
-                    <input
-                      type="number" min="0" step="0.01"
-                      value={row.unitPrice}
-                      onChange={(e) => updateRow(row.key, { unitPrice: parseFloat(e.target.value) || 0 })}
-                      className={`${inputCls} text-right`}
-                    />
+                  {/* Unit Price — auto from ProductUnit */}
+                  <div className="px-1 text-right">
+                    <span className="inline-block w-full rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5 text-sm text-gray-700">
+                      {row.productId > 0 ? fmt(row.unitPrice) : '—'}
+                    </span>
                   </div>
 
                   {/* Disc % */}

@@ -270,8 +270,10 @@ public class PurchaseService : IPurchaseService
                 ?? throw new InvalidOperationException(
                     $"Unit {i.UnitId} is not valid for product '{product.ProductName}'.");
 
+            var (variant, variantId) = ResolveProductVariant(product, i.VariantId);
+
             var conversionFactor = unit.ConversionFactor > 0 ? unit.ConversionFactor : 1m;
-            var costPrice = ResolveUnitCostPrice(product, unit, i.VariantId);
+            var costPrice = ResolveUnitCostPrice(product, unit, variant);
             var baseQty = ConvertToBase(i.Quantity, conversionFactor);
             var totalCost = i.Quantity * costPrice;
             total += totalCost;
@@ -279,7 +281,7 @@ public class PurchaseService : IPurchaseService
             purchase.Items.Add(new PurchaseItem
             {
                 ProductId = i.ProductId,
-                VariantId = i.VariantId,
+                VariantId = variantId,
                 UnitId = unit.Id,
                 Quantity = i.Quantity,
                 ConversionFactor = conversionFactor,
@@ -294,14 +296,34 @@ public class PurchaseService : IPurchaseService
         purchase.TotalAmount = total;
     }
 
-    private static decimal ResolveUnitCostPrice(Domain.Product product, ProductUnit unit, int? variantId)
+    private static (ProductVariant? Variant, int? VariantId) ResolveProductVariant(
+        Domain.Product product, int? requestedVariantId)
+    {
+        var activeVariants = product.Variants.Where(v => !v.IsDeleted && v.Status).ToList();
+        var hasVariants = product.IsVariantEnabled || activeVariants.Count > 0;
+
+        if (!hasVariants)
+            return (null, null);
+
+        if (requestedVariantId.HasValue)
+        {
+            var matched = activeVariants.FirstOrDefault(v => v.Id == requestedVariantId.Value)
+                ?? throw new InvalidOperationException(
+                    $"Variant {requestedVariantId} is not valid for product '{product.ProductName}'.");
+            return (matched, matched.Id);
+        }
+
+        var fallback = activeVariants.FirstOrDefault()
+            ?? throw new InvalidOperationException(
+                $"Product '{product.ProductName}' requires a variant selection.");
+
+        return (fallback, fallback.Id);
+    }
+
+    private static decimal ResolveUnitCostPrice(Domain.Product product, ProductUnit unit, ProductVariant? variant)
     {
         if (unit.CostPrice.HasValue && unit.CostPrice.Value >= 0)
             return unit.CostPrice.Value;
-
-        ProductVariant? variant = null;
-        if (variantId.HasValue)
-            variant = product.Variants.FirstOrDefault(v => v.Id == variantId && !v.IsDeleted);
 
         var baseCost = variant?.CostPriceOverride ?? product.CostPrice;
         var factor = unit.ConversionFactor > 0 ? unit.ConversionFactor : 1m;

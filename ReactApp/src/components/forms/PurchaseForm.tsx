@@ -473,6 +473,9 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
           );
           updated.totalCost = updated.quantity * updated.costPrice;
         }
+        if ('unitId' in field && updated.variantId == null && updated.isVariantEnabled && updated.variants.length > 0) {
+          updated.variantId = updated.variants[0].id;
+        }
         return updated;
       })
     );
@@ -503,10 +506,19 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     if (branchId <= 0) nextErrors.branchId = branchError ?? 'Branch is required';
 
     const invalidRows = rows.filter((r) => r.productId > 0 && (r.unitId <= 0 || r.quantity <= 0));
+    const missingVariantRows = rows.filter(
+      (r) =>
+        r.productId > 0 &&
+        r.isVariantEnabled &&
+        r.variants.length > 0 &&
+        (r.variantId == null || r.variantId <= 0)
+    );
     const emptyRows = rows.filter((r) => r.productId <= 0);
 
     if (rows.every((r) => r.productId <= 0)) {
       nextErrors.items = 'At least one product is required';
+    } else if (missingVariantRows.length > 0) {
+      nextErrors.items = 'All variant-enabled products must have a variant selected';
     } else if (invalidRows.length > 0) {
       nextErrors.items = 'All added items must have a unit and quantity greater than zero';
     } else if (emptyRows.length > 0 && rows.length > 1) {

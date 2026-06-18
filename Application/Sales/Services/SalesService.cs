@@ -201,33 +201,22 @@ public class SalesService : ISalesService
     {
         ValidateInvoiceDto(dto.BranchId, dto.WarehouseId, dto.Items);
         ValidateCreditSale(dto.IsCreditSale, dto.CustomerId);
-        await ValidateStockAvailabilityAsync(dto.BusinessId, dto.BranchId, dto.WarehouseId, dto.Items);
+
+        var resolvedItems = await ResolveSaleItemsAsync(dto.Items, dto.PricingType, dto.BusinessId, dto.BranchId);
+        await ValidateStockAvailabilityFromResolvedAsync(dto.BusinessId, dto.BranchId, dto.WarehouseId, resolvedItems);
 
         var invoiceNo = await GenerateInvoiceNoAsync(dto.BranchId);
-        var invoice = BuildInvoice(invoiceNo, dto);
+        var invoice = BuildInvoice(invoiceNo, dto, resolvedItems);
         invoice.Status = SaleInvoiceStatus.Completed;
 
         await _salesRepository.AddAsync(invoice);
         await _salesRepository.SaveChangesAsync();
 
-        // Write stock ledger — one SaleEntry (stock OUT) per invoice item
         foreach (var item in invoice.Items.Where(i => !i.IsDeleted))
         {
-            await _stockLedgerRepository.AddAsync(new StockLedger
-            {
-                ProductId          = item.ProductId,
-                VariantId          = item.VariantId,
-                WarehouseId        = invoice.WarehouseId,
-                Type               = StockLedgerType.SaleEntry,
-                ReferenceId        = invoice.Id,
-                QuantityInBaseUnit = -item.BaseQuantity,   // negative = stock OUT
-                UnitPrice          = item.UnitPrice,
-                TotalAmount        = item.LineTotal,
-                Date               = invoice.SaleDate,
-                Remarks            = $"Sale — Invoice: {invoice.InvoiceNo}",
-                BusinessId         = dto.BusinessId,
-                BranchId           = dto.BranchId
-            });
+            await _stockLedgerRepository.AddAsync(CreateSaleStockLedgerEntry(
+                item, invoice.WarehouseId, invoice.Id, invoice.InvoiceNo, invoice.SaleDate,
+                dto.BusinessId, dto.BranchId));
         }
         await _stockLedgerRepository.SaveChangesAsync();
 
@@ -284,7 +273,8 @@ public class SalesService : ISalesService
             Items = dto.Items
         };
 
-        var invoice = BuildInvoice(invoiceNo, createDto);
+        var resolvedItems = await ResolveSaleItemsAsync(dto.Items, dto.PricingType, dto.BusinessId, dto.BranchId);
+        var invoice = BuildInvoice(invoiceNo, createDto, resolvedItems);
         invoice.Status = SaleInvoiceStatus.Held;
         invoice.HeldNote = dto.HeldNote;
 
@@ -326,7 +316,7 @@ public class SalesService : ISalesService
     private Task<string> GenerateInvoiceNoAsync(int branchId)
         => _codeGenerator.GenerateAsync(CodeModuleNames.SalesInvoice, branchId);
 
-    private static SaleInvoice BuildInvoice(string invoiceNo, CreateSaleInvoiceDto dto)
+    private static SaleInvoice BuildInvoice(string invoiceNo, CreateSaleInvoiceDto dto, List<ResolvedSaleLineItem> resolvedItems)
     {
         var invoice = new SaleInvoice
         {
@@ -358,7 +348,7 @@ public class SalesService : ISalesService
         decimal totalDiscount = 0;
         decimal totalTax = 0;
 
-        foreach (var i in dto.Items)
+        foreach (var i in resolvedItems)
         {
             var lineDiscount = i.DiscountAmount > 0
                 ? i.DiscountAmount
@@ -373,15 +363,14 @@ public class SalesService : ISalesService
             totalDiscount += lineDiscount;
             totalTax += lineTax;
 
-            var cf = i.ConversionFactor > 0 ? i.ConversionFactor : 1m;
             invoice.Items.Add(new SaleInvoiceItem
             {
                 ProductId        = i.ProductId,
                 VariantId        = i.VariantId,
                 UnitId           = i.UnitId,
                 Quantity         = i.Quantity,
-                ConversionFactor = cf,
-                BaseQuantity     = i.Quantity * cf,
+                ConversionFactor = i.ConversionFactor,
+                BaseQuantity     = i.BaseQuantity,
                 UnitPrice        = i.UnitPrice,
                 DiscountPercent  = i.DiscountPercent,
                 DiscountAmount   = lineDiscount,
@@ -416,8 +405,8 @@ public class SalesService : ISalesService
             throw new InvalidOperationException("Customer is required for credit sales.");
     }
 
-    private async Task ValidateStockAvailabilityAsync(
-        int businessId, int branchId, int warehouseId, List<CreateSaleInvoiceItemDto> items)
+    private async Task ValidateStockAvailabilityFromResolvedAsync(
+        int businessId, int branchId, int warehouseId, List<ResolvedSaleLineItem> items)
     {
         var productIds = items.Select(i => i.ProductId).Distinct();
         var settings = await _productRepository.GetStockSettingsByIdsAsync(businessId, branchId, productIds);
@@ -428,11 +417,8 @@ public class SalesService : ISalesService
             if (!settings.TryGetValue(item.ProductId, out var productSettings) || productSettings.AllowNegativeStock)
                 continue;
 
-            var cf = item.ConversionFactor > 0 ? item.ConversionFactor : 1m;
-            var baseQty = item.Quantity * cf;
             var key = $"{item.ProductId}:{item.VariantId ?? 0}";
-
-            requiredByKey[key] = requiredByKey.GetValueOrDefault(key) + baseQty;
+            requiredByKey[key] = requiredByKey.GetValueOrDefault(key) + item.BaseQuantity;
         }
 
         foreach (var (key, requiredQty) in requiredByKey)
@@ -448,6 +434,144 @@ public class SalesService : ISalesService
             if (requiredQty > available)
                 throw new InvalidOperationException("Insufficient stock for this product.");
         }
+    }
+
+    private async Task ValidateStockAvailabilityAsync(
+        int businessId, int branchId, int warehouseId, PricingType pricingType, List<CreateSaleInvoiceItemDto> items)
+    {
+        var resolved = await ResolveSaleItemsAsync(items, pricingType, businessId, branchId);
+        await ValidateStockAvailabilityFromResolvedAsync(businessId, branchId, warehouseId, resolved);
+    }
+
+    private static decimal ConvertToBase(decimal qty, decimal rate) => qty * rate;
+
+    private sealed record ResolvedSaleLineItem(
+        int ProductId,
+        int? VariantId,
+        int UnitId,
+        decimal Quantity,
+        decimal ConversionFactor,
+        decimal BaseQuantity,
+        decimal UnitPrice,
+        decimal DiscountPercent,
+        decimal DiscountAmount,
+        decimal TaxPercent,
+        string? ItemNote);
+
+    private async Task<List<ResolvedSaleLineItem>> ResolveSaleItemsAsync(
+        List<CreateSaleInvoiceItemDto> items,
+        PricingType pricingType,
+        int businessId,
+        int branchId)
+    {
+        var productCache = new Dictionary<int, ProductEntity>();
+        var resolved = new List<ResolvedSaleLineItem>();
+
+        foreach (var i in items)
+        {
+            if (!productCache.TryGetValue(i.ProductId, out var product))
+            {
+                product = await _productRepository.GetByIdAsync(i.ProductId, businessId, branchId)
+                    ?? throw new InvalidOperationException($"Product {i.ProductId} not found.");
+                productCache[i.ProductId] = product;
+            }
+
+            var unit = product.Units.FirstOrDefault(u => u.Id == i.UnitId && !u.IsDeleted)
+                ?? throw new InvalidOperationException(
+                    $"Unit {i.UnitId} is not valid for product '{product.ProductName}'.");
+
+            var (variant, variantId) = ResolveProductVariant(product, i.VariantId);
+
+            var conversionFactor = unit.ConversionFactor > 0 ? unit.ConversionFactor : 1m;
+            var unitPrice = ResolveUnitSellingPrice(product, unit, variant, pricingType);
+
+            resolved.Add(new ResolvedSaleLineItem(
+                i.ProductId,
+                variantId,
+                unit.Id,
+                i.Quantity,
+                conversionFactor,
+                ConvertToBase(i.Quantity, conversionFactor),
+                unitPrice,
+                i.DiscountPercent,
+                i.DiscountAmount,
+                i.TaxPercent,
+                i.ItemNote));
+        }
+
+        return resolved;
+    }
+
+    private static (ProductVariant? Variant, int? VariantId) ResolveProductVariant(
+        ProductEntity product, int? requestedVariantId)
+    {
+        var activeVariants = product.Variants.Where(v => !v.IsDeleted && v.Status).ToList();
+        var hasVariants = product.IsVariantEnabled || activeVariants.Count > 0;
+
+        if (!hasVariants)
+            return (null, null);
+
+        if (requestedVariantId.HasValue)
+        {
+            var matched = activeVariants.FirstOrDefault(v => v.Id == requestedVariantId.Value)
+                ?? throw new InvalidOperationException(
+                    $"Variant {requestedVariantId} is not valid for product '{product.ProductName}'.");
+            return (matched, matched.Id);
+        }
+
+        var fallback = activeVariants.FirstOrDefault()
+            ?? throw new InvalidOperationException(
+                $"Product '{product.ProductName}' requires a variant selection.");
+
+        return (fallback, fallback.Id);
+    }
+
+    private static decimal ResolveUnitSellingPrice(
+        ProductEntity product, ProductUnit unit, ProductVariant? variant, PricingType pricingType)
+    {
+        if (pricingType == PricingType.Wholesale)
+        {
+            if (unit.WholesalePrice.HasValue) return unit.WholesalePrice.Value;
+            return product.WholesalePrice;
+        }
+
+        if (unit.SellingPrice.HasValue) return unit.SellingPrice.Value;
+
+        if (variant?.SellingPriceOverride.HasValue == true)
+            return variant.SellingPriceOverride.Value;
+
+        return product.SellingPrice + (variant?.AdditionalPrice ?? 0);
+    }
+
+    private static StockLedger CreateSaleStockLedgerEntry(
+        SaleInvoiceItem item,
+        int warehouseId,
+        int invoiceId,
+        string invoiceNo,
+        DateTime saleDate,
+        int businessId,
+        int branchId,
+        bool corrected = false)
+    {
+        return new StockLedger
+        {
+            ProductId = item.ProductId,
+            VariantId = item.VariantId,
+            WarehouseId = warehouseId,
+            Type = StockLedgerType.SaleEntry,
+            ReferenceId = invoiceId,
+            QuantityInBaseUnit = -item.BaseQuantity,
+            UnitId = item.UnitId,
+            UnitQuantity = item.Quantity,
+            UnitPrice = item.UnitPrice,
+            TotalAmount = item.LineTotal,
+            Date = saleDate,
+            Remarks = corrected
+                ? $"Sale (Corrected) — Invoice: {invoiceNo}"
+                : $"Sale — Invoice: {invoiceNo}",
+            BusinessId = businessId,
+            BranchId = branchId
+        };
     }
 
     private static void ValidateInvoiceDto(int branchId, int warehouseId, List<CreateSaleInvoiceItemDto> items)
@@ -665,10 +789,12 @@ public class SalesService : ISalesService
         {
             ProductId          = e.ProductId,
             VariantId          = e.VariantId,
-            WarehouseId        = e.WarehouseId,   // same warehouse as original
+            WarehouseId        = e.WarehouseId,
             Type               = StockLedgerType.SaleReversal,
             ReferenceId        = id,
-            QuantityInBaseUnit = -e.QuantityInBaseUnit,   // flip sign: was negative, now positive
+            QuantityInBaseUnit = -e.QuantityInBaseUnit,
+            UnitId             = e.UnitId,
+            UnitQuantity       = e.UnitQuantity.HasValue ? -e.UnitQuantity.Value : null,
             UnitPrice          = e.UnitPrice,
             TotalAmount        = e.TotalAmount,
             Date               = DateTime.UtcNow,
@@ -738,6 +864,8 @@ public class SalesService : ISalesService
             Type               = StockLedgerType.SaleReversal,
             ReferenceId        = id,
             QuantityInBaseUnit = -e.QuantityInBaseUnit,
+            UnitId             = e.UnitId,
+            UnitQuantity       = e.UnitQuantity.HasValue ? -e.UnitQuantity.Value : null,
             UnitPrice          = e.UnitPrice,
             TotalAmount        = e.TotalAmount,
             Date               = DateTime.UtcNow,
@@ -748,14 +876,14 @@ public class SalesService : ISalesService
 
         await _stockLedgerRepository.AddRangeAsync(reversals);
 
-        // STEP 2: Soft-delete all existing line items
         foreach (var item in invoice.Items)
             item.IsDeleted = true;
 
-        // STEP 3: Rebuild invoice header and items
+        var resolvedItems = await ResolveSaleItemsAsync(dto.Items, dto.PricingType, dto.BusinessId, dto.BranchId);
+
         decimal subTotal = 0, totalDiscount = 0, totalTax = 0;
 
-        foreach (var i in dto.Items)
+        foreach (var i in resolvedItems)
         {
             var lineDiscount = i.DiscountAmount > 0
                 ? i.DiscountAmount
@@ -770,15 +898,14 @@ public class SalesService : ISalesService
             totalDiscount  += lineDiscount;
             totalTax       += lineTax;
 
-            var cf = i.ConversionFactor > 0 ? i.ConversionFactor : 1m;
             invoice.Items.Add(new SaleInvoiceItem
             {
                 ProductId        = i.ProductId,
                 VariantId        = i.VariantId,
                 UnitId           = i.UnitId,
                 Quantity         = i.Quantity,
-                ConversionFactor = cf,
-                BaseQuantity     = i.Quantity * cf,
+                ConversionFactor = i.ConversionFactor,
+                BaseQuantity     = i.BaseQuantity,
                 UnitPrice        = i.UnitPrice,
                 DiscountPercent  = i.DiscountPercent,
                 DiscountAmount   = lineDiscount,
@@ -823,26 +950,13 @@ public class SalesService : ISalesService
 
         await _salesRepository.SaveChangesAsync();
 
-        await ValidateStockAvailabilityAsync(dto.BusinessId, dto.BranchId, dto.WarehouseId, dto.Items);
+        await ValidateStockAvailabilityAsync(dto.BusinessId, dto.BranchId, dto.WarehouseId, dto.PricingType, dto.Items);
 
-        // STEP 4: Write new SaleEntry ledger records for updated items
         foreach (var item in invoice.Items.Where(i => !i.IsDeleted))
         {
-            await _stockLedgerRepository.AddAsync(new StockLedger
-            {
-                ProductId          = item.ProductId,
-                VariantId          = item.VariantId,
-                WarehouseId        = invoice.WarehouseId,
-                Type               = StockLedgerType.SaleEntry,
-                ReferenceId        = invoice.Id,
-                QuantityInBaseUnit = -item.BaseQuantity,
-                UnitPrice          = item.UnitPrice,
-                TotalAmount        = item.LineTotal,
-                Date               = invoice.SaleDate,
-                Remarks            = $"Sale (Corrected) — Invoice: {invoice.InvoiceNo}",
-                BusinessId         = dto.BusinessId,
-                BranchId           = dto.BranchId
-            });
+            await _stockLedgerRepository.AddAsync(CreateSaleStockLedgerEntry(
+                item, invoice.WarehouseId, invoice.Id, invoice.InvoiceNo, invoice.SaleDate,
+                dto.BusinessId, dto.BranchId, corrected: true));
         }
 
         await _stockLedgerRepository.SaveChangesAsync();

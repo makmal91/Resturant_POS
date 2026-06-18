@@ -21,6 +21,8 @@ import {
   computeLineTotal,
   lookupToCartItem,
   groupRowToLookup,
+  applyUnitToCartItem,
+  resolveSaleUnitPrice,
 } from './posService';
 import { ReceiptPrintModal } from '../../components/receipt';
 import { getApiErrorMessage } from '../../services/api';
@@ -379,6 +381,36 @@ const POSBillingPage: React.FC = () => {
     setBarcodeError('');
   }, [pricingType]);
 
+  const updateItemUnit = useCallback((key: string, unitId: number) => {
+    setCart((prev) =>
+      prev.map((c) => (c.cartKey === key ? applyUnitToCartItem(c, unitId, pricingType) : c))
+    );
+  }, [pricingType]);
+
+  // Recalculate prices when retail/wholesale mode changes
+  useEffect(() => {
+    setCart((prev) => {
+      if (prev.length === 0) return prev;
+      return prev.map((c) => {
+        const unit = c.availableUnits.find((u) => u.unitId === c.unitId);
+        const variant =
+          c.variantId != null
+            ? c.availableVariants.find((v) => v.variantId === c.variantId) ?? null
+            : null;
+        const baseUnit = c.availableUnits.find((u) => u.isBaseUnit) ?? c.availableUnits[0];
+        const unitPrice = resolveSaleUnitPrice(
+          pricingType,
+          unit,
+          variant,
+          baseUnit?.sellingPrice ?? c.unitPrice,
+          baseUnit?.wholesalePrice ?? c.unitPrice
+        );
+        const updated = { ...c, unitPrice, lineTotal: computeLineTotal({ ...c, unitPrice }) };
+        return updated;
+      });
+    });
+  }, [pricingType]);
+
   const updateQuantity = (key: string, qty: number) => {
     if (qty <= 0) { removeFromCart(key); return; }
     setCart((prev) => prev.map((c) => c.cartKey === key ? { ...c, quantity: qty, lineTotal: computeLineTotal({ ...c, quantity: qty }) } : c));
@@ -436,6 +468,16 @@ const POSBillingPage: React.FC = () => {
   // ── Payment ──
   const handlePaymentConfirm = async (method: 'Cash' | 'Card' | 'Mixed' | 'Credit', paid: number, cash: number, card: number) => {
     if (!warehouseId || effectiveBranchId <= 0) return;
+
+    const missingVariant = cart.find(
+      (c) => c.availableVariants.length > 0 && (c.variantId == null || c.variantId <= 0)
+    );
+    if (missingVariant) {
+      setError(`"${missingVariant.productName}" requires a variant selection.`);
+      setShowPayment(false);
+      return;
+    }
+
     setPaymentLoading(true);
     try {
       const isCreditSale = method === 'Credit';
@@ -474,7 +516,7 @@ const POSBillingPage: React.FC = () => {
       cartKey: cartKey(i.productId, i.variantId, i.unitId),
       productId: i.productId, productName: i.productName, productCode: i.productCode, barcode: '',
       variantId: i.variantId, variantName: i.variantName, variantSize: i.variantSize, variantColor: i.variantColor,
-      unitId: i.unitId, unitName: i.unitName, conversionFactor: 1, quantity: i.quantity, unitPrice: i.unitPrice,
+      unitId: i.unitId, unitName: i.unitName, conversionFactor: i.conversionFactor ?? 1, quantity: i.quantity, unitPrice: i.unitPrice,
       discountPercent: i.discountPercent, discountAmount: i.discountAmount, taxPercent: i.taxPercent,
       lineTotal: i.lineTotal, itemNote: i.itemNote, availableUnits: [], availableVariants: []
     })));
@@ -580,6 +622,7 @@ const POSBillingPage: React.FC = () => {
                       item={item}
                       idx={idx}
                       onUpdateQty={updateQuantity}
+                      onUpdateUnit={updateItemUnit}
                       onUpdateDiscount={updateItemDiscount}
                       onRemove={removeFromCart}
                     />
@@ -1001,11 +1044,12 @@ interface CartRowProps {
   item: CartItem;
   idx: number;
   onUpdateQty: (key: string, qty: number) => void;
+  onUpdateUnit: (key: string, unitId: number) => void;
   onUpdateDiscount: (key: string, percent: number) => void;
   onRemove: (key: string) => void;
 }
 
-const CartRow: React.FC<CartRowProps> = React.memo(({ item, idx, onUpdateQty, onUpdateDiscount, onRemove }) => {
+const CartRow: React.FC<CartRowProps> = React.memo(({ item, idx, onUpdateQty, onUpdateUnit, onUpdateDiscount, onRemove }) => {
   const { fmt } = useBusinessCurrency();
   const [editingQty, setEditingQty] = useState(false);
   const [editingDisc, setEditingDisc] = useState(false);
@@ -1041,7 +1085,26 @@ const CartRow: React.FC<CartRowProps> = React.memo(({ item, idx, onUpdateQty, on
         {variantLabel && <p className="text-xs text-purple-600 mt-0.5">{variantLabel}</p>}
         {item.productCode && <p className="text-xs text-gray-400">{item.productCode}</p>}
       </td>
-      <td className="px-4 py-2.5 text-gray-500 text-xs">{item.unitName}</td>
+      <td className="px-4 py-2.5">
+        {item.availableUnits.length > 1 ? (
+          <select
+            value={item.unitId}
+            onChange={(e) => onUpdateUnit(item.cartKey, Number(e.target.value))}
+            className="w-full rounded-md border border-gray-200 bg-white px-1.5 py-1 text-xs text-gray-700 focus:border-blue-400 focus:outline-none"
+          >
+            {item.availableUnits.map((u) => (
+              <option key={u.unitId} value={u.unitId}>
+                {u.unitName}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <span className="text-gray-500 text-xs">{item.unitName}</span>
+        )}
+        {item.conversionFactor !== 1 && (
+          <p className="text-[10px] text-gray-400 mt-0.5">×{item.conversionFactor} base</p>
+        )}
+      </td>
 
       {/* Quantity */}
       <td className="px-4 py-2.5">
