@@ -142,8 +142,8 @@ export default function SalesPersonDashboardPage() {
   const hasBranch = hasBranchContext(selectedBranchId);
   const branchId = hasBranch && selectedBranchId !== null && selectedBranchId > 0 ? selectedBranchId : 0;
 
-  const canPos    = useHasPermission('POS Billing', 'view');
-  const canSales  = useHasPermission('Sales', 'view');
+  const canPos = useHasPermission('POS Billing', 'view');
+  const canSales = useHasPermission('Sales', 'view') || useHasPermission('Orders', 'view');
 
   const [data, setData] = useState<SalesPersonSummaryDto | null>(null);
   const [loading, setLoading] = useState(true);

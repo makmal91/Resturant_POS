@@ -27,8 +27,9 @@ public class PermissionService : IPermissionService
             return true;
 
         var permissions = await _roleRepository.GetPermissionsAsync(roleId);
+        var normalizedModule = PermissionModuleResolver.Normalize(moduleName);
         var modulePermission = permissions.FirstOrDefault(p =>
-            string.Equals(p.ModuleName, moduleName, StringComparison.OrdinalIgnoreCase));
+            PermissionModuleResolver.Matches(p.ModuleName, normalizedModule));
 
         if (modulePermission == null)
             return false;

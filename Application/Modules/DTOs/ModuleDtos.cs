@@ -32,6 +32,7 @@ public class ModulePermissionItemDto
     public string ModuleKey { get; set; } = string.Empty;
     public int? ParentModuleId { get; set; }
     public int DisplayOrder { get; set; }
+    public bool IsViewOnly { get; set; }
     public bool CanView { get; set; }
     public bool CanCreate { get; set; }
     public bool CanEdit { get; set; }

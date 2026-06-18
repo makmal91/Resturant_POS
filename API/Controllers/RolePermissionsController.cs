@@ -40,7 +40,7 @@ public class RolePermissionsController : ControllerBase
     {
         try
         {
-            var permissions = await _rolePermissionService.SaveRolePermissionsAsync(dto);
+            var permissions = await _rolePermissionService.SaveRolePermissionsAsync(dto, ResolveRoleName());
             return Ok(permissions);
         }
         catch (InvalidOperationException ex)
@@ -48,4 +48,7 @@ public class RolePermissionsController : ControllerBase
             return BadRequest(new { message = ex.Message });
         }
     }
+
+    private string? ResolveRoleName() =>
+        User?.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
 }

@@ -34,6 +34,12 @@ public static class ApiPermissionMapper
         ["expense-categories"] = PermissionModules.ExpenseCategories,
         ["CashFlow"] = PermissionModules.CashFlow,
         ["code-sequences"] = PermissionModules.CodeSequences,
+        ["codes"] = PermissionModules.CodeSequences,
+        ["ledger"] = PermissionModules.PartyLedger,
+        ["payments"] = PermissionModules.PartyLedger,
+        ["currencies"] = PermissionModules.SystemSettings,
+        ["cashflow"] = PermissionModules.CashFlow,
+        ["Dashboard"] = PermissionModules.Dashboard,
     };
 
     public static (string Module, string Action)? Resolve(HttpContext context)
@@ -89,6 +95,10 @@ public static class ApiPermissionMapper
             return (uploadModule, uploadAction);
         }
 
+        var posBillingMapping = ResolvePosBillingEndpoint(path, method);
+        if (posBillingMapping != null)
+            return posBillingMapping;
+
         if (path.Contains("/menu/pos", StringComparison.OrdinalIgnoreCase) ||
             path.Contains("/pos", StringComparison.OrdinalIgnoreCase))
         {
@@ -109,6 +119,80 @@ public static class ApiPermissionMapper
         };
 
         return (module, action);
+    }
+
+    /// <summary>
+    /// When POS Billing is required, also accept Sales or Customers module rights
+    /// (for custom roles that manage invoices/customers without an explicit POS grant).
+    /// </summary>
+    public static IReadOnlyList<string> GetAlternateModules(string module) =>
+        string.Equals(module, PermissionModules.PosBilling, StringComparison.OrdinalIgnoreCase)
+            ? [PermissionModules.Sales, PermissionModules.Customers]
+            : Array.Empty<string>();
+
+    private static (string Module, string Action)? ResolvePosBillingEndpoint(string path, string method)
+    {
+        if (!IsPosBillingApiEndpoint(path, method))
+            return null;
+
+        var action = method.ToUpperInvariant() switch
+        {
+            "GET" or "HEAD" => PermissionActions.View,
+            "POST" => PermissionActions.Create,
+            "PUT" or "PATCH" => PermissionActions.Edit,
+            "DELETE" => PermissionActions.Delete,
+            _ => PermissionActions.View
+        };
+
+        return (PermissionModules.PosBilling, action);
+    }
+
+    private static bool IsPosBillingApiEndpoint(string path, string method) =>
+        IsPosCustomerEndpoint(path) || IsPosSalesEndpoint(path, method);
+
+    private static bool IsPosCustomerEndpoint(string path) =>
+        path.Contains("/customers/walk-in", StringComparison.OrdinalIgnoreCase) ||
+        path.Contains("/customers/quick-create", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsPosSalesEndpoint(string path, string method)
+    {
+        if (!path.Contains("/api/sales/", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        if (path.Contains("/product/barcode/", StringComparison.OrdinalIgnoreCase) ||
+            path.Contains("/products/search", StringComparison.OrdinalIgnoreCase) ||
+            path.Contains("/customers/search", StringComparison.OrdinalIgnoreCase) ||
+            path.Contains("/held", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (method.Equals("POST", StringComparison.OrdinalIgnoreCase) &&
+            path.EndsWith("/hold", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (method.Equals("POST", StringComparison.OrdinalIgnoreCase) &&
+            path.EndsWith("/invoice", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (!method.Equals("GET", StringComparison.OrdinalIgnoreCase) &&
+            !method.Equals("HEAD", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var segments = path
+            .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        return segments.Length == 4 &&
+               segments[0].Equals("api", StringComparison.OrdinalIgnoreCase) &&
+               segments[1].Equals("sales", StringComparison.OrdinalIgnoreCase) &&
+               segments[2].Equals("invoice", StringComparison.OrdinalIgnoreCase) &&
+               int.TryParse(segments[3], out _);
     }
 
     private static string? ResolveModuleFromPath(string path)

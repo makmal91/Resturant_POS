@@ -59,7 +59,20 @@ public class PermissionAuthorizationMiddleware
 
         var (module, action) = mapping.Value;
 
-        if (!await permissionService.HasPermissionAsync(roleId, roleName, module, action))
+        var hasPermission = await permissionService.HasPermissionAsync(roleId, roleName, module, action);
+        if (!hasPermission)
+        {
+            foreach (var alternateModule in Authorization.ApiPermissionMapper.GetAlternateModules(module))
+            {
+                if (await permissionService.HasPermissionAsync(roleId, roleName, alternateModule, action))
+                {
+                    hasPermission = true;
+                    break;
+                }
+            }
+        }
+
+        if (!hasPermission)
         {
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
             await context.Response.WriteAsJsonAsync(new

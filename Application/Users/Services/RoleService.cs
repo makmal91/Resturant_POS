@@ -45,11 +45,13 @@ public class RoleService : IRoleService
         return (await _repository.GetByIdAsync(role.Id))!;
     }
 
-    public async Task<RoleDetailDto?> UpdateRoleAsync(int id, UpdateRoleDto dto)
+    public async Task<RoleDetailDto?> UpdateRoleAsync(int id, UpdateRoleDto dto, string? actorRoleName = null)
     {
         var role = await _repository.GetTrackedByIdAsync(id);
         if (role == null)
             return null;
+
+        RoleProtection.EnsureCanModifyRole(actorRoleName, role.Name, dto.Name);
 
         if (string.IsNullOrWhiteSpace(dto.Name))
             throw new InvalidOperationException("Role name is required.");
@@ -65,13 +67,15 @@ public class RoleService : IRoleService
         return await _repository.GetByIdAsync(id);
     }
 
-    public async Task DeleteRoleAsync(int id)
+    public async Task DeleteRoleAsync(int id, string? actorRoleName = null)
     {
         var role = await _repository.GetTrackedByIdAsync(id);
         if (role == null)
             throw new InvalidOperationException("Role not found.");
 
-        if (role.Users.Any())
+        RoleProtection.EnsureCanDeleteRole(actorRoleName, role.Name);
+
+        if (role.Users.Any(u => !u.IsDeleted))
             throw new InvalidOperationException("Cannot delete a role that is assigned to users.");
 
         role.IsDeleted = true;

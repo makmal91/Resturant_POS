@@ -4,19 +4,30 @@ import SalesPersonDashboardPage from './SalesPersonDashboardPage';
 
 /**
  * Routes to the admin control panel or personal sales summary based on role permissions.
- * - Dashboard module → full system overview (managers/admins)
- * - POS Billing / Sales only → logged-in user's sales data only
+ * Cashiers / sales staff → personal sales dashboard (even if Dashboard menu is visible).
+ * Managers / admins with broad access → full system overview.
  */
 export default function DashboardPage() {
-  const canAdminDashboard = useHasPermission('Dashboard', 'view');
-  const canPos            = useHasPermission('POS Billing', 'view');
-  const canSales          = useHasPermission('Sales', 'view');
+  const canPos = useHasPermission('POS Billing', 'view');
+  const canSales = useHasPermission('Sales', 'view') || useHasPermission('Orders', 'view');
+  const canDashboard = useHasPermission('Dashboard', 'view');
+  const canManageUsers = useHasPermission('Users', 'view');
+  const canManageProducts = useHasPermission('Products', 'view');
+  const canViewReports = useHasPermission('Reports', 'view');
 
-  if (canAdminDashboard) {
+  const hasSalesPersonAccess = canPos || canSales;
+  const hasFullAdminAccess =
+    canDashboard && (canManageUsers || canManageProducts || canViewReports);
+
+  if (hasSalesPersonAccess && !hasFullAdminAccess) {
+    return <SalesPersonDashboardPage />;
+  }
+
+  if (canDashboard) {
     return <AdminDashboardPage />;
   }
 
-  if (canPos || canSales) {
+  if (hasSalesPersonAccess) {
     return <SalesPersonDashboardPage />;
   }
 

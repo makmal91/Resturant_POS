@@ -29,7 +29,8 @@ public class RoleRepository : IRoleRepository
                 Id = r.Id,
                 Name = r.Name,
                 Description = r.Description,
-                IsActive = r.IsActive
+                IsActive = r.IsActive,
+                UserCount = r.Users.Count(u => !u.IsDeleted)
             })
             .ToListAsync();
     }
@@ -113,7 +114,23 @@ public class RoleRepository : IRoleRepository
             .Select(p => p.ModuleName.Trim())
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var row in existing.Where(r => !incomingKeys.Contains(r.ModuleName)))
+        var incomingModuleIds = permissions
+            .Where(p => p.ModuleId.HasValue)
+            .Select(p => p.ModuleId!.Value)
+            .ToHashSet();
+
+        foreach (var row in existing.Where(r =>
+                     r.ModuleId.HasValue &&
+                     !incomingModuleIds.Contains(r.ModuleId.Value) &&
+                     !incomingKeys.Contains(r.ModuleName)))
+        {
+            row.IsDeleted = true;
+            row.UpdatedDate = DateTime.UtcNow;
+        }
+
+        foreach (var row in existing.Where(r =>
+                     !r.ModuleId.HasValue &&
+                     !incomingKeys.Contains(r.ModuleName)))
         {
             row.IsDeleted = true;
             row.UpdatedDate = DateTime.UtcNow;
@@ -122,7 +139,11 @@ public class RoleRepository : IRoleRepository
         foreach (var permission in permissions)
         {
             var moduleName = permission.ModuleName.Trim();
-            var row = existing.FirstOrDefault(r =>
+            var row = permission.ModuleId.HasValue
+                ? existing.FirstOrDefault(r => r.ModuleId == permission.ModuleId)
+                : null;
+
+            row ??= existing.FirstOrDefault(r =>
                 string.Equals(r.ModuleName, moduleName, StringComparison.OrdinalIgnoreCase));
 
             if (row == null)
@@ -159,6 +180,11 @@ public class RoleRepository : IRoleRepository
         _cache.Remove(GetPermissionCacheKey(roleId));
     }
 
+    private const string CacheGenerationKey = "perm-cache-gen";
+
+    private long GetCacheGeneration() =>
+        _cache.GetOrCreate(CacheGenerationKey, _ => 0L);
+
     private static RoleDetailDto MapDetail(Role role) => new()
     {
         Id = role.Id,
@@ -182,9 +208,11 @@ public class RoleRepository : IRoleRepository
             .ToList()
     };
 
-    private static string GetPermissionCacheKey(int roleId) => $"role-permissions:{roleId}";
+    private string GetPermissionCacheKey(int roleId) => $"role-permissions:{roleId}:{GetCacheGeneration()}";
 
     private void InvalidatePermissionCache()
     {
+        var current = _cache.Get<long>(CacheGenerationKey);
+        _cache.Set(CacheGenerationKey, current + 1);
     }
 }

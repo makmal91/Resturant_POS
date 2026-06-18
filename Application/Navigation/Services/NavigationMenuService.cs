@@ -87,6 +87,22 @@ public class NavigationMenuService : INavigationMenuService
         if (viewableNames.Contains(module.ModuleName))
             return true;
 
+        if (viewableNames.Any(name =>
+                !string.IsNullOrWhiteSpace(module.ModuleKey) &&
+                PermissionModuleResolver.Matches(name, module.ModuleKey)))
+            return true;
+
+        // Cashiers / sales staff: show home dashboard when they have POS or sales access.
+        if (string.Equals(module.ModuleKey, PermissionModules.Dashboard, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(module.Route, "/", StringComparison.OrdinalIgnoreCase))
+        {
+            return viewableNames.Any(name =>
+                PermissionModuleResolver.Matches(name, PermissionModules.Dashboard) ||
+                PermissionModuleResolver.Matches(name, PermissionModules.PosBilling) ||
+                PermissionModuleResolver.Matches(name, PermissionModules.Orders) ||
+                PermissionModuleResolver.Matches(name, PermissionModules.Sales));
+        }
+
         // Cash flow sub-pages share the main Cash Flow permission.
         if (!string.IsNullOrWhiteSpace(module.ModuleKey) &&
             module.ModuleKey.StartsWith("CashFlow.", StringComparison.OrdinalIgnoreCase) &&

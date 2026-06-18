@@ -74,3 +74,29 @@ export const normalizeModulePermission = (value: Record<string, unknown>): Modul
   canExport: Boolean(value.canExport ?? value.CanExport),
   canUpload: Boolean(value.canUpload ?? value.CanUpload),
 })
+
+const MODULE_ALIAS_GROUPS: string[][] = [
+  ['pos billing', 'pos', 'posbilling'],
+  ['sales', 'orders'],
+  ['dashboard'],
+]
+
+const normalizeAlias = (name: string): string => name.trim().toLowerCase()
+
+export const modulePermissionMatches = (storedName: string, requestedName: string): boolean => {
+  const stored = normalizeAlias(storedName)
+  const requested = normalizeAlias(requestedName)
+  if (stored === requested) return true
+
+  for (const group of MODULE_ALIAS_GROUPS) {
+    if (group.includes(stored) && group.includes(requested)) return true
+  }
+
+  return false
+}
+
+export const findModulePermission = (
+  permissions: ModulePermission[],
+  moduleName: string,
+): ModulePermission | undefined =>
+  permissions.find((permission) => modulePermissionMatches(permission.moduleName, moduleName))

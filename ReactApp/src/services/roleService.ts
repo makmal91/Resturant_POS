@@ -5,6 +5,7 @@ export interface RoleListItem {
   name: string;
   description: string;
   isActive: boolean;
+  userCount: number;
 }
 
 export interface ModuleFormItem {
@@ -47,6 +48,7 @@ export interface RolePermissionItem {
   moduleKey: string;
   parentModuleId: number | null;
   displayOrder: number;
+  isViewOnly: boolean;
   canView: boolean;
   canCreate: boolean;
   canEdit: boolean;
@@ -119,6 +121,7 @@ const normalizePermission = (row: Record<string, unknown>): RolePermissionItem =
       ? null
       : Number(row.parentModuleId ?? row.ParentModuleId ?? 0),
   displayOrder: Number(row.displayOrder ?? row.DisplayOrder ?? 0),
+  isViewOnly: Boolean(row.isViewOnly ?? row.IsViewOnly ?? false),
   canView: Boolean(row.canView ?? row.CanView),
   canCreate: Boolean(row.canCreate ?? row.CanCreate),
   canEdit: Boolean(row.canEdit ?? row.CanEdit),
@@ -139,6 +142,7 @@ export const roleService = {
       name: String(toRecord(row).name ?? toRecord(row).Name ?? ''),
       description: String(toRecord(row).description ?? toRecord(row).Description ?? ''),
       isActive: Boolean(toRecord(row).isActive ?? toRecord(row).IsActive ?? true),
+      userCount: Number(toRecord(row).userCount ?? toRecord(row).UserCount ?? 0),
     }));
   },
 

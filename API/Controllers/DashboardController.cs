@@ -39,9 +39,10 @@ public class DashboardController : ControllerBase
 
         if (!RoleNames.CanBypassPermissions(roleName))
         {
-            var hasPos   = await _permissionService.HasPermissionAsync(roleId, roleName, PermissionModules.PosBilling, PermissionActions.View);
+            var hasPos = await _permissionService.HasPermissionAsync(roleId, roleName, PermissionModules.PosBilling, PermissionActions.View);
             var hasSales = await _permissionService.HasPermissionAsync(roleId, roleName, PermissionModules.Sales, PermissionActions.View);
-            if (!hasPos && !hasSales)
+            var hasOrders = await _permissionService.HasPermissionAsync(roleId, roleName, PermissionModules.Orders, PermissionActions.View);
+            if (!hasPos && !hasSales && !hasOrders)
                 return StatusCode(StatusCodes.Status403Forbidden, new { message = "You do not have permission to view sales summary." });
         }
 

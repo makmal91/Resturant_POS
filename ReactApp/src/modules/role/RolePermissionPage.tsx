@@ -81,6 +81,9 @@ interface GroupCardProps {
   searchTerm: string;
 }
 
+const isViewOnlyModule = (perm?: RolePermissionItem): boolean =>
+  Boolean(perm?.isViewOnly);
+
 const GroupCard: React.FC<GroupCardProps> = ({
   group,
   permissionMap,
@@ -184,12 +187,14 @@ const GroupCard: React.FC<GroupCardProps> = ({
                       <p className={`text-sm font-medium truncate ${hasAccess ? 'text-gray-900' : 'text-gray-500'}`}>
                         {child.moduleName}
                       </p>
-                      <p className="text-xs text-gray-400">Menu access</p>
+                      <p className="text-xs text-gray-400">
+                        {isViewOnlyModule(perm) ? 'View only' : 'Menu access'}
+                      </p>
                     </div>
                   </div>
 
-                  {hasAccess && forms.length > 0 && (
-                    <div className="ml-13 space-y-2 border-l-2 border-gray-100 pl-4">
+                  {hasAccess && forms.length > 0 && !isViewOnlyModule(perm) && (
+                    <div className="ml-12 space-y-2 border-l-2 border-gray-100 pl-4">
                       {forms.map((form) => (
                         <div key={form.formId} className="flex flex-col sm:flex-row sm:items-center gap-2">
                           <p className="text-xs font-medium text-gray-600 min-w-[140px] truncate">
@@ -257,13 +262,12 @@ const RolePermissionPage: React.FC = () => {
     setLoadingRoles(true);
     try {
       const roleList = await roleService.getRoles();
-      const activeRoles = roleList.filter((role) => role.isActive);
-      setRoles(activeRoles);
-      if (selectRoleId && activeRoles.some((role) => role.id === selectRoleId)) {
+      setRoles(roleList);
+      if (selectRoleId && roleList.some((role) => role.id === selectRoleId)) {
         setSelectedRoleId(selectRoleId);
-      } else if (activeRoles.length > 0) {
+      } else if (roleList.length > 0) {
         setSelectedRoleId((current) =>
-          current && activeRoles.some((role) => role.id === current) ? current : activeRoles[0].id,
+          current && roleList.some((role) => role.id === current) ? current : roleList[0].id,
         );
       } else {
         setSelectedRoleId(null);
@@ -364,22 +368,25 @@ const RolePermissionPage: React.FC = () => {
     (moduleId: number, enabled: boolean) => {
       if (!canEditSelectedRole) return;
 
-      applyToModules([moduleId], (item) => ({
-        ...item,
-        canView: enabled,
-        canCreate: enabled ? item.canCreate : false,
-        canEdit: enabled ? item.canEdit : false,
-        canDelete: enabled ? item.canDelete : false,
-        canExport: enabled ? item.canExport : false,
-        canUpload: enabled ? item.canUpload : false,
-        forms: item.forms.map((f) => ({
-          ...f,
+      applyToModules([moduleId], (item) => {
+        const viewOnly = isViewOnlyModule(item);
+        return {
+          ...item,
           canView: enabled,
-          canCreate: enabled ? f.canCreate : false,
-          canEdit: enabled ? f.canEdit : false,
-          canDelete: enabled ? f.canDelete : false,
-        })),
-      }));
+          canCreate: enabled && !viewOnly ? item.canCreate : false,
+          canEdit: enabled && !viewOnly ? item.canEdit : false,
+          canDelete: enabled && !viewOnly ? item.canDelete : false,
+          canExport: enabled ? item.canExport : false,
+          canUpload: enabled && !viewOnly ? item.canUpload : false,
+          forms: item.forms.map((f) => ({
+            ...f,
+            canView: enabled,
+            canCreate: enabled && !viewOnly ? f.canCreate : false,
+            canEdit: enabled && !viewOnly ? f.canEdit : false,
+            canDelete: enabled && !viewOnly ? f.canDelete : false,
+          })),
+        };
+      });
     },
     [applyToModules, canEditSelectedRole]
   );
@@ -393,22 +400,26 @@ const RolePermissionPage: React.FC = () => {
         const p = permissionMap.get(id);
         return p && p.moduleKey !== '';
       });
-      applyToModules(ids, (item) => ({
-        ...item,
-        canView: enabled,
-        canCreate: enabled ? item.canCreate : false,
-        canEdit: enabled ? item.canEdit : false,
-        canDelete: enabled ? item.canDelete : false,
-        canExport: enabled ? item.canExport : false,
-        canUpload: enabled ? item.canUpload : false,
-        forms: item.forms.map((f) => ({
-          ...f,
+      applyToModules(ids, (item) => {
+        const viewOnly = isViewOnlyModule(item);
+        const enableActions = enabled && !viewOnly;
+        return {
+          ...item,
           canView: enabled,
-          canCreate: enabled ? f.canCreate : false,
-          canEdit: enabled ? f.canEdit : false,
-          canDelete: enabled ? f.canDelete : false,
-        })),
-      }));
+          canCreate: enableActions,
+          canEdit: enableActions,
+          canDelete: enableActions,
+          canExport: enabled,
+          canUpload: enableActions,
+          forms: item.forms.map((f) => ({
+            ...f,
+            canView: enabled,
+            canCreate: enableActions,
+            canEdit: enableActions,
+            canDelete: enableActions,
+          })),
+        };
+      });
     },
     [applyToModules, canEditSelectedRole, permissionMap, tree]
   );
@@ -522,7 +533,9 @@ const RolePermissionPage: React.FC = () => {
               className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               {roles.map((role) => (
-                <option key={role.id} value={role.id}>{role.name}</option>
+                <option key={role.id} value={role.id}>
+                  {role.name}{!role.isActive ? ' (Inactive)' : ''}
+                </option>
               ))}
             </select>
             {selectedRole?.description && (
@@ -533,12 +546,12 @@ const RolePermissionPage: React.FC = () => {
                 This role is read-only for your account.
               </p>
             )}
-            <div className="mt-4 flex flex-wrap gap-2">
+            <div className="mt-4 w-full flex flex-wrap gap-2 justify-end">
               {canCreate && (
                 <button
                   type="button"
                   onClick={handleCreateRole}
-                  className="flex-1 min-w-[7rem] rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+                  className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
                 >
                   New Role
                 </button>
@@ -548,7 +561,7 @@ const RolePermissionPage: React.FC = () => {
                   type="button"
                   onClick={handleEditRole}
                   disabled={!canEditSelectedRole}
-                  className="flex-1 min-w-[7rem] rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                 >
                   Edit Role
                 </button>
@@ -558,7 +571,7 @@ const RolePermissionPage: React.FC = () => {
                   type="button"
                   onClick={handleDeleteRole}
                   disabled={!canDeleteSelectedRole}
-                  className="flex-1 min-w-[7rem] rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
+                  className="rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
                 >
                   Delete
                 </button>
@@ -566,7 +579,7 @@ const RolePermissionPage: React.FC = () => {
             </div>
             <div className="mt-4 pt-4 border-t border-gray-100 space-y-2 text-xs text-gray-500">
               <p><span className="font-medium text-gray-700">Menu access</span> — show/hide in sidebar</p>
-              <p><span className="font-medium text-gray-700">Create / Edit / Delete</span> — allowed actions</p>
+              <p><span className="font-medium text-gray-700">Create / Edit / Delete</span> — allowed actions (hidden for reports)</p>
             </div>
           </div>
         </div>
@@ -615,7 +628,9 @@ const RolePermissionPage: React.FC = () => {
                     <div key={mod.id} className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-3 flex items-center justify-between">
                       <div>
                         <p className="text-sm font-semibold text-gray-900">{mod.moduleName}</p>
-                        <p className="text-xs text-gray-400">Standalone module</p>
+                        <p className="text-xs text-gray-400">
+                          {isViewOnlyModule(perm) ? 'View only' : 'Standalone module'}
+                        </p>
                       </div>
                       <label className="relative inline-flex items-center cursor-pointer">
                         <input

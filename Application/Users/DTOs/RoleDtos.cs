@@ -6,6 +6,7 @@ public class RoleListItemDto
     public string Name { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public bool IsActive { get; set; }
+    public int UserCount { get; set; }
 }
 
 public class RoleDetailDto : RoleListItemDto

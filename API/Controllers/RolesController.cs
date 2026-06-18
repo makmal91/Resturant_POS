@@ -54,7 +54,7 @@ public class RolesController : ControllerBase
     {
         try
         {
-            var updated = await _roleService.UpdateRoleAsync(id, dto);
+            var updated = await _roleService.UpdateRoleAsync(id, dto, ResolveRoleName());
             if (updated == null)
                 return NotFound();
 
@@ -71,7 +71,7 @@ public class RolesController : ControllerBase
     {
         try
         {
-            await _roleService.DeleteRoleAsync(id);
+            await _roleService.DeleteRoleAsync(id, ResolveRoleName());
             return NoContent();
         }
         catch (InvalidOperationException ex)
@@ -108,7 +108,6 @@ public class RolesController : ControllerBase
 
     private string? ResolveRoleName()
     {
-        return User?.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ??
-               Request.Headers["X-User-Role"].FirstOrDefault();
+        return User?.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
     }
 }

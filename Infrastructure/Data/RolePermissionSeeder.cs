@@ -75,6 +75,62 @@ public static class RolePermissionSeeder
                 logger.LogWarning(ex, "Failed to seed permissions for role {RoleName}", role.Name);
             }
         }
+
+        await EnsureCashierDashboardAccessAsync(context, logger);
+    }
+
+    private static async Task EnsureCashierDashboardAccessAsync(POSDbContext context, ILogger logger)
+    {
+        try
+        {
+            var cashierRole = await context.Roles
+                .AsNoTracking()
+                .FirstOrDefaultAsync(r => !r.IsDeleted && r.Name == RoleNames.Cashier);
+
+            if (cashierRole == null)
+                return;
+
+            var dashboardModule = await context.PermissionModules
+                .AsNoTracking()
+                .FirstOrDefaultAsync(m => !m.IsDeleted && m.ModuleKey == PermissionModules.Dashboard);
+
+            var dashboardPerm = await context.RolePermissions
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(rp =>
+                    rp.RoleId == cashierRole.Id &&
+                    (rp.ModuleName == PermissionModules.Dashboard ||
+                     (dashboardModule != null && rp.ModuleId == dashboardModule.Id)));
+
+            if (dashboardPerm == null)
+            {
+                await context.RolePermissions.AddAsync(new RolePermission
+                {
+                    RoleId = cashierRole.Id,
+                    ModuleId = dashboardModule?.Id,
+                    ModuleName = PermissionModules.Dashboard,
+                    CanView = true,
+                    CanCreate = false,
+                    CanEdit = false,
+                    CanDelete = false,
+                    CanExport = false,
+                    CanUpload = false,
+                    IsDeleted = false,
+                    CreatedDate = DateTime.UtcNow
+                });
+            }
+            else if (!dashboardPerm.CanView || dashboardPerm.IsDeleted)
+            {
+                dashboardPerm.CanView = true;
+                dashboardPerm.IsDeleted = false;
+                dashboardPerm.UpdatedDate = DateTime.UtcNow;
+            }
+
+            await context.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to ensure cashier dashboard access.");
+        }
     }
 
     private static IReadOnlyList<(string ModuleName, bool CanView, bool CanCreate, bool CanEdit, bool CanDelete, bool CanExport, bool CanUpload)> BuildDefaultPermissions(string roleName)
@@ -123,6 +179,9 @@ public static class RolePermissionSeeder
             return PermissionModules.All
                 .Select(module =>
                 {
+                    if (string.Equals(module, PermissionModules.Dashboard, StringComparison.OrdinalIgnoreCase))
+                        return (module, true, false, false, false, false, false);
+
                     if (string.Equals(module, PermissionModules.PosBilling, StringComparison.OrdinalIgnoreCase))
                         return (module, true, true, false, false, false, false);
 

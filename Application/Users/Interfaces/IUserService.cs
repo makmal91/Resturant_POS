@@ -69,8 +69,8 @@ public interface IRoleService
     Task<IReadOnlyList<RoleListItemDto>> GetRolesAsync();
     Task<RoleDetailDto?> GetRoleByIdAsync(int id);
     Task<RoleDetailDto> CreateRoleAsync(CreateRoleDto dto);
-    Task<RoleDetailDto?> UpdateRoleAsync(int id, UpdateRoleDto dto);
-    Task DeleteRoleAsync(int id);
+    Task<RoleDetailDto?> UpdateRoleAsync(int id, UpdateRoleDto dto, string? actorRoleName = null);
+    Task DeleteRoleAsync(int id, string? actorRoleName = null);
     Task<IReadOnlyList<RolePermissionDto>> GetRolePermissionsAsync(int roleId);
     Task UpdateRolePermissionsAsync(int roleId, UpdateRolePermissionsDto dto, string? actorRoleName = null);
 }

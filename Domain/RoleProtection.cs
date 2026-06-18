@@ -37,4 +37,31 @@ public static class RoleProtection
         throw new InvalidOperationException(
             $"You do not have permission to change permissions for {targetRoleName}.");
     }
+
+    public static void EnsureCanDeleteRole(string? actorRoleName, string targetRoleName)
+    {
+        if (RoleNames.IsMasterUser(targetRoleName))
+            throw new InvalidOperationException("The System Admin role cannot be deleted.");
+
+        if (!RoleNames.IsProtectedRole(targetRoleName))
+            return;
+
+        if (RoleNames.IsMasterUser(actorRoleName ?? string.Empty))
+            return;
+
+        throw new InvalidOperationException(
+            $"You do not have permission to delete the {targetRoleName} role.");
+    }
+
+    public static void EnsureCanModifyRole(string? actorRoleName, string targetRoleName, string? newRoleName = null)
+    {
+        EnsureCanManageRolePermissions(actorRoleName, targetRoleName);
+
+        if (RoleNames.IsMasterUser(targetRoleName) &&
+            !string.IsNullOrWhiteSpace(newRoleName) &&
+            !RoleNames.IsMasterUser(newRoleName))
+        {
+            throw new InvalidOperationException("The System Admin role name cannot be changed.");
+        }
+    }
 }

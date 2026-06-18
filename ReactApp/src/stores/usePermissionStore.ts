@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { authStorage } from '../utils/storage'
 import {
   canBypassPermissionsSession,
+  findModulePermission,
   normalizeModulePermission,
   type ModulePermission,
   type PermissionAction,
@@ -42,9 +43,7 @@ export const usePermissionStore = create<PermissionState>((set, get) => ({
       return true
     }
 
-    const modulePermission = permissions.find(
-      (permission) => permission.moduleName.toLowerCase() === moduleName.toLowerCase()
-    )
+    const modulePermission = findModulePermission(permissions, moduleName)
 
     if (!modulePermission) {
       return false

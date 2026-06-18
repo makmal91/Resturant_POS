@@ -110,28 +110,50 @@ public class ModuleRepository : IModuleRepository
 
     public async Task ReplaceFormPermissionsAsync(int roleId, IReadOnlyList<SaveFormPermissionItemDto> formPermissions)
     {
+        var deduped = formPermissions
+            .GroupBy(fp => fp.FormId)
+            .Select(g => g.Last())
+            .ToList();
+
         var existing = await _context.RoleFormPermissions
+            .IgnoreQueryFilters()
             .Where(rfp => rfp.RoleId == roleId)
             .ToListAsync();
 
-        _context.RoleFormPermissions.RemoveRange(existing);
+        var incomingFormIds = deduped.Select(fp => fp.FormId).ToHashSet();
 
-        foreach (var item in formPermissions)
+        foreach (var row in existing.Where(r => !incomingFormIds.Contains(r.FormId)))
         {
-            await _context.RoleFormPermissions.AddAsync(new Domain.RoleFormPermission
-            {
-                RoleId = roleId,
-                FormId = item.FormId,
-                CanView = item.CanView,
-                CanCreate = item.CanCreate,
-                CanEdit = item.CanEdit,
-                CanDelete = item.CanDelete,
-                IsDeleted = false,
-                CreatedDate = DateTime.UtcNow
-            });
+            row.IsDeleted = true;
+            row.UpdatedDate = DateTime.UtcNow;
         }
 
-        await _context.SaveChangesAsync();
+        foreach (var item in deduped)
+        {
+            var row = existing.FirstOrDefault(r => r.FormId == item.FormId);
+            if (row == null)
+            {
+                await _context.RoleFormPermissions.AddAsync(new Domain.RoleFormPermission
+                {
+                    RoleId = roleId,
+                    FormId = item.FormId,
+                    CanView = item.CanView,
+                    CanCreate = item.CanCreate,
+                    CanEdit = item.CanEdit,
+                    CanDelete = item.CanDelete,
+                    IsDeleted = false,
+                    CreatedDate = DateTime.UtcNow
+                });
+                continue;
+            }
+
+            row.CanView = item.CanView;
+            row.CanCreate = item.CanCreate;
+            row.CanEdit = item.CanEdit;
+            row.CanDelete = item.CanDelete;
+            row.IsDeleted = false;
+            row.UpdatedDate = DateTime.UtcNow;
+        }
     }
 
     private async Task<IReadOnlyList<(int Id, string ModuleKey, string ModuleName, int? ParentModuleId, int DisplayOrder, string? Route, string? Icon)>> GetModuleRowsAsync()

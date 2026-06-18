@@ -1,7 +1,9 @@
+using POSSystem.Application.Common.Constants;
 using POSSystem.Application.Modules.DTOs;
 using POSSystem.Application.Modules.Interfaces;
 using POSSystem.Application.Users.DTOs;
 using POSSystem.Application.Users.Interfaces;
+using POSSystem.Domain;
 
 namespace POSSystem.Application.Modules.Services;
 
@@ -65,6 +67,7 @@ public class RolePermissionService : IRolePermissionService
                     ModuleKey = module.ModuleKey,
                     ParentModuleId = module.ParentModuleId,
                     DisplayOrder = module.DisplayOrder,
+                    IsViewOnly = IsViewOnlyModule(module.ModuleKey),
                     CanView = moduleCanView,
                     CanCreate = moduleCanView && (permission?.CanCreate ?? false),
                     CanEdit = moduleCanView && (permission?.CanEdit ?? false),
@@ -77,11 +80,15 @@ public class RolePermissionService : IRolePermissionService
             .ToList();
     }
 
-    public async Task<IReadOnlyList<ModulePermissionItemDto>> SaveRolePermissionsAsync(SaveRolePermissionsRequestDto dto)
+    public async Task<IReadOnlyList<ModulePermissionItemDto>> SaveRolePermissionsAsync(
+        SaveRolePermissionsRequestDto dto,
+        string? actorRoleName = null)
     {
         var role = await _roleRepository.GetTrackedByIdAsync(dto.RoleId);
         if (role == null)
             throw new InvalidOperationException("Role not found.");
+
+        RoleProtection.EnsureCanManageRolePermissions(actorRoleName, role.Name);
 
         var modules = await _moduleRepository.GetAllModulesFlatAsync();
         var moduleLookup = modules.ToDictionary(m => m.Id);
@@ -89,6 +96,8 @@ public class RolePermissionService : IRolePermissionService
         var formsByModule = allForms.ToLookup(f => f.ModuleId);
 
         var normalizedFormPermissions = dto.FormPermissions
+            .GroupBy(fp => fp.FormId)
+            .Select(g => g.Last())
             .Select(fp => new SaveFormPermissionItemDto
             {
                 FormId = fp.FormId,
@@ -111,6 +120,8 @@ public class RolePermissionService : IRolePermissionService
                 .Where(fp => moduleFormIds.Contains(fp.FormId))
                 .ToList();
 
+            var viewOnly = IsViewOnlyModule(module.ModuleKey);
+
             if (!item.CanView)
             {
                 foreach (var formPerm in relevantFormPerms)
@@ -121,16 +132,25 @@ public class RolePermissionService : IRolePermissionService
                     formPerm.CanDelete = false;
                 }
             }
+            else if (viewOnly)
+            {
+                foreach (var formPerm in relevantFormPerms)
+                {
+                    formPerm.CanCreate = false;
+                    formPerm.CanEdit = false;
+                    formPerm.CanDelete = false;
+                }
+            }
 
-            var aggregatedCreate = item.CanView && (
+            var aggregatedCreate = !viewOnly && item.CanView && (
                 relevantFormPerms.Count > 0
                     ? relevantFormPerms.Any(fp => fp.CanCreate)
                     : item.CanCreate);
-            var aggregatedEdit = item.CanView && (
+            var aggregatedEdit = !viewOnly && item.CanView && (
                 relevantFormPerms.Count > 0
                     ? relevantFormPerms.Any(fp => fp.CanEdit)
                     : item.CanEdit);
-            var aggregatedDelete = item.CanView && (
+            var aggregatedDelete = !viewOnly && item.CanView && (
                 relevantFormPerms.Count > 0
                     ? relevantFormPerms.Any(fp => fp.CanDelete)
                     : item.CanDelete);
@@ -144,7 +164,7 @@ public class RolePermissionService : IRolePermissionService
                 CanEdit = aggregatedEdit,
                 CanDelete = aggregatedDelete,
                 CanExport = item.CanView && item.CanExport,
-                CanUpload = item.CanView && item.CanUpload
+                CanUpload = !viewOnly && item.CanView && item.CanUpload
             });
         }
 
@@ -178,5 +198,22 @@ public class RolePermissionService : IRolePermissionService
     }
 
     private static string ResolvePermissionModuleName(string moduleKey, string moduleName) =>
-        !string.IsNullOrWhiteSpace(moduleKey) ? moduleKey : moduleName;
+        !string.IsNullOrWhiteSpace(moduleKey) ? moduleKey.Trim() : moduleName.Trim();
+
+    private static bool IsViewOnlyModule(string moduleKey) =>
+        ViewOnlyModuleKeys.Contains(moduleKey);
+
+    private static readonly HashSet<string> ViewOnlyModuleKeys = new(StringComparer.OrdinalIgnoreCase)
+    {
+        PermissionModules.Dashboard,
+        PermissionModules.Reports,
+        PermissionModules.SalesReports,
+        PermissionModules.PurchaseReports,
+        PermissionModules.StockReports,
+        PermissionModules.CustomerOutstandingReport,
+        PermissionModules.SupplierPayableReport,
+        PermissionModules.ProfitLossReport,
+        PermissionModules.CustomerReceivableAgingReport,
+        PermissionModules.SupplierPayableAgingReport,
+    };
 }
