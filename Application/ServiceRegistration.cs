@@ -40,6 +40,10 @@ using POSSystem.Application.Customer.Interfaces;
 using POSSystem.Application.Customer.Services;
 using POSSystem.Application.CashFlow.Interfaces;
 using POSSystem.Application.CashFlow.Services;
+using POSSystem.Application.Ledger.Interfaces;
+using POSSystem.Application.Ledger.Services;
+using POSSystem.Application.Payments.Interfaces;
+using POSSystem.Application.Payments.Services;
 using POSSystem.Application.License.Interfaces;
 using POSSystem.Application.License.Services;
 
@@ -103,6 +107,12 @@ public static class ServiceRegistration
 
         // Register cash flow service
         services.AddScoped<ICashFlowService, CashFlowService>();
+
+        // Party ledger service
+        services.AddScoped<IPartyLedgerService, PartyLedgerService>();
+
+        // Invoice payment service
+        services.AddScoped<IInvoicePaymentService, InvoicePaymentService>();
 
         // License enforcement
         services.AddScoped<ILicenseEnforcementService, LicenseEnforcementService>();

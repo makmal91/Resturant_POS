@@ -68,6 +68,11 @@ public class POSDbContext : DbContext
     public DbSet<CashFlowTransaction> CashFlowTransactions { get; set; } = null!;
     public DbSet<CashRegister> CashRegisters { get; set; } = null!;
 
+    // Party ledger (customer receivable / supplier payable)
+    public DbSet<CustomerLedgerTransaction> CustomerLedgerTransactions { get; set; } = null!;
+    public DbSet<SupplierLedgerTransaction> SupplierLedgerTransactions { get; set; } = null!;
+    public DbSet<InvoicePayment> InvoicePayments { get; set; } = null!;
+
     // Expenses module
     public DbSet<Expense> Expenses { get; set; } = null!;
     public DbSet<ExpenseCategory> ExpenseCategories { get; set; } = null!;
@@ -129,6 +134,9 @@ public class POSDbContext : DbContext
         modelBuilder.ApplyConfiguration(new SaleInvoiceItemConfiguration());
         modelBuilder.ApplyConfiguration(new CashFlowTransactionConfiguration());
         modelBuilder.ApplyConfiguration(new CashRegisterConfiguration());
+        modelBuilder.ApplyConfiguration(new CustomerLedgerTransactionConfiguration());
+        modelBuilder.ApplyConfiguration(new SupplierLedgerTransactionConfiguration());
+        modelBuilder.ApplyConfiguration(new InvoicePaymentConfiguration());
         modelBuilder.ApplyConfiguration(new ExpenseCategoryConfiguration());
         modelBuilder.ApplyConfiguration(new ExpenseConfiguration());
         modelBuilder.ApplyConfiguration(new CodeSequenceConfiguration());

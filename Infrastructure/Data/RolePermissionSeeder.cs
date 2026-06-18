@@ -107,7 +107,7 @@ public static class RolePermissionSeeder
                         (module, true, false, false, false, true, false),
                     PermissionModules.PosBilling =>
                         (module, true, false, false, false, false, false),
-                    PermissionModules.Expenses or PermissionModules.CashFlow =>
+                    PermissionModules.Expenses or PermissionModules.CashFlow or PermissionModules.PartyLedger =>
                         (module, true, true, false, false, true, false),
                     _ => (module, true, true, true, false, true, true)
                 })

@@ -1,6 +1,9 @@
 using POSSystem.Application.Common.Constants;
 using POSSystem.Application.Common.DTOs;
 using POSSystem.Application.Common.Interfaces;
+using POSSystem.Application.Ledger.Interfaces;
+using POSSystem.Application.Payments.DTOs;
+using POSSystem.Application.Payments.Interfaces;
 using POSSystem.Application.Purchase.DTOs;
 using POSSystem.Application.Purchase.Interfaces;
 using POSSystem.Application.Sales.DTOs;
@@ -14,17 +17,23 @@ public class PurchaseService : IPurchaseService
     private readonly IPurchaseRepository _purchaseRepository;
     private readonly IStockLedgerRepository _stockLedgerRepository;
     private readonly ILowStockAlertService _lowStockAlertService;
+    private readonly IPartyLedgerService _partyLedgerService;
+    private readonly IInvoicePaymentService _invoicePaymentService;
     private readonly ICodeGeneratorService _codeGenerator;
 
     public PurchaseService(
         IPurchaseRepository purchaseRepository,
         IStockLedgerRepository stockLedgerRepository,
         ILowStockAlertService lowStockAlertService,
+        IPartyLedgerService partyLedgerService,
+        IInvoicePaymentService invoicePaymentService,
         ICodeGeneratorService codeGenerator)
     {
         _purchaseRepository = purchaseRepository;
         _stockLedgerRepository = stockLedgerRepository;
         _lowStockAlertService = lowStockAlertService;
+        _partyLedgerService = partyLedgerService;
+        _invoicePaymentService = invoicePaymentService;
         _codeGenerator = codeGenerator;
     }
 
@@ -32,9 +41,12 @@ public class PurchaseService : IPurchaseService
         int businessId, int branchId, int page, int pageSize, string? search = null, PurchaseStatus? status = null)
     {
         var result = await _purchaseRepository.GetPagedAsync(businessId, branchId, page, pageSize, search, status);
+        var purchaseIds = result.Data.Select(p => p.Id).ToList();
+        var paidMap = await _invoicePaymentService.GetPaidTotalsForPurchasesAsync(purchaseIds, businessId, branchId);
+
         return new PagedResultDto<PurchaseDto>
         {
-            Data = result.Data.Select(MapDto).ToList(),
+            Data = result.Data.Select(p => MapDto(p, paidMap.GetValueOrDefault(p.Id))).ToList(),
             TotalRecords = result.TotalRecords,
             TotalPages = result.TotalPages,
             CurrentPage = result.CurrentPage
@@ -44,7 +56,11 @@ public class PurchaseService : IPurchaseService
     public async Task<PurchaseDetailDto?> GetPurchaseByIdAsync(int id, int businessId, int branchId)
     {
         var entity = await _purchaseRepository.GetByIdWithItemsAsync(id, businessId, branchId);
-        return entity == null ? null : MapDetailDto(entity);
+        if (entity == null) return null;
+
+        var paid = await _invoicePaymentService.GetTotalPaidForPurchaseAsync(id, businessId, branchId);
+        var payments = await _invoicePaymentService.GetPaymentsForPurchaseAsync(id, businessId, branchId);
+        return MapDetailDto(entity, paid, payments);
     }
 
     public async Task<PurchaseDetailDto> CreatePurchaseAsync(CreatePurchaseDto dto)
@@ -63,6 +79,7 @@ public class PurchaseService : IPurchaseService
             WarehouseId = dto.WarehouseId,
             PurchaseDate = dto.PurchaseDate,
             Notes = dto.Notes?.Trim() ?? string.Empty,
+            IsCreditPurchase = dto.IsCreditPurchase,
             Status = PurchaseStatus.Draft,
             BusinessId = dto.BusinessId,
             BranchId = dto.BranchId
@@ -74,7 +91,7 @@ public class PurchaseService : IPurchaseService
         await _purchaseRepository.SaveChangesAsync();
 
         var created = await _purchaseRepository.GetByIdWithItemsAsync(purchase.Id, dto.BusinessId, dto.BranchId);
-        return MapDetailDto(created!);
+        return await MapDetailDtoAsync(created!, dto.BusinessId, dto.BranchId);
     }
 
     public async Task<PurchaseDetailDto?> UpdatePurchaseAsync(int id, UpdatePurchaseDto dto)
@@ -118,6 +135,7 @@ public class PurchaseService : IPurchaseService
         entity.WarehouseId  = dto.WarehouseId;
         entity.PurchaseDate = dto.PurchaseDate;
         entity.Notes        = dto.Notes?.Trim() ?? string.Empty;
+        entity.IsCreditPurchase = dto.IsCreditPurchase;
         foreach (var item in entity.Items)
             item.IsDeleted = true;
 
@@ -161,7 +179,7 @@ public class PurchaseService : IPurchaseService
         }
 
         var updated = await _purchaseRepository.GetByIdWithItemsAsync(id, dto.BusinessId, dto.BranchId);
-        return MapDetailDto(updated!);
+        return await MapDetailDtoAsync(updated!, dto.BusinessId, dto.BranchId);
     }
 
     public async Task<PurchaseDetailDto> PostPurchaseAsync(int id, PostPurchaseDto dto)
@@ -208,13 +226,20 @@ public class PurchaseService : IPurchaseService
         await _purchaseRepository.SaveChangesAsync();
         await _stockLedgerRepository.SaveChangesAsync();
 
+        if (entity.IsCreditPurchase)
+        {
+            await _partyLedgerService.RecordCreditPurchaseAsync(
+                dto.BusinessId, dto.BranchId, entity.SupplierId,
+                entity.Id, entity.InvoiceNo, entity.TotalAmount, entity.PurchaseDate);
+        }
+
         await _lowStockAlertService.EvaluateAfterStockChangeAsync(
             dto.BusinessId,
             dto.BranchId,
             activeItems.Select(i => new StockChangeItem(i.ProductId, i.VariantId, entity.WarehouseId)));
 
         var posted = await _purchaseRepository.GetByIdWithItemsAsync(id, dto.BusinessId, dto.BranchId);
-        return MapDetailDto(posted!);
+        return await MapDetailDtoAsync(posted!, dto.BusinessId, dto.BranchId);
     }
 
     public async Task DeletePurchaseAsync(int id, int businessId, int branchId)
@@ -305,6 +330,13 @@ public class PurchaseService : IPurchaseService
 
         await _stockLedgerRepository.AddRangeAsync(reversals);
 
+        if (entity.IsCreditPurchase)
+        {
+            await _partyLedgerService.ReverseCreditPurchaseAsync(
+                dto.BusinessId, dto.BranchId, entity.SupplierId,
+                entity.Id, entity.InvoiceNo, entity.TotalAmount, DateTime.UtcNow, dto.Reason);
+        }
+
         entity.Status       = PurchaseStatus.Cancelled;
         entity.VoidedAt     = DateTime.UtcNow;
         entity.VoidedByName = dto.VoidedByName;
@@ -318,7 +350,7 @@ public class PurchaseService : IPurchaseService
             reversals.Select(r => new StockChangeItem(r.ProductId, r.VariantId, r.WarehouseId)));
 
         var result = await _purchaseRepository.GetByIdWithItemsAsync(id, dto.BusinessId, dto.BranchId);
-        return MapDetailDto(result!);
+        return await MapDetailDtoAsync(result!, dto.BusinessId, dto.BranchId);
     }
 
     public async Task<List<SaleLedgerEntryDto>> GetPurchaseLedgerHistoryAsync(
@@ -348,7 +380,14 @@ public class PurchaseService : IPurchaseService
             }).ToList();
     }
 
-    private static PurchaseDto MapDto(Domain.Purchase p) => new()
+    private async Task<PurchaseDetailDto> MapDetailDtoAsync(Domain.Purchase p, int businessId, int branchId)
+    {
+        var paid = await _invoicePaymentService.GetTotalPaidForPurchaseAsync(p.Id, businessId, branchId);
+        var payments = await _invoicePaymentService.GetPaymentsForPurchaseAsync(p.Id, businessId, branchId);
+        return MapDetailDto(p, paid, payments);
+    }
+
+    private static PurchaseDto MapDto(Domain.Purchase p, decimal paidAmount = 0) => new()
     {
         Id = p.Id,
         InvoiceNo = p.InvoiceNo,
@@ -360,7 +399,10 @@ public class PurchaseService : IPurchaseService
         BranchName = p.Branch?.Name ?? string.Empty,
         PurchaseDate = p.PurchaseDate,
         TotalAmount = p.TotalAmount,
+        PaidAmount = paidAmount,
+        BalanceDue = p.TotalAmount - paidAmount,
         Status = p.Status,
+        IsCreditPurchase = p.IsCreditPurchase,
         Notes = p.Notes,
         ItemCount    = p.Items.Count(i => !i.IsDeleted),
         CreatedAt    = p.CreatedAt,
@@ -369,7 +411,8 @@ public class PurchaseService : IPurchaseService
         VoidedByName = p.VoidedByName
     };
 
-    private static PurchaseDetailDto MapDetailDto(Domain.Purchase p) => new()
+    private static PurchaseDetailDto MapDetailDto(
+        Domain.Purchase p, decimal paidAmount, List<InvoicePaymentDto> payments) => new()
     {
         Id           = p.Id,
         InvoiceNo    = p.InvoiceNo,
@@ -381,7 +424,10 @@ public class PurchaseService : IPurchaseService
         BranchName   = p.Branch?.Name ?? string.Empty,
         PurchaseDate = p.PurchaseDate,
         TotalAmount  = p.TotalAmount,
+        PaidAmount   = paidAmount,
+        BalanceDue   = p.TotalAmount - paidAmount,
         Status       = p.Status,
+        IsCreditPurchase = p.IsCreditPurchase,
         Notes        = p.Notes,
         ItemCount    = p.Items.Count(i => !i.IsDeleted),
         CreatedAt    = p.CreatedAt,
@@ -404,6 +450,7 @@ public class PurchaseService : IPurchaseService
                 BaseQuantity = i.BaseQuantity,
                 CostPrice = i.CostPrice,
                 TotalCost = i.TotalCost
-            }).ToList()
+            }).ToList(),
+        Payments = payments
     };
 }

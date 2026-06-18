@@ -107,6 +107,7 @@ export interface CreateSaleInvoicePayload {
   discountAmount: number;
   notes?: string;
   cashierName?: string;
+  isCreditSale?: boolean;
   businessId: number;
   branchId: number;
   items: SaleInvoiceItem[];
@@ -149,6 +150,7 @@ export interface SaleInvoiceDto {
   notes: string | null;
   heldNote: string | null;
   cashierName: string | null;
+  isCreditSale?: boolean;
   branchId: number;
   branchName: string;
   branchAddress?: string;

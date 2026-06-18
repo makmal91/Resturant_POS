@@ -2,6 +2,8 @@ using POSSystem.Application.CashFlow.Interfaces;
 using POSSystem.Application.Common.Constants;
 using POSSystem.Application.Common.DTOs;
 using POSSystem.Application.Common.Interfaces;
+using POSSystem.Application.Ledger.Interfaces;
+using POSSystem.Application.Payments.Interfaces;
 using POSSystem.Application.Product.Interfaces;
 using POSSystem.Application.Sales.DTOs;
 using POSSystem.Application.Sales.Interfaces;
@@ -18,6 +20,8 @@ public class SalesService : ISalesService
     private readonly IProductRepository _productRepository;
     private readonly ILowStockAlertService _lowStockAlertService;
     private readonly ICashFlowService _cashFlowService;
+    private readonly IPartyLedgerService _partyLedgerService;
+    private readonly IInvoicePaymentService _invoicePaymentService;
     private readonly ICodeGeneratorService _codeGenerator;
 
     public SalesService(
@@ -26,6 +30,8 @@ public class SalesService : ISalesService
         IProductRepository productRepository,
         ILowStockAlertService lowStockAlertService,
         ICashFlowService cashFlowService,
+        IPartyLedgerService partyLedgerService,
+        IInvoicePaymentService invoicePaymentService,
         ICodeGeneratorService codeGenerator)
     {
         _salesRepository = salesRepository;
@@ -33,6 +39,8 @@ public class SalesService : ISalesService
         _productRepository = productRepository;
         _lowStockAlertService = lowStockAlertService;
         _cashFlowService = cashFlowService;
+        _partyLedgerService = partyLedgerService;
+        _invoicePaymentService = invoicePaymentService;
         _codeGenerator = codeGenerator;
     }
 
@@ -152,27 +160,36 @@ public class SalesService : ISalesService
             filter.BusinessId, filter.BranchId, filter.Page, filter.PageSize,
             filter.Search, filter.Status, filter.DateFrom, filter.DateTo);
 
+        var invoiceIds = paged.Data.Select(inv => inv.Id).ToList();
+        var paidMap = await _invoicePaymentService.GetPaidTotalsForSaleInvoicesAsync(
+            invoiceIds, filter.BusinessId, filter.BranchId);
+
         return new PagedResultDto<SaleInvoiceListDto>
         {
-            Data = paged.Data.Select(inv => new SaleInvoiceListDto
+            Data = paged.Data.Select(inv =>
             {
-                Id            = inv.Id,
-                InvoiceNo     = inv.InvoiceNo,
-                CustomerName  = inv.Customer?.Name,
-                CustomerPhone = inv.Customer?.Phone,
-                WarehouseName = inv.Warehouse?.Name ?? string.Empty,
-                SaleDate      = inv.SaleDate,
-                GrandTotal    = inv.GrandTotal,
-                PaidAmount    = inv.PaidAmount,
-                PaymentMethod = inv.PaymentMethod.ToString(),
-                Status        = inv.Status,
-                CashierName   = inv.CashierName,
-                ItemCount     = inv.Items.Count(i => !i.IsDeleted),
-                CreatedAt   = inv.CreatedAt,
-                VoidedAt      = inv.VoidedAt,
-                BranchId      = inv.BranchId,
-                WarehouseId   = inv.WarehouseId,
-                CustomerId    = inv.CustomerId
+                var paid = paidMap.GetValueOrDefault(inv.Id, inv.PaidAmount);
+                return new SaleInvoiceListDto
+                {
+                    Id            = inv.Id,
+                    InvoiceNo     = inv.InvoiceNo,
+                    CustomerName  = inv.Customer?.Name,
+                    CustomerPhone = inv.Customer?.Phone,
+                    WarehouseName = inv.Warehouse?.Name ?? string.Empty,
+                    SaleDate      = inv.SaleDate,
+                    GrandTotal    = inv.GrandTotal,
+                    PaidAmount    = paid,
+                    PaymentMethod = inv.PaymentMethod.ToString(),
+                    IsCreditSale  = inv.IsCreditSale,
+                    Status        = inv.Status,
+                    CashierName   = inv.CashierName,
+                    ItemCount     = inv.Items.Count(i => !i.IsDeleted),
+                    CreatedAt   = inv.CreatedAt,
+                    VoidedAt      = inv.VoidedAt,
+                    BranchId      = inv.BranchId,
+                    WarehouseId   = inv.WarehouseId,
+                    CustomerId    = inv.CustomerId
+                };
             }).ToList(),
             TotalRecords = paged.TotalRecords,
             TotalPages   = paged.TotalPages,
@@ -183,6 +200,7 @@ public class SalesService : ISalesService
     public async Task<SaleInvoiceDto> CreateSaleInvoiceAsync(CreateSaleInvoiceDto dto)
     {
         ValidateInvoiceDto(dto.BranchId, dto.WarehouseId, dto.Items);
+        ValidateCreditSale(dto.IsCreditSale, dto.CustomerId);
         await ValidateStockAvailabilityAsync(dto.BusinessId, dto.BranchId, dto.WarehouseId, dto.Items);
 
         var invoiceNo = await GenerateInvoiceNoAsync(dto.BranchId);
@@ -220,12 +238,32 @@ public class SalesService : ISalesService
                 .Where(i => !i.IsDeleted)
                 .Select(i => new StockChangeItem(i.ProductId, i.VariantId, invoice.WarehouseId)));
 
-        var (cash, card) = ResolvePaymentAmounts(invoice);
-        await _cashFlowService.RecordSaleAsync(
-            dto.BusinessId, dto.BranchId, invoice.Id, invoice.InvoiceNo, cash, card, invoice.SaleDate);
+        if (invoice.IsCreditSale)
+        {
+            await _partyLedgerService.RecordCreditSaleAsync(
+                dto.BusinessId, dto.BranchId, invoice.CustomerId!.Value,
+                invoice.Id, invoice.InvoiceNo, invoice.GrandTotal, invoice.SaleDate);
+        }
+        else
+        {
+            var (cash, card) = ResolvePaymentAmounts(invoice);
+            await _cashFlowService.RecordSaleAsync(
+                dto.BusinessId, dto.BranchId, invoice.Id, invoice.InvoiceNo, cash, card, invoice.SaleDate);
+
+            try
+            {
+                await _invoicePaymentService.RecordPosSalePaymentsAsync(invoice);
+            }
+            catch
+            {
+                // Keep sale completed even if payment rows fail; PaidAmount remains from invoice totals.
+                invoice.PaidAmount = cash + card > 0 ? cash + card : invoice.GrandTotal;
+                await _salesRepository.UpdatePaidAmountAsync(invoice.Id, dto.BusinessId, dto.BranchId, invoice.PaidAmount);
+            }
+        }
 
         var created = await _salesRepository.GetByIdAsync(invoice.Id, dto.BusinessId, dto.BranchId);
-        return MapInvoiceDto(created!);
+        return await MapInvoiceDtoAsync(created!);
     }
 
     public async Task<SaleInvoiceDto> HoldBillAsync(HoldBillDto dto)
@@ -254,19 +292,22 @@ public class SalesService : ISalesService
         await _salesRepository.SaveChangesAsync();
 
         var created = await _salesRepository.GetByIdAsync(invoice.Id, dto.BusinessId, dto.BranchId);
-        return MapInvoiceDto(created!);
+        return await MapInvoiceDtoAsync(created!);
     }
 
     public async Task<List<SaleInvoiceDto>> GetHeldBillsAsync(int businessId, int branchId)
     {
         var bills = await _salesRepository.GetHeldBillsAsync(businessId, branchId);
-        return bills.Select(MapInvoiceDto).ToList();
+        var result = new List<SaleInvoiceDto>();
+        foreach (var bill in bills)
+            result.Add(await MapInvoiceDtoAsync(bill));
+        return result;
     }
 
     public async Task<SaleInvoiceDto?> GetInvoiceByIdAsync(int id, int businessId, int branchId)
     {
         var invoice = await _salesRepository.GetByIdAsync(id, businessId, branchId);
-        return invoice == null ? null : MapInvoiceDto(invoice);
+        return invoice == null ? null : await MapInvoiceDtoAsync(invoice);
     }
 
     public async Task CancelHeldBillAsync(int id, int businessId, int branchId)
@@ -295,14 +336,23 @@ public class SalesService : ISalesService
             SaleDate = DateTime.UtcNow,
             PricingType = dto.PricingType,
             PaymentMethod = dto.PaymentMethod,
-            PaidAmount = dto.PaidAmount,
+            PaidAmount = dto.IsCreditSale ? 0 : dto.PaidAmount,
             CashAmount = dto.CashAmount,
             CardAmount = dto.CardAmount,
             Notes = dto.Notes,
             CashierName = dto.CashierName,
+            IsCreditSale = dto.IsCreditSale,
             BusinessId = dto.BusinessId,
             BranchId = dto.BranchId
         };
+
+        if (dto.IsCreditSale)
+        {
+            invoice.PaidAmount = 0;
+            invoice.CashAmount = 0;
+            invoice.CardAmount = 0;
+            invoice.ReturnAmount = 0;
+        }
 
         decimal subTotal = 0;
         decimal totalDiscount = 0;
@@ -351,11 +401,19 @@ public class SalesService : ISalesService
         invoice.DiscountAmount = totalDiscount;
         invoice.TaxAmount = totalTax;
         invoice.GrandTotal = subTotal - totalDiscount + totalTax;
-        invoice.ReturnAmount = dto.PaidAmount > invoice.GrandTotal
-            ? dto.PaidAmount - invoice.GrandTotal
-            : 0;
+        invoice.ReturnAmount = dto.IsCreditSale
+            ? 0
+            : dto.PaidAmount > invoice.GrandTotal
+                ? dto.PaidAmount - invoice.GrandTotal
+                : 0;
 
         return invoice;
+    }
+
+    private static void ValidateCreditSale(bool isCreditSale, int? customerId)
+    {
+        if (isCreditSale && (!customerId.HasValue || customerId.Value <= 0))
+            throw new InvalidOperationException("Customer is required for credit sales.");
     }
 
     private async Task ValidateStockAvailabilityAsync(
@@ -430,6 +488,23 @@ public class SalesService : ISalesService
             }
         }
 
+        if (cash <= 0 && card <= 0 && inv.GrandTotal > 0)
+        {
+            switch (inv.PaymentMethod)
+            {
+                case SalePaymentMethod.Card:
+                    card = inv.GrandTotal;
+                    break;
+                case SalePaymentMethod.Mixed:
+                    cash = inv.CashAmount > 0 || inv.CardAmount > 0 ? inv.CashAmount : inv.GrandTotal;
+                    card = inv.CardAmount;
+                    break;
+                default:
+                    cash = inv.GrandTotal;
+                    break;
+            }
+        }
+
         return (cash, card);
     }
 
@@ -498,7 +573,13 @@ public class SalesService : ISalesService
         };
     }
 
-    private static SaleInvoiceDto MapInvoiceDto(SaleInvoice inv) => new()
+    private async Task<SaleInvoiceDto> MapInvoiceDtoAsync(SaleInvoice inv)
+    {
+        var paid = await _invoicePaymentService.GetTotalPaidForSaleInvoiceAsync(inv.Id, inv.BusinessId, inv.BranchId);
+        return MapInvoiceDto(inv, paid);
+    }
+
+    private static SaleInvoiceDto MapInvoiceDto(SaleInvoice inv, decimal? paidAmount = null) => new()
     {
         Id = inv.Id,
         InvoiceNo = inv.InvoiceNo,
@@ -512,7 +593,8 @@ public class SalesService : ISalesService
         DiscountAmount = inv.DiscountAmount,
         TaxAmount = inv.TaxAmount,
         GrandTotal = inv.GrandTotal,
-        PaidAmount = inv.PaidAmount,
+        PaidAmount = paidAmount ?? inv.PaidAmount,
+        BalanceDue = inv.GrandTotal - (paidAmount ?? inv.PaidAmount),
         ReturnAmount = inv.ReturnAmount,
         PaymentMethod = inv.PaymentMethod,
         CashAmount = inv.CashAmount,
@@ -524,6 +606,7 @@ public class SalesService : ISalesService
         CashierName  = inv.CashierName,
         VoidedAt     = inv.VoidedAt,
         VoidedByName = inv.VoidedByName,
+        IsCreditSale = inv.IsCreditSale,
         BranchId      = inv.BranchId,
         BranchName    = inv.Branch?.Name ?? string.Empty,
         BranchAddress = inv.Branch?.Address ?? string.Empty,
@@ -569,6 +652,9 @@ public class SalesService : ISalesService
                 $"Only completed invoices can be voided. Current status: {invoice.Status}.");
 
         var (prevCash, prevCard) = ResolvePaymentAmounts(invoice);
+        var prevWasCredit = invoice.IsCreditSale;
+        var prevCreditAmount = invoice.GrandTotal;
+        var prevCustomerId = invoice.CustomerId;
 
         // Load the original SaleEntry ledger records for this invoice
         var originalEntries = await _stockLedgerRepository.GetByReferenceAsync(
@@ -606,17 +692,27 @@ public class SalesService : ISalesService
             dto.BranchId,
             reversals.Select(r => new StockChangeItem(r.ProductId, r.VariantId, r.WarehouseId)));
 
-        await _cashFlowService.ReverseSaleAsync(
-            dto.BusinessId, dto.BranchId, invoice.Id, invoice.InvoiceNo,
-            prevCash, prevCard, DateTime.UtcNow, dto.Reason);
+        if (prevWasCredit && prevCustomerId.HasValue)
+        {
+            await _partyLedgerService.ReverseCreditSaleAsync(
+                dto.BusinessId, dto.BranchId, prevCustomerId.Value, invoice.Id, invoice.InvoiceNo,
+                prevCreditAmount, DateTime.UtcNow, dto.Reason);
+        }
+        else
+        {
+            await _cashFlowService.ReverseSaleAsync(
+                dto.BusinessId, dto.BranchId, invoice.Id, invoice.InvoiceNo,
+                prevCash, prevCard, DateTime.UtcNow, dto.Reason);
+        }
 
         var result = await _salesRepository.GetByIdAsync(id, dto.BusinessId, dto.BranchId);
-        return MapInvoiceDto(result!);
+        return await MapInvoiceDtoAsync(result!);
     }
 
     public async Task<SaleInvoiceDto> UpdateSaleInvoiceAsync(int id, UpdateSaleInvoiceDto dto)
     {
         ValidateInvoiceDto(dto.BranchId, dto.WarehouseId, dto.Items);
+        ValidateCreditSale(dto.IsCreditSale, dto.CustomerId);
 
         var invoice = await _salesRepository.GetByIdAsync(id, dto.BusinessId, dto.BranchId)
             ?? throw new InvalidOperationException("Invoice not found.");
@@ -626,6 +722,9 @@ public class SalesService : ISalesService
                 $"Only completed invoices can be edited. Current status: {invoice.Status}.");
 
         var (prevCash, prevCard) = ResolvePaymentAmounts(invoice);
+        var prevWasCredit = invoice.IsCreditSale;
+        var prevCreditAmount = invoice.GrandTotal;
+        var prevCustomerId = invoice.CustomerId;
 
         // STEP 1: Reverse the existing stock ledger entries
         var originalEntries = await _stockLedgerRepository.GetByReferenceAsync(
@@ -703,12 +802,24 @@ public class SalesService : ISalesService
         invoice.CardAmount    = dto.CardAmount;
         invoice.Notes         = dto.Notes;
         invoice.CashierName   = dto.CashierName;
+        invoice.IsCreditSale  = dto.IsCreditSale;
         invoice.SubTotal      = subTotal;
         invoice.DiscountAmount = totalDiscount;
         invoice.TaxAmount     = totalTax;
         invoice.GrandTotal    = subTotal - totalDiscount + totalTax;
-        invoice.ReturnAmount  = dto.PaidAmount > invoice.GrandTotal
-                                    ? dto.PaidAmount - invoice.GrandTotal : 0;
+
+        if (dto.IsCreditSale)
+        {
+            invoice.PaidAmount = 0;
+            invoice.CashAmount = 0;
+            invoice.CardAmount = 0;
+            invoice.ReturnAmount = 0;
+        }
+        else
+        {
+            invoice.ReturnAmount = dto.PaidAmount > invoice.GrandTotal
+                ? dto.PaidAmount - invoice.GrandTotal : 0;
+        }
 
         await _salesRepository.SaveChangesAsync();
 
@@ -743,17 +854,35 @@ public class SalesService : ISalesService
                 .Where(i => !i.IsDeleted)
                 .Select(i => new StockChangeItem(i.ProductId, i.VariantId, invoice.WarehouseId)));
 
-        await _cashFlowService.ReverseSaleAsync(
-            dto.BusinessId, dto.BranchId, invoice.Id, invoice.InvoiceNo,
-            prevCash, prevCard, DateTime.UtcNow, "Invoice correction");
+        if (prevWasCredit && prevCustomerId.HasValue)
+        {
+            await _partyLedgerService.ReverseCreditSaleAsync(
+                dto.BusinessId, dto.BranchId, prevCustomerId.Value, invoice.Id, invoice.InvoiceNo,
+                prevCreditAmount, DateTime.UtcNow, "Invoice correction");
+        }
+        else
+        {
+            await _cashFlowService.ReverseSaleAsync(
+                dto.BusinessId, dto.BranchId, invoice.Id, invoice.InvoiceNo,
+                prevCash, prevCard, DateTime.UtcNow, "Invoice correction");
+        }
 
-        var (newCash, newCard) = ResolvePaymentAmounts(invoice);
-        await _cashFlowService.RecordSaleAsync(
-            dto.BusinessId, dto.BranchId, invoice.Id, invoice.InvoiceNo,
-            newCash, newCard, invoice.SaleDate);
+        if (invoice.IsCreditSale)
+        {
+            await _partyLedgerService.RecordCreditSaleAsync(
+                dto.BusinessId, dto.BranchId, invoice.CustomerId!.Value,
+                invoice.Id, invoice.InvoiceNo, invoice.GrandTotal, invoice.SaleDate);
+        }
+        else
+        {
+            var (newCash, newCard) = ResolvePaymentAmounts(invoice);
+            await _cashFlowService.RecordSaleAsync(
+                dto.BusinessId, dto.BranchId, invoice.Id, invoice.InvoiceNo,
+                newCash, newCard, invoice.SaleDate);
+        }
 
         var result = await _salesRepository.GetByIdAsync(id, dto.BusinessId, dto.BranchId);
-        return MapInvoiceDto(result!);
+        return await MapInvoiceDtoAsync(result!);
     }
 
     public async Task<List<SaleLedgerEntryDto>> GetSaleLedgerHistoryAsync(

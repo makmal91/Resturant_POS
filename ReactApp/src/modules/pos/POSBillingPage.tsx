@@ -23,6 +23,7 @@ import {
   groupRowToLookup,
 } from './posService';
 import { ReceiptPrintModal } from '../../components/receipt';
+import { getApiErrorMessage } from '../../services/api';
 import { useBusinessCurrency } from '../../hooks/useBusinessCurrency';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -40,14 +41,15 @@ function useDebounce<T>(value: T, delay: number): T {
 
 interface PaymentModalProps {
   grandTotal: number;
+  hasCustomer: boolean;
   onClose: () => void;
-  onConfirm: (method: 'Cash' | 'Card' | 'Mixed', paid: number, cash: number, card: number) => void;
+  onConfirm: (method: 'Cash' | 'Card' | 'Mixed' | 'Credit', paid: number, cash: number, card: number) => void;
   loading: boolean;
 }
 
-const PaymentModal: React.FC<PaymentModalProps> = ({ grandTotal, onClose, onConfirm, loading }) => {
+const PaymentModal: React.FC<PaymentModalProps> = ({ grandTotal, hasCustomer, onClose, onConfirm, loading }) => {
   const { fmt } = useBusinessCurrency();
-  const [method, setMethod] = useState<'Cash' | 'Card' | 'Mixed'>('Cash');
+  const [method, setMethod] = useState<'Cash' | 'Card' | 'Mixed' | 'Credit'>('Cash');
   const [cash, setCash] = useState(grandTotal);
   const [card, setCard] = useState(0);
   const cashRef = useRef<HTMLInputElement>(null);
@@ -61,9 +63,13 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ grandTotal, onClose, onConf
     setTimeout(() => { cashRef.current?.focus(); cashRef.current?.select(); }, 50);
   }, [method]);
 
-  const paid = method === 'Mixed' ? cash + card : method === 'Cash' ? cash : card;
-  const change = Math.max(0, paid - grandTotal);
-  const isValid = method === 'Mixed' ? Math.abs(cash + card - grandTotal) < 0.01 : paid >= grandTotal;
+  const paid = method === 'Credit' ? 0 : method === 'Mixed' ? cash + card : method === 'Cash' ? cash : card;
+  const change = method === 'Credit' ? 0 : Math.max(0, paid - grandTotal);
+  const isValid = method === 'Credit'
+    ? hasCustomer
+    : method === 'Mixed'
+      ? Math.abs(cash + card - grandTotal) < 0.01
+      : paid >= grandTotal;
 
   const handleConfirm = () => {
     if (!isValid) return;
@@ -75,10 +81,11 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ grandTotal, onClose, onConf
     );
   };
 
-  const methodBtns: { key: 'Cash' | 'Card' | 'Mixed'; label: string; icon: string }[] = [
+  const methodBtns: { key: 'Cash' | 'Card' | 'Mixed' | 'Credit'; label: string; icon: string }[] = [
     { key: 'Cash', label: 'Cash', icon: '💵' },
     { key: 'Card', label: 'Card', icon: '💳' },
     { key: 'Mixed', label: 'Mixed', icon: '🔀' },
+    { key: 'Credit', label: 'Credit', icon: '📝' },
   ];
 
   return (
@@ -92,7 +99,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ grandTotal, onClose, onConf
 
         <div className="p-6 space-y-5">
           {/* Payment method selector */}
-          <div className="flex gap-2">
+          <div className="grid grid-cols-2 gap-2">
             {methodBtns.map((m) => (
               <button
                 key={m.key}
@@ -100,9 +107,9 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ grandTotal, onClose, onConf
                   setMethod(m.key);
                   if (m.key === 'Cash') { setCash(grandTotal); setCard(0); }
                   else if (m.key === 'Card') { setCash(0); setCard(grandTotal); }
-                  else { setCash(grandTotal); setCard(0); }
+                  else if (m.key === 'Mixed') { setCash(grandTotal); setCard(0); }
                 }}
-                className={`flex-1 py-3 rounded-xl font-semibold text-sm transition-all border ${
+                className={`py-3 rounded-xl font-semibold text-sm transition-all border ${
                   method === m.key
                     ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
                     : 'bg-white border-gray-200 text-gray-600 hover:border-blue-300 hover:text-blue-600'
@@ -113,8 +120,18 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ grandTotal, onClose, onConf
             ))}
           </div>
 
+          {method === 'Credit' && (
+            <div className={`rounded-xl p-4 text-center ${hasCustomer ? 'bg-amber-50 border border-amber-200' : 'bg-red-50 border border-red-200'}`}>
+              <p className="text-sm font-medium text-gray-700">Credit Sale — full amount on customer account</p>
+              <p className="text-2xl font-black text-gray-800 mt-1">{fmt(grandTotal)}</p>
+              {!hasCustomer && (
+                <p className="text-red-600 text-xs mt-2">Select a customer before completing a credit sale.</p>
+              )}
+            </div>
+          )}
+
           {/* Amount inputs */}
-          {method === 'Cash' && (
+          {method !== 'Credit' && method === 'Cash' && (
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1.5">Cash Received</label>
               <input
@@ -126,7 +143,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ grandTotal, onClose, onConf
               />
             </div>
           )}
-          {method === 'Card' && (
+          {method !== 'Credit' && method === 'Card' && (
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1.5">Card Amount</label>
               <input
@@ -137,7 +154,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ grandTotal, onClose, onConf
               />
             </div>
           )}
-          {method === 'Mixed' && (
+          {method !== 'Credit' && method === 'Mixed' && (
             <div className="space-y-3">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">💵 Cash</label>
@@ -162,11 +179,12 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ grandTotal, onClose, onConf
             </div>
           )}
 
-          {/* Change */}
+          {method !== 'Credit' && (
           <div className={`rounded-xl p-4 text-center ${change > 0 ? 'bg-green-50 border border-green-200' : 'bg-gray-50 border border-gray-200'}`}>
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Change</p>
             <p className={`text-3xl font-black mt-1 ${change > 0 ? 'text-green-600' : 'text-gray-400'}`}>{fmt(change)}</p>
           </div>
+          )}
         </div>
 
         <div className="px-6 pb-6 flex gap-3">
@@ -178,7 +196,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ grandTotal, onClose, onConf
             disabled={!isValid || loading}
             className="flex-1 py-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-base transition shadow-sm"
           >
-            {loading ? 'Processing…' : '✓ Confirm Payment'}
+            {loading ? 'Processing…' : method === 'Credit' ? '✓ Confirm Credit Sale' : '✓ Confirm Payment'}
           </button>
         </div>
       </div>
@@ -416,13 +434,16 @@ const POSBillingPage: React.FC = () => {
   };
 
   // ── Payment ──
-  const handlePaymentConfirm = async (method: 'Cash' | 'Card' | 'Mixed', paid: number, cash: number, card: number) => {
+  const handlePaymentConfirm = async (method: 'Cash' | 'Card' | 'Mixed' | 'Credit', paid: number, cash: number, card: number) => {
     if (!warehouseId || effectiveBranchId <= 0) return;
     setPaymentLoading(true);
     try {
+      const isCreditSale = method === 'Credit';
       const res = await posService.createInvoice({
         customerId: customer?.id ?? null, warehouseId, pricingType,
-        paymentMethod: method, paidAmount: paid, cashAmount: cash, cardAmount: card,
+        paymentMethod: isCreditSale ? 'Cash' : method,
+        paidAmount: paid, cashAmount: cash, cardAmount: card,
+        isCreditSale,
         discountAmount: billDiscount,
         cashierName: user?.fullName ?? user?.username ?? undefined,
         businessId, branchId: effectiveBranchId,
@@ -431,8 +452,8 @@ const POSBillingPage: React.FC = () => {
       setCompletedInvoice(res.data);
       setShowPayment(false);
       clearCart();
-    } catch {
-      setError('Failed to save invoice. Please try again.');
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Failed to save invoice. Please try again.'));
     } finally {
       setPaymentLoading(false);
     }
@@ -937,7 +958,7 @@ const POSBillingPage: React.FC = () => {
 
       {/* ══ Modals ══ */}
       {showPayment && (
-        <PaymentModal grandTotal={grandTotal} onClose={() => setShowPayment(false)} onConfirm={handlePaymentConfirm} loading={paymentLoading} />
+        <PaymentModal grandTotal={grandTotal} hasCustomer={!!customer?.id} onClose={() => setShowPayment(false)} onConfirm={handlePaymentConfirm} loading={paymentLoading} />
       )}
       {showHeld && (
         <HeldBillsModal bills={heldBills} onResume={handleResumeBill} onCancel={cancelHeldBill} onClose={() => setShowHeld(false)} />

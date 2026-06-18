@@ -1,3 +1,4 @@
+using POSSystem.Application.Payments.DTOs;
 using POSSystem.Domain;
 
 namespace POSSystem.Application.Purchase.DTOs;
@@ -14,7 +15,10 @@ public class PurchaseDto
     public string BranchName { get; set; } = string.Empty;
     public DateTime PurchaseDate { get; set; }
     public decimal TotalAmount { get; set; }
+    public decimal PaidAmount { get; set; }
+    public decimal BalanceDue { get; set; }
     public PurchaseStatus Status { get; set; }
+    public bool IsCreditPurchase { get; set; }
     public string Notes { get; set; } = string.Empty;
     public int ItemCount { get; set; }
     public DateTime CreatedAt { get; set; }
@@ -26,6 +30,7 @@ public class PurchaseDto
 public class PurchaseDetailDto : PurchaseDto
 {
     public List<PurchaseItemDto> Items { get; set; } = new();
+    public List<InvoicePaymentDto> Payments { get; set; } = new();
 }
 
 public class PurchaseItemDto
@@ -51,6 +56,7 @@ public class CreatePurchaseDto
     public int WarehouseId { get; set; }
     public DateTime PurchaseDate { get; set; } = DateTime.UtcNow;
     public string Notes { get; set; } = string.Empty;
+    public bool IsCreditPurchase { get; set; }
     public int BusinessId { get; set; }
     public int BranchId { get; set; }
     public List<CreatePurchaseItemDto> Items { get; set; } = new();
@@ -73,6 +79,7 @@ public class UpdatePurchaseDto
     public int WarehouseId { get; set; }
     public DateTime PurchaseDate { get; set; }
     public string Notes { get; set; } = string.Empty;
+    public bool IsCreditPurchase { get; set; }
     public int BusinessId { get; set; }
     public int BranchId { get; set; }
     public List<CreatePurchaseItemDto> Items { get; set; } = new();

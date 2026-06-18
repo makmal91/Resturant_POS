@@ -197,6 +197,12 @@ public static class PermissionModuleSeeder
         new("Cash Ledger", "CashFlow.Ledger", "Finance", 4, "/cashflow/ledger", "CFL"),
         new("Cash Summary", "CashFlow.Summary", "Finance", 5, "/cashflow/summary", "CFS"),
 
+        // Party Ledger
+        new("Receive Payment", PermissionModules.PartyLedger, "Finance", 6, "/ledger/customers", "RP"),
+        new("Pay Supplier", "PartyLedger.PaySupplier", "Finance", 7, "/ledger/suppliers", "PS"),
+        new("Customer Ledger", "PartyLedger.CustomerLedger", "Finance", 8, "/ledger/customers", "CL"),
+        new("Supplier Ledger", "PartyLedger.SupplierLedger", "Finance", 9, "/ledger/suppliers", "SL"),
+
         // Reports
         new("Sales Reports", PermissionModules.SalesReports, "Reports", 1, "/reports", "Rp"),
         new("Purchase Reports", PermissionModules.PurchaseReports, "Reports", 2, "/reports", "Rp"),
@@ -414,12 +420,57 @@ public static class ModuleFormSeeder
                 });
             }
 
+            await SeedAdditionalFormsAsync(context);
+
             await context.SaveChangesAsync();
             await BackfillRoleFormPermissionsAsync(context, logger);
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to seed module forms.");
+        }
+    }
+
+    private static readonly (string ModuleKey, string FormCode, string FormName, int SortOrder)[] AdditionalForms =
+    [
+        ("Cash Flow", "CashFlow_RecordTransaction", "Record Transaction", 2),
+        ("Party Ledger", "PartyLedger_ReceivePayment", "Receive Payment", 2),
+        ("PartyLedger.PaySupplier", "PartyLedger_PaySupplier", "Pay Supplier", 2),
+    ];
+
+    private static async Task SeedAdditionalFormsAsync(POSDbContext context)
+    {
+        var moduleIds = await context.PermissionModules
+            .AsNoTracking()
+            .Where(m => !m.IsDeleted && m.IsActive && m.ModuleKey != string.Empty)
+            .Select(m => new { m.Id, m.ModuleKey })
+            .ToListAsync();
+
+        var moduleByKey = moduleIds.ToDictionary(m => m.ModuleKey, m => m.Id, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (moduleKey, formCode, formName, sortOrder) in AdditionalForms)
+        {
+            if (!moduleByKey.TryGetValue(moduleKey, out var moduleId))
+                continue;
+
+            var exists = await context.ModuleForms
+                .IgnoreQueryFilters()
+                .AnyAsync(f => f.FormCode == formCode);
+
+            if (exists)
+                continue;
+
+            await context.ModuleForms.AddAsync(new Domain.ModuleForm
+            {
+                ModuleId = moduleId,
+                FormName = formName,
+                FormCode = formCode,
+                Route = null,
+                SortOrder = sortOrder,
+                IsActive = true,
+                IsDeleted = false,
+                CreatedDate = DateTime.UtcNow
+            });
         }
     }
 

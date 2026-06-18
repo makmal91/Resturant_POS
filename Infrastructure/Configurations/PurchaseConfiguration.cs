@@ -16,6 +16,7 @@ public class PurchaseConfiguration : IEntityTypeConfiguration<Purchase>
         builder.Property(p => p.Status).HasDefaultValue(PurchaseStatus.Draft);
         builder.Property(p => p.Notes).HasMaxLength(1000);
         builder.Property(p => p.PurchaseDate).HasDefaultValueSql("GETUTCDATE()");
+        builder.Property(p => p.IsCreditPurchase).HasDefaultValue(false);
 
         builder.HasIndex(p => new { p.BusinessId, p.BranchId, p.InvoiceNo })
             .IsUnique()

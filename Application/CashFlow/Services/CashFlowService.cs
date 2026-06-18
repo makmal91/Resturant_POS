@@ -138,16 +138,18 @@ public class CashFlowService : ICashFlowService
         };
     }
 
-    public Task<CashFlowLedgerPageDto> GetLedgerAsync(CashFlowLedgerFilterDto filter)
-        => _repo.GetLedgerPagedAsync(filter);
+    public async Task<CashFlowLedgerPageDto> GetLedgerAsync(CashFlowLedgerFilterDto filter)
+    {
+        await SyncLedgerRangeAsync(filter.BusinessId, filter.BranchId, filter.FromDate, filter.ToDate);
+        return await _repo.GetLedgerPagedAsync(filter);
+    }
 
     // ─── Summaries ─────────────────────────────────────────────────────────────
 
     public async Task<DailyCashSummaryDto> GetDailySummaryAsync(int businessId, int branchId, DateTime? date = null)
     {
         var targetDate = (date ?? DateTime.UtcNow).Date;
-        await SyncMissingSalesAsync(businessId, branchId, targetDate);
-        await SyncMissingExpensesAsync(businessId, branchId, targetDate);
+        await SyncDayAsync(businessId, branchId, targetDate);
         return await _repo.GetDailySummaryAsync(businessId, branchId, targetDate);
     }
 
@@ -160,8 +162,7 @@ public class CashFlowService : ICashFlowService
     public async Task<List<BranchCashSummaryDto>> GetAllBranchesSummaryAsync(int businessId, DateTime? date = null)
     {
         var targetDate = (date ?? DateTime.UtcNow).Date;
-        await SyncMissingSalesAsync(businessId, 0, targetDate);
-        await SyncMissingExpensesAsync(businessId, 0, targetDate);
+        await SyncDayAsync(businessId, 0, targetDate);
         return await _repo.GetBranchSummariesAsync(businessId, targetDate);
     }
 
@@ -278,7 +279,106 @@ public class CashFlowService : ICashFlowService
         });
     }
 
+    public async Task RecordCustomerPaymentAsync(
+        int businessId, int branchId, int paymentId, string? referenceNo, string description,
+        decimal amount, PartyPaymentType paymentType, DateTime? transactionDate = null)
+    {
+        if (amount <= 0) return;
+
+        await _repo.AddTransactionAsync(new CashFlowTransaction
+        {
+            BusinessId      = businessId,
+            BranchId        = branchId,
+            TransactionType = CashFlowTransactionType.CashIn,
+            PaymentMethod   = MapPartyPaymentType(paymentType),
+            Amount          = amount,
+            ReferenceId     = paymentId,
+            ReferenceNo     = referenceNo,
+            Description     = description,
+            TransactionDate = transactionDate ?? DateTime.UtcNow,
+        });
+    }
+
+    public async Task RecordSupplierPaymentAsync(
+        int businessId, int branchId, int paymentId, string? referenceNo, string description,
+        decimal amount, PartyPaymentType paymentType, DateTime? transactionDate = null)
+    {
+        if (amount <= 0) return;
+
+        await _repo.AddTransactionAsync(new CashFlowTransaction
+        {
+            BusinessId      = businessId,
+            BranchId        = branchId,
+            TransactionType = CashFlowTransactionType.CashOut,
+            PaymentMethod   = MapPartyPaymentType(paymentType),
+            Amount          = amount,
+            ReferenceId     = paymentId,
+            ReferenceNo     = referenceNo,
+            Description     = description,
+            TransactionDate = transactionDate ?? DateTime.UtcNow,
+        });
+    }
+
     // ─── Mapping helpers ───────────────────────────────────────────────────────
+
+    private async Task SyncLedgerRangeAsync(int businessId, int branchId, DateTime? fromDate, DateTime? toDate)
+    {
+        var start = (fromDate ?? DateTime.UtcNow).Date;
+        var end = (toDate ?? start).Date;
+        if (end < start)
+            (start, end) = (end, start);
+
+        for (var day = start; day <= end; day = day.AddDays(1))
+            await SyncDayAsync(businessId, branchId, day);
+    }
+
+    private async Task SyncDayAsync(int businessId, int branchId, DateTime date)
+    {
+        await _repo.RemoveCreditSaleCashFlowAsync(businessId, branchId, date);
+        await SyncMissingSalesAsync(businessId, branchId, date);
+        await SyncMissingExpensesAsync(businessId, branchId, date);
+        await SyncMissingPartyPaymentsAsync(businessId, branchId, date);
+    }
+
+    private async Task SyncMissingPartyPaymentsAsync(int businessId, int branchId, DateTime date)
+    {
+        var missing = await _repo.GetPartyPaymentsMissingCashFlowAsync(businessId, branchId, date);
+        foreach (var payment in missing)
+        {
+            if (payment.Amount <= 0) continue;
+
+            var referenceNo = string.IsNullOrWhiteSpace(payment.ReferenceNo)
+                ? payment.InvoiceNo
+                : payment.ReferenceNo;
+
+            if (payment.Module == InvoicePaymentModule.Sale)
+            {
+                var description = string.IsNullOrWhiteSpace(payment.InvoiceNo)
+                    ? $"Customer payment received — {payment.PartyName ?? "Customer"}"
+                    : $"Customer payment — {payment.InvoiceNo}";
+
+                if (!string.IsNullOrWhiteSpace(payment.Notes))
+                    description = $"{description} | {payment.Notes}";
+
+                await RecordCustomerPaymentAsync(
+                    businessId, payment.BranchId, payment.Id, referenceNo, description,
+                    payment.Amount, payment.PaymentType, payment.PaymentDate);
+            }
+            else
+            {
+                var description = string.IsNullOrWhiteSpace(payment.InvoiceNo)
+                    ? $"Supplier payment — {payment.PartyName ?? "Supplier"}"
+                    : $"Supplier payment — {payment.InvoiceNo}";
+
+                if (!string.IsNullOrWhiteSpace(payment.Notes))
+                    description = $"{description} | {payment.Notes}";
+
+                await RecordSupplierPaymentAsync(
+                    businessId, payment.BranchId, payment.Id, referenceNo, description,
+                    payment.Amount, payment.PaymentType, payment.PaymentDate);
+            }
+        }
+    }
 
     private async Task SyncMissingSalesAsync(int businessId, int branchId, DateTime date)
     {
@@ -316,6 +416,13 @@ public class CashFlowService : ICashFlowService
         ExpensePaymentMethod.Bank   => CashFlowPaymentMethod.Bank,
         ExpensePaymentMethod.Wallet => CashFlowPaymentMethod.Wallet,
         _                           => CashFlowPaymentMethod.Cash,
+    };
+
+    private static CashFlowPaymentMethod MapPartyPaymentType(PartyPaymentType type) => type switch
+    {
+        PartyPaymentType.Bank   => CashFlowPaymentMethod.Bank,
+        PartyPaymentType.Online => CashFlowPaymentMethod.Wallet,
+        _                       => CashFlowPaymentMethod.Cash,
     };
 
     private static (decimal Cash, decimal Card) ResolvePaymentAmounts(SaleInvoiceCashFlowDto inv)

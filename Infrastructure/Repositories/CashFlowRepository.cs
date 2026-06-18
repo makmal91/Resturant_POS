@@ -347,6 +347,7 @@ public class CashFlowRepository : ICashFlowRepository
             .AsNoTracking()
             .Where(i => i.BusinessId == businessId
                      && i.Status == SaleInvoiceStatus.Completed
+                     && !i.IsCreditSale
                      && i.SaleDate >= dateOnly
                      && i.SaleDate < datePlus1
                      && !recordedSaleIds.Contains(i.Id));
@@ -414,5 +415,110 @@ public class CashFlowRepository : ICashFlowRepository
                 ExpenseDate   = e.ExpenseDate,
             })
             .ToListAsync();
+    }
+
+    public async Task<List<InvoicePaymentCashFlowDto>> GetPartyPaymentsMissingCashFlowAsync(int businessId, int branchId, DateTime date)
+    {
+        var dateOnly = date.Date;
+        var datePlus1 = dateOnly.AddDays(1);
+
+        var recordedInQuery = _db.CashFlowTransactions
+            .AsNoTracking()
+            .Where(t => t.BusinessId == businessId
+                     && t.TransactionType == CashFlowTransactionType.CashIn
+                     && t.ReferenceId != null
+                     && t.TransactionDate >= dateOnly
+                     && t.TransactionDate < datePlus1);
+
+        if (branchId > 0)
+            recordedInQuery = recordedInQuery.Where(t => t.BranchId == branchId);
+
+        var recordedInIds = await recordedInQuery
+            .Select(t => t.ReferenceId!.Value)
+            .Distinct()
+            .ToListAsync();
+
+        var recordedOutQuery = _db.CashFlowTransactions
+            .AsNoTracking()
+            .Where(t => t.BusinessId == businessId
+                     && t.TransactionType == CashFlowTransactionType.CashOut
+                     && t.ReferenceId != null
+                     && t.TransactionDate >= dateOnly
+                     && t.TransactionDate < datePlus1);
+
+        if (branchId > 0)
+            recordedOutQuery = recordedOutQuery.Where(t => t.BranchId == branchId);
+
+        var recordedOutIds = await recordedOutQuery
+            .Select(t => t.ReferenceId!.Value)
+            .Distinct()
+            .ToListAsync();
+
+        var paymentQuery = _db.InvoicePayments
+            .AsNoTracking()
+            .Where(p => p.BusinessId == businessId
+                     && p.PaymentDate >= dateOnly
+                     && p.PaymentDate < datePlus1);
+
+        if (branchId > 0)
+            paymentQuery = paymentQuery.Where(p => p.BranchId == branchId);
+
+        return await paymentQuery
+            .Where(p =>
+                (p.Module == InvoicePaymentModule.Sale
+                 && !recordedInIds.Contains(p.Id)
+                 && (!p.SaleInvoiceId.HasValue || p.SaleInvoice!.IsCreditSale))
+                || (p.Module == InvoicePaymentModule.Purchase
+                    && !recordedOutIds.Contains(p.Id)))
+            .Select(p => new InvoicePaymentCashFlowDto
+            {
+                Id = p.Id,
+                BranchId = p.BranchId,
+                Module = p.Module,
+                Amount = p.Amount,
+                PaymentType = p.PaymentType,
+                PaymentDate = p.PaymentDate,
+                ReferenceNo = p.ReferenceNo,
+                InvoiceNo = p.SaleInvoice != null ? p.SaleInvoice.InvoiceNo : p.Purchase!.InvoiceNo,
+                PartyName = p.Customer != null ? p.Customer.Name : p.Supplier!.Name,
+                Notes = p.Notes,
+            })
+            .ToListAsync();
+    }
+
+    public async Task RemoveCreditSaleCashFlowAsync(int businessId, int branchId, DateTime date)
+    {
+        var dateOnly = date.Date;
+        var datePlus1 = dateOnly.AddDays(1);
+
+        var creditSaleQuery = _db.SaleInvoices
+            .AsNoTracking()
+            .Where(i => i.BusinessId == businessId
+                     && i.IsCreditSale
+                     && i.SaleDate >= dateOnly
+                     && i.SaleDate < datePlus1);
+
+        if (branchId > 0)
+            creditSaleQuery = creditSaleQuery.Where(i => i.BranchId == branchId);
+
+        var creditSaleIds = await creditSaleQuery.Select(i => i.Id).ToListAsync();
+        if (creditSaleIds.Count == 0)
+            return;
+
+        var txQuery = _db.CashFlowTransactions
+            .Where(t => t.BusinessId == businessId
+                     && t.TransactionType == CashFlowTransactionType.Sale
+                     && t.ReferenceId != null
+                     && creditSaleIds.Contains(t.ReferenceId.Value));
+
+        if (branchId > 0)
+            txQuery = txQuery.Where(t => t.BranchId == branchId);
+
+        var erroneous = await txQuery.ToListAsync();
+        if (erroneous.Count == 0)
+            return;
+
+        _db.CashFlowTransactions.RemoveRange(erroneous);
+        await _db.SaveChangesAsync();
     }
 }

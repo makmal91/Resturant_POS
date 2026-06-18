@@ -30,6 +30,8 @@ import SaleInvoicesPage from './modules/sales/SaleInvoicesPage';
 import CashFlowDashboardPage from './modules/cashflow/CashFlowDashboardPage';
 import CashLedgerPage from './modules/cashflow/CashLedgerPage';
 import CashFlowSummaryPage from './modules/cashflow/CashFlowSummaryPage';
+import CustomerLedgerPage from './modules/ledger/CustomerLedgerPage';
+import SupplierLedgerPage from './modules/ledger/SupplierLedgerPage';
 import ExpensePage from './modules/expense/ExpensePage';
 import SizePage from './modules/master/SizePage';
 import ColorPage from './modules/master/ColorPage';
@@ -74,6 +76,8 @@ export const routeRegistry: RouteDefinition[] = [
   { path: '/cashflow',          label: 'Cash Dashboard',  component: CashFlowDashboardPage, module: 'Cash Flow' },
   { path: '/cashflow/ledger',   label: 'Cash Ledger',     component: CashLedgerPage,        module: 'Cash Flow' },
   { path: '/cashflow/summary',  label: 'Cash Summary',    component: CashFlowSummaryPage,   module: 'Cash Flow' },
+  { path: '/ledger/customers', label: 'Customer Ledger', component: CustomerLedgerPage, module: 'Party Ledger' },
+  { path: '/ledger/suppliers', label: 'Supplier Ledger', component: SupplierLedgerPage, module: 'Party Ledger' },
   { path: '/settings', label: 'System Settings', component: SettingsPage, module: 'System Settings' },
   { path: '/settings/code-sequences', label: 'Code Sequences', component: CodeSequencePage, module: 'Code Sequences' },
   { path: '/settings/licenses', label: 'System License', component: LicensePage },
@@ -88,6 +92,8 @@ const extraRouteContext: Record<string, { module: string; form: string }> = {
   '/sales-invoices/edit': { module: 'Sales', form: 'EditInvoice' },
   '/cashflow/opening': { module: 'Cash Flow', form: 'OpeningCash' },
   '/cashflow/closing': { module: 'Cash Flow', form: 'ClosingCash' },
+  '/ledger/customers': { module: 'Party Ledger', form: 'ReceivePayment' },
+  '/ledger/suppliers': { module: 'Party Ledger', form: 'PaySupplier' },
 };
 
 export const resolveRouteContext = (

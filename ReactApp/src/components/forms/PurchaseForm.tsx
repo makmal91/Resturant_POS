@@ -21,6 +21,7 @@ export interface PurchaseFormData {
   warehouseId: number;
   purchaseDate: string;
   notes: string;
+  isCreditPurchase: boolean;
   branchId: number;
   items: PurchaseItemFormData[];
 }
@@ -96,6 +97,7 @@ interface PurchaseFormProps {
     PurchaseFormData & {
       id?: number;
       status?: string;
+      isCreditPurchase?: boolean;
       items?: Array<{
         productId: number;
         productName?: string;
@@ -188,6 +190,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       : new Date().toISOString().slice(0, 10)
   );
   const [notes, setNotes] = useState(safeString(initialData?.notes));
+  const [isCreditPurchase, setIsCreditPurchase] = useState(Boolean(initialData?.isCreditPurchase));
   const [rows, setRows] = useState<ItemRow[]>(() => buildRowsFromInitial(initialData?.items));
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -209,6 +212,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
         : new Date().toISOString().slice(0, 10)
     );
     setNotes(safeString(initialData?.notes));
+    setIsCreditPurchase(Boolean(initialData?.isCreditPurchase));
     setRows(buildRowsFromInitial(initialData?.items));
     setErrors({});
   }, [initialData]);
@@ -441,6 +445,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
         : new Date().toISOString().slice(0, 10)
     );
     setNotes(safeString(initialData?.notes));
+    setIsCreditPurchase(Boolean(initialData?.isCreditPurchase));
     setRows(buildRowsFromInitial(initialData?.items));
     setErrors({});
     closeSearch();
@@ -458,6 +463,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
         warehouseId,
         purchaseDate,
         notes: notes.trim(),
+        isCreditPurchase,
         branchId,
         items: rows
           .filter((r) => r.productId > 0 && r.unitId > 0)
@@ -551,6 +557,20 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
               rows={2}
             />
           </div>
+
+          <label className="md:col-span-2 flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={isCreditPurchase}
+              onChange={(e) => setIsCreditPurchase(e.target.checked)}
+              disabled={isPosted}
+              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            <span>
+              <span className="block text-sm font-semibold text-gray-800">Credit Purchase</span>
+              <span className="block text-xs text-gray-500">Record as supplier payable — no cash payment on post</span>
+            </span>
+          </label>
         </div>
       </div>
 

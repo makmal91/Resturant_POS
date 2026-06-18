@@ -41,6 +41,8 @@ public static class DatabaseBootstrapper
         await CustomerInitializer.EnsureSchemaAsync(context, logger);
         await CodeSequenceDatabaseInitializer.EnsureSchemaAsync(context, logger);
         await CashFlowDatabaseInitializer.EnsureSchemaAsync(context, logger);
+        await PartyLedgerInitializer.EnsureSchemaAsync(context, logger);
+        await InvoicePaymentInitializer.EnsureSchemaAsync(context, logger);
         await MasterDataDatabaseInitializer.EnsureSchemaAsync(context, logger);
 
         await RolePermissionSeeder.SeedDefaultPermissionsAsync(context, logger);

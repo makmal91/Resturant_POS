@@ -17,6 +17,7 @@ export interface PurchasePayload {
   warehouseId: number;
   purchaseDate: string;
   notes?: string;
+  isCreditPurchase?: boolean;
   branchId: number;
   items: PurchaseItemPayload[];
 }
@@ -48,6 +49,7 @@ export interface PurchaseDto {
   purchaseDate: string;
   totalAmount: number;
   status: PurchaseStatus;
+  isCreditPurchase?: boolean;
   notes: string;
   itemCount: number;
   createdDate: string;

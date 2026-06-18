@@ -17,4 +17,5 @@ public interface ISalesRepository
     Task<List<SaleInvoice>> GetHeldBillsAsync(int businessId, int branchId);
     Task AddAsync(SaleInvoice invoice);
     Task SaveChangesAsync();
+    Task UpdatePaidAmountAsync(int saleInvoiceId, int businessId, int branchId, decimal paidAmount);
 }

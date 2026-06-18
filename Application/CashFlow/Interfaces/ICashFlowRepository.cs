@@ -25,4 +25,6 @@ public interface ICashFlowRepository
     Task<decimal> GetTotalByTypeAsync(int businessId, int branchId, DateTime date, CashFlowTransactionType type, CashFlowPaymentMethod? paymentMethod = null);
     Task<List<SaleInvoiceCashFlowDto>> GetCompletedInvoicesMissingCashFlowAsync(int businessId, int branchId, DateTime date);
     Task<List<ExpenseCashFlowDto>> GetExpensesMissingCashFlowAsync(int businessId, int branchId, DateTime date);
+    Task<List<InvoicePaymentCashFlowDto>> GetPartyPaymentsMissingCashFlowAsync(int businessId, int branchId, DateTime date);
+    Task RemoveCreditSaleCashFlowAsync(int businessId, int branchId, DateTime date);
 }

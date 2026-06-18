@@ -11,11 +11,13 @@ public class Purchase : BaseEntity
     public string Notes { get; set; } = string.Empty;
     public DateTime? VoidedAt    { get; set; }
     public string?  VoidedByName { get; set; }
+    public bool IsCreditPurchase { get; set; }
 
     public virtual Supplier Supplier { get; set; } = null!;
     public virtual Warehouse Warehouse { get; set; } = null!;
     public virtual Branch Branch { get; set; } = null!;
     public virtual ICollection<PurchaseItem> Items { get; set; } = new List<PurchaseItem>();
+    public virtual ICollection<InvoicePayment> Payments { get; set; } = new List<InvoicePayment>();
 }
 
 public class PurchaseItem : BaseEntity

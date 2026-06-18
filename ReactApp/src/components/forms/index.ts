@@ -20,4 +20,8 @@ export { default as CustomerForm } from './CustomerForm';
 export { default as RoleForm } from './RoleForm';
 export { default as CashTransactionForm } from './CashTransactionForm';
 export type { CashTransactionFormData } from './CashTransactionForm';
+export { default as ReceivePaymentForm } from './ReceivePaymentForm';
+export type { ReceivePaymentFormData } from './ReceivePaymentForm';
+export { default as PaySupplierForm } from './PaySupplierForm';
+export type { PaySupplierFormData } from './PaySupplierForm';
 export { default as OrderScreen } from './OrderScreen';

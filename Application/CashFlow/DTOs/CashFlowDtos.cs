@@ -145,6 +145,21 @@ public class SaleInvoiceCashFlowDto
     public DateTime SaleDate { get; set; }
 }
 
+/// <summary>Party payment (customer receipt / supplier payment) missing from cash flow.</summary>
+public class InvoicePaymentCashFlowDto
+{
+    public int Id { get; set; }
+    public int BranchId { get; set; }
+    public InvoicePaymentModule Module { get; set; }
+    public decimal Amount { get; set; }
+    public PartyPaymentType PaymentType { get; set; }
+    public DateTime PaymentDate { get; set; }
+    public string? ReferenceNo { get; set; }
+    public string? InvoiceNo { get; set; }
+    public string? PartyName { get; set; }
+    public string? Notes { get; set; }
+}
+
 /// <summary>Expense that has not yet been posted to the cash flow ledger.</summary>
 public class ExpenseCashFlowDto
 {

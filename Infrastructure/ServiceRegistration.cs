@@ -21,9 +21,11 @@ using POSSystem.Application.Stock.Interfaces;
 using POSSystem.Application.Sales.Interfaces;
 using POSSystem.Application.Customer.Interfaces;
 using POSSystem.Application.CashFlow.Interfaces;
+using POSSystem.Application.Ledger.Interfaces;
 using POSSystem.Application.CodeSequence.Interfaces;
 using POSSystem.Application.Common.Interfaces;
 using POSSystem.Application.License.Interfaces;
+using POSSystem.Application.Payments.Interfaces;
 using POSSystem.Application.License.Options;
 using POSSystem.Infrastructure.Data;
 using POSSystem.Infrastructure.License;
@@ -80,6 +82,12 @@ public static class ServiceRegistration
 
         // Register cash flow repository
         services.AddScoped<ICashFlowRepository, CashFlowRepository>();
+
+        // Party ledger (customer receivable / supplier payable)
+        services.AddScoped<IPartyLedgerRepository, PartyLedgerRepository>();
+
+        // Invoice payments (sales / purchase)
+        services.AddScoped<IInvoicePaymentRepository, InvoicePaymentRepository>();
 
         // Centralized code generation
         services.AddScoped<ICodeGeneratorService, CodeGeneratorService>();

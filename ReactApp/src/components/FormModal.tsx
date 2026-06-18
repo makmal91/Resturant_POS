@@ -1,6 +1,6 @@
 import React, { useMemo, useEffect, useState } from 'react';
 import { useFormModal } from '../contexts/FormModalContext';
-import { BranchForm, BusinessForm, UserForm, MenuForm, InventoryForm, CategoryForm, SubCategoryForm, BrandForm, WarehouseForm, SupplierForm, PurchaseForm, CustomerForm, RoleForm, CashTransactionForm, type CashTransactionFormData } from './forms';
+import { BranchForm, BusinessForm, UserForm, MenuForm, InventoryForm, CategoryForm, SubCategoryForm, BrandForm, WarehouseForm, SupplierForm, PurchaseForm, CustomerForm, RoleForm, CashTransactionForm, ReceivePaymentForm, PaySupplierForm, type CashTransactionFormData, type ReceivePaymentFormData, type PaySupplierFormData } from './forms';
 import { BranchService, BusinessService, MenuService, InventoryService } from '../services/apiService';
 import { getApiErrorMessage } from '../services/api';
 import { categoryService } from '../modules/category/categoryService';
@@ -13,6 +13,7 @@ import { customerService as apiCustomerService } from '../modules/customer/custo
 import { userService, RoleListItem } from '../modules/user/userService';
 import { roleService } from '../services/roleService';
 import { cashFlowService } from '../modules/cashflow/cashFlowService';
+import { partyLedgerService } from '../modules/ledger/partyLedgerService';
 import { useBranchStore } from '../stores/useBranchStore';
 import { useIsGlobalAdmin, useIsMasterUser } from '../hooks/usePermission';
 import { isProtectedRole, hasBranchContext } from '../types/permissions';
@@ -51,6 +52,9 @@ const FormModal: React.FC = () => {
   const [purchaseSuppliers, setPurchaseSuppliers] = useState<LookupOption[]>([]);
   const [purchaseWarehouses, setPurchaseWarehouses] = useState<LookupOption[]>([]);
   const [isPurchaseMetaLoading, setIsPurchaseMetaLoading] = useState(false);
+  const [ledgerCustomers, setLedgerCustomers] = useState<LookupOption[]>([]);
+  const [ledgerSuppliers, setLedgerSuppliers] = useState<LookupOption[]>([]);
+  const [isLedgerMetaLoading, setIsLedgerMetaLoading] = useState(false);
   const [userRoles, setUserRoles] = useState<RoleListItem[]>([]);
   const [isUserMetaLoading, setIsUserMetaLoading] = useState(false);
   const branches = useBranchStore((state) => state.branches);
@@ -233,6 +237,66 @@ const FormModal: React.FC = () => {
     };
 
     void loadPurchaseMeta();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [isOpen, formType, editingData?.branchId, selectedBranchId]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadLedgerMeta = async () => {
+      if (!isOpen || (formType !== 'receivePayment' && formType !== 'paySupplier')) {
+        return;
+      }
+
+      const branchId = Number(editingData?.branchId ?? selectedBranchId ?? -1);
+      if (!hasBranchContext(branchId)) {
+        setLedgerCustomers([]);
+        setLedgerSuppliers([]);
+        return;
+      }
+
+      setIsLedgerMetaLoading(true);
+      try {
+        if (formType === 'receivePayment') {
+          const res = await apiCustomerService.getAll({ branchId, page: 1, pageSize: 500 });
+          const customers = (res.data as { customers?: Array<{ id?: number; name?: string }> }).customers ?? [];
+          if (!isCancelled) {
+            setLedgerCustomers(
+              customers
+                .map((item) => ({ id: Number(item.id ?? 0), name: String(item.name ?? '') }))
+                .filter((item) => item.id > 0)
+            );
+          }
+        } else {
+          const res = await supplierService.getAllActive(branchId);
+          if (!isCancelled) {
+            setLedgerSuppliers(
+              (Array.isArray(res.data) ? res.data : [])
+                .map((item) => ({
+                  id: Number((item as { id?: number }).id ?? 0),
+                  name: String((item as { name?: string }).name ?? ''),
+                }))
+                .filter((item) => item.id > 0)
+            );
+          }
+        }
+      } catch (err) {
+        if (!isCancelled) {
+          setLedgerCustomers([]);
+          setLedgerSuppliers([]);
+          setError(getApiErrorMessage(err, 'Failed to load ledger form data.'));
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsLedgerMetaLoading(false);
+        }
+      }
+    };
+
+    void loadLedgerMeta();
 
     return () => {
       isCancelled = true;
@@ -499,6 +563,88 @@ const FormModal: React.FC = () => {
       closeWithSuccess('Transaction recorded successfully.');
     } catch (err: any) {
       setError(getApiErrorMessage(err, 'Failed to record transaction.'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleReceivePaymentSubmit = async (data: ReceivePaymentFormData) => {
+    const branchId = selectedBranchId ?? 0;
+    if (branchId <= 0) {
+      setError('Please select a branch first.');
+      return;
+    }
+
+    const customerId = Number(data.customerId);
+    const parsed = parseFloat(data.amount);
+    if (!customerId) {
+      setError('Customer is required.');
+      return;
+    }
+    if (isNaN(parsed) || parsed <= 0) {
+      setError('Amount must be greater than zero.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    try {
+      await partyLedgerService.receivePayment({
+        customerId,
+        saleInvoiceId: data.saleInvoiceId.trim() ? Number(data.saleInvoiceId) : undefined,
+        paymentType: data.paymentType,
+        amount: parsed,
+        paymentDate: new Date(data.paymentDate).toISOString(),
+        referenceNo: data.referenceNo.trim() || undefined,
+        notes: data.notes.trim() || undefined,
+        branchId,
+      });
+      closeWithSuccess('Payment received successfully.');
+    } catch (err: any) {
+      setError(getApiErrorMessage(err, 'Failed to record payment.'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handlePaySupplierSubmit = async (data: PaySupplierFormData) => {
+    const branchId = selectedBranchId ?? 0;
+    if (branchId <= 0) {
+      setError('Please select a branch first.');
+      return;
+    }
+
+    const supplierId = Number(data.supplierId);
+    const parsed = parseFloat(data.amount);
+    if (!supplierId) {
+      setError('Supplier is required.');
+      return;
+    }
+    if (isNaN(parsed) || parsed <= 0) {
+      setError('Amount must be greater than zero.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    try {
+      await partyLedgerService.paySupplier({
+        supplierId,
+        purchaseId: data.purchaseId.trim() ? Number(data.purchaseId) : undefined,
+        paymentType: data.paymentType,
+        amount: parsed,
+        paymentDate: new Date(data.paymentDate).toISOString(),
+        referenceNo: data.referenceNo.trim() || undefined,
+        notes: data.notes.trim() || undefined,
+        branchId,
+      });
+      closeWithSuccess('Supplier payment recorded successfully.');
+    } catch (err: any) {
+      setError(getApiErrorMessage(err, 'Failed to record payment.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -958,6 +1104,7 @@ const FormModal: React.FC = () => {
       warehouseId,
       purchaseDate: new Date(String(data?.purchaseDate ?? new Date().toISOString())).toISOString(),
       notes: String(data?.notes ?? '').trim(),
+      isCreditPurchase: Boolean(data?.isCreditPurchase),
       branchId,
       items,
     };
@@ -1127,6 +1274,26 @@ const FormModal: React.FC = () => {
             isLoading={isSubmitting}
           />
         );
+      case 'receivePayment':
+        return (
+          <ReceivePaymentForm
+            customers={ledgerCustomers}
+            initialData={editingData}
+            branchId={selectedBranchId ?? 0}
+            onSubmit={handleReceivePaymentSubmit}
+            isLoading={isSubmitting || isLedgerMetaLoading}
+          />
+        );
+      case 'paySupplier':
+        return (
+          <PaySupplierForm
+            suppliers={ledgerSuppliers}
+            initialData={editingData}
+            branchId={selectedBranchId ?? 0}
+            onSubmit={handlePaySupplierSubmit}
+            isLoading={isSubmitting || isLedgerMetaLoading}
+          />
+        );
       default:
         return null;
     }
@@ -1146,7 +1313,9 @@ const FormModal: React.FC = () => {
     formType === 'customer' ||
     formType === 'user' ||
     formType === 'role' ||
-    formType === 'cashTransaction'
+    formType === 'cashTransaction' ||
+    formType === 'receivePayment' ||
+    formType === 'paySupplier'
       ? 'max-w-4xl'
       : 'max-w-2xl';
 
@@ -1167,6 +1336,10 @@ const FormModal: React.FC = () => {
                 ? 'Role'
                 : formType === 'cashTransaction'
                   ? 'Record Transaction'
+                  : formType === 'receivePayment'
+                    ? 'Receive Payment'
+                    : formType === 'paySupplier'
+                      ? 'Pay Supplier'
               : formType
                 ? formType.charAt(0).toUpperCase() + formType.slice(1)
                 : '';

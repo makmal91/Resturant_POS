@@ -151,7 +151,7 @@ public class SalesController : ControllerBase
         try
         {
             var result = await _salesService.CreateSaleInvoiceAsync(dto);
-            return CreatedAtAction(nameof(GetInvoiceById), new { id = result.Id }, result);
+            return Ok(result);
         }
         catch (InvalidOperationException ex)
         {

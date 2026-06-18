@@ -68,4 +68,12 @@ public static class TenantRequestExtensions
         var resolved = controller.ResolveBranchId(null);
         return resolved > 0 ? resolved : null;
     }
+
+    public static int? ResolveUserId(this ControllerBase controller)
+    {
+        var value = controller.User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+            ?? controller.User?.FindFirst("userId")?.Value
+            ?? controller.User?.FindFirst("UserId")?.Value;
+        return int.TryParse(value, out var id) && id > 0 ? id : null;
+    }
 }

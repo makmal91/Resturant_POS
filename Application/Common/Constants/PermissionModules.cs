@@ -24,6 +24,7 @@ public static class PermissionModules
     public const string Customers = "Customers";
     public const string Expenses = "Expenses";
     public const string CashFlow = "Cash Flow";
+    public const string PartyLedger = "Party Ledger";
     public const string Dashboard = "Dashboard";
     public const string Variants = "Variants";
     public const string Sizes = "Sizes";
@@ -69,6 +70,7 @@ public static class PermissionModules
         Customers,
         Expenses,
         CashFlow,
+        PartyLedger,
         Dashboard,
         SalesReports,
         PurchaseReports,

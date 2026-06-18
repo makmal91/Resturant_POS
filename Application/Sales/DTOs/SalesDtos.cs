@@ -108,6 +108,7 @@ public class CreateSaleInvoiceDto
     public decimal DiscountAmount { get; set; }
     public string? Notes { get; set; }
     public string? CashierName { get; set; }
+    public bool IsCreditSale { get; set; }
     public int BusinessId { get; set; }
     public int BranchId { get; set; }
     public List<CreateSaleInvoiceItemDto> Items { get; set; } = new();
@@ -159,6 +160,7 @@ public class SaleInvoiceDto
     public decimal TaxAmount { get; set; }
     public decimal GrandTotal { get; set; }
     public decimal PaidAmount { get; set; }
+    public decimal BalanceDue { get; set; }
     public decimal ReturnAmount { get; set; }
     public SalePaymentMethod PaymentMethod { get; set; }
     public decimal CashAmount { get; set; }
@@ -170,6 +172,7 @@ public class SaleInvoiceDto
     public string? CashierName { get; set; }
     public DateTime? VoidedAt    { get; set; }
     public string?  VoidedByName { get; set; }
+    public bool IsCreditSale { get; set; }
     public int BranchId { get; set; }
     public string BranchName { get; set; } = string.Empty;
     public string BranchAddress { get; set; } = string.Empty;
@@ -228,6 +231,7 @@ public class SaleInvoiceListDto
     public decimal GrandTotal { get; set; }
     public decimal PaidAmount { get; set; }
     public string PaymentMethod { get; set; } = string.Empty;
+    public bool IsCreditSale { get; set; }
     public SaleInvoiceStatus Status { get; set; }
     public string? CashierName { get; set; }
     public int ItemCount { get; set; }
@@ -252,6 +256,7 @@ public class UpdateSaleInvoiceDto
     public decimal DiscountAmount { get; set; }
     public string? Notes { get; set; }
     public string? CashierName { get; set; }
+    public bool IsCreditSale { get; set; }
     public int BusinessId { get; set; }
     public int BranchId { get; set; }
     public List<CreateSaleInvoiceItemDto> Items { get; set; } = new();

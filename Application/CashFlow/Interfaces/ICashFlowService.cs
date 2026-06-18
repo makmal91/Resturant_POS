@@ -25,4 +25,6 @@ public interface ICashFlowService
     Task ReverseSaleAsync(int businessId, int branchId, int saleId, string invoiceNo, decimal cashAmount, decimal cardAmount, DateTime? transactionDate = null, string? reason = null);
     Task RecordExpenseAsync(int businessId, int branchId, int expenseId, string description, decimal amount, CashFlowPaymentMethod paymentMethod, DateTime? transactionDate = null);
     Task ReverseExpenseAsync(int businessId, int branchId, int expenseId, string description, decimal amount, CashFlowPaymentMethod paymentMethod, DateTime? transactionDate = null, string? reason = null);
+    Task RecordCustomerPaymentAsync(int businessId, int branchId, int paymentId, string? referenceNo, string description, decimal amount, PartyPaymentType paymentType, DateTime? transactionDate = null);
+    Task RecordSupplierPaymentAsync(int businessId, int branchId, int paymentId, string? referenceNo, string description, decimal amount, PartyPaymentType paymentType, DateTime? transactionDate = null);
 }

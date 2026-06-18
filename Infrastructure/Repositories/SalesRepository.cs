@@ -163,4 +163,18 @@ public class SalesRepository : ISalesRepository
     {
         await _db.SaveChangesAsync();
     }
+
+    public async Task UpdatePaidAmountAsync(int saleInvoiceId, int businessId, int branchId, decimal paidAmount)
+    {
+        var invoice = await _db.SaleInvoices
+            .FirstOrDefaultAsync(i => i.Id == saleInvoiceId
+                                      && i.BusinessId == businessId
+                                      && i.BranchId == branchId
+                                      && !i.IsDeleted);
+
+        if (invoice == null) return;
+
+        invoice.PaidAmount = paidAmount;
+        await _db.SaveChangesAsync();
+    }
 }

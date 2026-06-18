@@ -45,11 +45,13 @@ public class SaleInvoice : BaseEntity
     public string? CashierName   { get; set; }
     public DateTime? VoidedAt    { get; set; }
     public string?  VoidedByName { get; set; }
+    public bool IsCreditSale { get; set; }
 
     public virtual Customer? Customer { get; set; }
     public virtual Warehouse Warehouse { get; set; } = null!;
     public virtual Branch Branch { get; set; } = null!;
     public virtual ICollection<SaleInvoiceItem> Items { get; set; } = new List<SaleInvoiceItem>();
+    public virtual ICollection<InvoicePayment> Payments { get; set; } = new List<InvoicePayment>();
 }
 
 public class SaleInvoiceItem : BaseEntity

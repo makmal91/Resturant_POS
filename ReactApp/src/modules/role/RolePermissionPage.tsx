@@ -69,15 +69,13 @@ const collectDescendantIds = (node: ModuleTreeNode): number[] => {
   return ids;
 };
 
-const getPrimaryForm = (item: RolePermissionItem) => item.forms[0] ?? null;
-
 interface GroupCardProps {
   group: ModuleTreeNode;
   permissionMap: Map<number, RolePermissionItem>;
   expanded: boolean;
   onToggleExpand: () => void;
   onModuleAccess: (moduleId: number, enabled: boolean) => void;
-  onActionToggle: (moduleId: number, field: FormPermissionField) => void;
+  onFormActionToggle: (moduleId: number, formId: number, field: FormPermissionField) => void;
   onGroupToggleAll: (groupId: number, enabled: boolean) => void;
   canEdit: boolean;
   searchTerm: string;
@@ -89,7 +87,7 @@ const GroupCard: React.FC<GroupCardProps> = ({
   expanded,
   onToggleExpand,
   onModuleAccess,
-  onActionToggle,
+  onFormActionToggle,
   onGroupToggleAll,
   canEdit,
   searchTerm,
@@ -162,12 +160,12 @@ const GroupCard: React.FC<GroupCardProps> = ({
             visibleChildren.map((child) => {
               const perm = permissionMap.get(child.id);
               const hasAccess = perm?.canView ?? false;
-              const form = perm ? getPrimaryForm(perm) : null;
+              const forms = perm?.forms ?? [];
 
               return (
                 <div
                   key={child.id}
-                  className={`px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3 ${
+                  className={`px-4 py-3 flex flex-col gap-3 ${
                     hasAccess ? 'bg-white' : 'bg-gray-50/50'
                   }`}
                 >
@@ -190,26 +188,35 @@ const GroupCard: React.FC<GroupCardProps> = ({
                     </div>
                   </div>
 
-                  {hasAccess && form && (
-                    <div className="flex items-center gap-2 flex-wrap sm:justify-end">
-                      {ACTION_LABELS.map((action) => {
-                        const active = form[action.key];
-                        return (
-                          <button
-                            key={action.key}
-                            type="button"
-                            disabled={!canEdit}
-                            onClick={() => onActionToggle(child.id, action.key)}
-                            className={`text-xs px-3 py-1 rounded-full border font-medium transition-all disabled:opacity-50 ${
-                              active
-                                ? action.color
-                                : 'bg-white text-gray-400 border-gray-200 hover:border-gray-300'
-                            }`}
-                          >
-                            {action.label}
-                          </button>
-                        );
-                      })}
+                  {hasAccess && forms.length > 0 && (
+                    <div className="ml-13 space-y-2 border-l-2 border-gray-100 pl-4">
+                      {forms.map((form) => (
+                        <div key={form.formId} className="flex flex-col sm:flex-row sm:items-center gap-2">
+                          <p className="text-xs font-medium text-gray-600 min-w-[140px] truncate">
+                            {form.formName}
+                          </p>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {ACTION_LABELS.map((action) => {
+                              const active = form[action.key];
+                              return (
+                                <button
+                                  key={`${form.formId}-${action.key}`}
+                                  type="button"
+                                  disabled={!canEdit}
+                                  onClick={() => onFormActionToggle(child.id, form.formId, action.key)}
+                                  className={`text-xs px-3 py-1 rounded-full border font-medium transition-all disabled:opacity-50 ${
+                                    active
+                                      ? action.color
+                                      : 'bg-white text-gray-400 border-gray-200 hover:border-gray-300'
+                                  }`}
+                                >
+                                  {action.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -406,16 +413,16 @@ const RolePermissionPage: React.FC = () => {
     [applyToModules, canEditSelectedRole, permissionMap, tree]
   );
 
-  const toggleAction = useCallback(
-    (moduleId: number, field: FormPermissionField) => {
+  const toggleFormAction = useCallback(
+    (moduleId: number, formId: number, field: FormPermissionField) => {
       if (!canEditSelectedRole) return;
 
       setPermissions((current) =>
         current.map((item) => {
           if (item.moduleId !== moduleId || !item.canView) return item;
 
-          const forms = item.forms.map((form, index) => {
-            if (index !== 0) return form;
+          const forms = item.forms.map((form) => {
+            if (form.formId !== formId) return form;
             const nextValue = !form[field];
             const updated = { ...form, [field]: nextValue };
             if (field !== 'canView' && nextValue) updated.canView = true;
@@ -640,7 +647,7 @@ const RolePermissionPage: React.FC = () => {
                     })
                   }
                   onModuleAccess={setModuleAccess}
-                  onActionToggle={toggleAction}
+                  onFormActionToggle={toggleFormAction}
                   onGroupToggleAll={setGroupToggleAll}
                   canEdit={canEditSelectedRole}
                   searchTerm={normalizedSearch}

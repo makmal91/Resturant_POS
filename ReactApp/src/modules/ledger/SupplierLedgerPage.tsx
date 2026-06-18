@@ -1,0 +1,225 @@
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import DataTable, { type Column } from '../../components/DataTable';
+import { useFormModal } from '../../contexts/FormModalContext';
+import { getApiErrorMessage } from '../../services/api';
+import { useBranchStore } from '../../stores/useBranchStore';
+import { useBusinessCurrency } from '../../hooks/useBusinessCurrency';
+import { supplierService, type SupplierItem } from '../supplier/supplierService';
+import { LEDGER_TYPE_LABELS, partyLedgerService, type PartyLedgerEntry } from './partyLedgerService';
+
+const formatDate = (value: string) => {
+  const d = new Date(value);
+  return Number.isNaN(d.getTime())
+    ? '—'
+    : d.toLocaleDateString(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+};
+
+export default function SupplierLedgerPage() {
+  const { fmt } = useBusinessCurrency();
+  const { openForm, isOpen } = useFormModal();
+  const { selectedBranchId } = useBranchStore();
+  const branchId = selectedBranchId ?? 0;
+
+  const [suppliers, setSuppliers] = useState<SupplierItem[]>([]);
+  const [supplierId, setSupplierId] = useState(0);
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [rows, setRows] = useState<PartyLedgerEntry[]>([]);
+  const [partyName, setPartyName] = useState('');
+  const [currentBalance, setCurrentBalance] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (branchId <= 0) return;
+    supplierService
+      .getAllActive(branchId)
+      .then((res) => setSuppliers(Array.isArray(res.data) ? res.data : []))
+      .catch(() => setSuppliers([]));
+  }, [branchId]);
+
+  const fetchLedger = useCallback(async () => {
+    if (branchId <= 0 || supplierId <= 0) {
+      setRows([]);
+      setTotalRecords(0);
+      setTotalPages(0);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await partyLedgerService.getSupplierLedger(
+        branchId,
+        supplierId,
+        currentPage,
+        pageSize,
+        fromDate || undefined,
+        toDate || undefined
+      );
+      setRows(res.data.entries);
+      setPartyName(res.data.partyName);
+      setCurrentBalance(res.data.currentBalance);
+      setTotalRecords(res.data.totalRecords);
+      setTotalPages(res.data.totalPages);
+    } catch (err) {
+      setRows([]);
+      setError(getApiErrorMessage(err, 'Failed to load supplier ledger.'));
+    } finally {
+      setLoading(false);
+    }
+  }, [branchId, supplierId, currentPage, pageSize, fromDate, toDate]);
+
+  useEffect(() => {
+    void fetchLedger();
+  }, [fetchLedger]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      void fetchLedger();
+    }
+  }, [isOpen, fetchLedger]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [supplierId, fromDate, toDate]);
+
+  const columns = useMemo<Column<PartyLedgerEntry>[]>(
+    () => [
+      {
+        key: 'date',
+        header: 'Date',
+        sortable: false,
+        render: (value: string) => <span className="text-gray-600 whitespace-nowrap">{formatDate(value)}</span>,
+      },
+      {
+        key: 'description',
+        header: 'Description',
+        sortable: false,
+        render: (_: string, row: PartyLedgerEntry) => (
+          <div>
+            <p className="text-gray-800 text-sm">{row.description}</p>
+            <p className="text-xs text-gray-400">{LEDGER_TYPE_LABELS[row.type] ?? row.type}</p>
+          </div>
+        ),
+      },
+      {
+        key: 'debit',
+        header: 'Debit',
+        sortable: false,
+        render: (value: number) => (
+          <span className="tabular-nums text-green-600">{value > 0 ? fmt(value) : '—'}</span>
+        ),
+      },
+      {
+        key: 'credit',
+        header: 'Credit',
+        sortable: false,
+        render: (value: number) => (
+          <span className="tabular-nums text-red-600">{value > 0 ? fmt(value) : '—'}</span>
+        ),
+      },
+      {
+        key: 'runningBalance',
+        header: 'Running Balance',
+        sortable: false,
+        render: (value: number) => <span className="tabular-nums font-semibold text-gray-800">{fmt(value)}</span>,
+      },
+    ],
+    [fmt]
+  );
+
+  if (branchId <= 0) {
+    return <div className="flex items-center justify-center h-64 text-gray-500">Please select a branch first.</div>;
+  }
+
+  return (
+    <div className="space-y-4 p-4 md:p-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">Supplier Ledger</h1>
+          <p className="text-sm text-gray-500 mt-0.5">Payable transactions and running balance</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => openForm('paySupplier', supplierId > 0 ? { supplierId } : undefined)}
+          className="px-4 py-2 bg-orange-600 text-white text-sm font-medium rounded-lg hover:bg-orange-700 transition-colors"
+        >
+          + Pay Supplier
+        </button>
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-100 p-4 grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div>
+          <label className="text-xs text-gray-500 font-medium mb-1 block">Supplier</label>
+          <select
+            value={supplierId || ''}
+            onChange={(e) => setSupplierId(Number(e.target.value))}
+            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+          >
+            <option value="">Select supplier</option>
+            {suppliers.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs text-gray-500 font-medium mb-1 block">From Date</label>
+          <input
+            type="date"
+            value={fromDate}
+            onChange={(e) => setFromDate(e.target.value)}
+            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+          />
+        </div>
+        <div>
+          <label className="text-xs text-gray-500 font-medium mb-1 block">To Date</label>
+          <input
+            type="date"
+            value={toDate}
+            onChange={(e) => setToDate(e.target.value)}
+            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+          />
+        </div>
+        {supplierId > 0 && (
+          <div className="flex items-end">
+            <div className="w-full rounded-lg bg-orange-50 border border-orange-100 px-4 py-2">
+              <p className="text-xs text-orange-600">Payable — {partyName}</p>
+              <p className="text-lg font-bold text-orange-900">{fmt(currentBalance)}</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {error && <div className="bg-red-50 border border-red-200 text-red-600 rounded-lg px-4 py-3 text-sm">{error}</div>}
+
+      {!supplierId ? (
+        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center text-gray-400">
+          Select a supplier to view ledger entries.
+        </div>
+      ) : (
+        <DataTable
+          columns={columns}
+          data={rows}
+          loading={loading}
+          currentPage={currentPage}
+          pageSize={pageSize}
+          totalRecords={totalRecords}
+          totalPages={totalPages}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={setPageSize}
+          emptyMessage="No ledger entries found for this supplier."
+        />
+      )}
+    </div>
+  );
+}

@@ -26,6 +26,7 @@ public class SaleInvoiceConfiguration : IEntityTypeConfiguration<SaleInvoice>
         builder.Property(x => x.Status).HasConversion<int>();
         builder.Property(x => x.PaymentMethod).HasConversion<int>();
         builder.Property(x => x.PricingType).HasConversion<int>();
+        builder.Property(x => x.IsCreditSale).HasDefaultValue(false);
 
         builder.HasOne(x => x.Customer)
             .WithMany()

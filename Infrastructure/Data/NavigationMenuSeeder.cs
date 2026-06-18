@@ -53,7 +53,11 @@ public static class NavigationMenuSeeder
         new("Expense Categories", "/expenses/categories", "expensecategories", "Expense Categories", "Accounts", 2),
         new("Cash Dashboard", "/cashflow", "CF", "Cash Flow", "Accounts", 3),
         new("Cash Ledger", "/cashflow/ledger", "CFL", "Cash Flow", "Accounts", 4),
-        new("Cash Summary", "/cashflow/summary", "CFS", "Cash Flow", "Accounts", 5)
+        new("Cash Summary", "/cashflow/summary", "CFS", "Cash Flow", "Accounts", 5),
+        new("Receive Payment", "/ledger/customers", "RP", "Party Ledger", "Accounts", 6),
+        new("Pay Supplier", "/ledger/suppliers", "PS", "Party Ledger", "Accounts", 7),
+        new("Customer Ledger", "/ledger/customers", "CL", "Party Ledger", "Accounts", 8),
+        new("Supplier Ledger", "/ledger/suppliers", "SL", "Party Ledger", "Accounts", 9)
     ];
 
     public static async Task SeedDefaultMenusAsync(POSDbContext context, ILogger logger)
@@ -107,6 +111,8 @@ public static class NavigationMenuSeeder
         ("/cashflow", "CF"),
         ("/cashflow/ledger", "CFL"),
         ("/cashflow/summary", "CFS"),
+        ("/ledger/customers", "CL"),
+        ("/ledger/suppliers", "SL"),
     ];
 
     private static Task PatchExistingMenusAsync(POSDbContext context, ILogger logger)
