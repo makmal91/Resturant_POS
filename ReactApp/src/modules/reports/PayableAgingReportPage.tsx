@@ -21,6 +21,8 @@ const PayableAgingReportPage: React.FC = () => {
   const { selectedBranchId } = useBranchWriteAccess();
   const branchId = hasBranchContext(selectedBranchId) && selectedBranchId !== null ? selectedBranchId : 0;
   const [agingBucket, setAgingBucket] = useState('');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
 
   const table = useAgingReportTable<PayableAgingRow>({
     branchId,
@@ -28,6 +30,8 @@ const PayableAgingReportPage: React.FC = () => {
     fetcher: reportService.getPayableAgingReport,
     defaultSortColumn: 'daysOverdue',
     agingBucket,
+    fromDate,
+    toDate,
   });
 
   const columns: Column<PayableAgingRow>[] = useMemo(() => [
@@ -58,7 +62,10 @@ const PayableAgingReportPage: React.FC = () => {
     <ReportPageShell
       title="Payable Aging Report"
       description="Supplier outstanding invoices grouped by aging buckets (calculated on server)."
-      showDateFilters={false}
+      fromDate={fromDate}
+      toDate={toDate}
+      onFromDateChange={(v) => { setFromDate(v); table.setPageNumber(1); }}
+      onToDateChange={(v) => { setToDate(v); table.setPageNumber(1); }}
       extraFilters={<AgingBucketFilter value={agingBucket} onChange={(v) => { setAgingBucket(v); table.setPageNumber(1); }} />}
       summary={<AgingSummaryCards summary={table.summary} />}
       error={table.error}

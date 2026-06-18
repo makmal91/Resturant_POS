@@ -451,7 +451,7 @@ public class ReportRepository : IReportRepository
     public async Task<AgingReportPagedResultDto<ReceivableAgingRowDto>> GetReceivableAgingReportAsync(ReportFilterDto filter)
     {
         var (pageNumber, pageSize) = filter.Normalize();
-        var asOfDate = DateTime.UtcNow.Date;
+        var asOfDate = (filter.ToDate ?? DateTime.UtcNow).Date;
 
         var invoiceQuery = _db.SaleInvoices
             .AsNoTracking()
@@ -465,6 +465,12 @@ public class ReportRepository : IReportRepository
 
         if (filter.CustomerId is > 0)
             invoiceQuery = invoiceQuery.Where(i => i.CustomerId == filter.CustomerId);
+
+        if (filter.FromDate.HasValue)
+            invoiceQuery = invoiceQuery.Where(i => i.SaleDate >= filter.FromDate.Value.Date);
+
+        if (filter.ToDate.HasValue)
+            invoiceQuery = invoiceQuery.Where(i => i.SaleDate < filter.ToDate.Value.Date.AddDays(1));
 
         if (!string.IsNullOrWhiteSpace(filter.Search))
         {
@@ -521,7 +527,7 @@ public class ReportRepository : IReportRepository
     public async Task<AgingReportPagedResultDto<PayableAgingRowDto>> GetPayableAgingReportAsync(ReportFilterDto filter)
     {
         var (pageNumber, pageSize) = filter.Normalize();
-        var asOfDate = DateTime.UtcNow.Date;
+        var asOfDate = (filter.ToDate ?? DateTime.UtcNow).Date;
 
         var purchaseQuery = _db.Purchases
             .AsNoTracking()
@@ -534,6 +540,12 @@ public class ReportRepository : IReportRepository
 
         if (filter.SupplierId is > 0)
             purchaseQuery = purchaseQuery.Where(p => p.SupplierId == filter.SupplierId);
+
+        if (filter.FromDate.HasValue)
+            purchaseQuery = purchaseQuery.Where(p => p.PurchaseDate >= filter.FromDate.Value.Date);
+
+        if (filter.ToDate.HasValue)
+            purchaseQuery = purchaseQuery.Where(p => p.PurchaseDate < filter.ToDate.Value.Date.AddDays(1));
 
         if (!string.IsNullOrWhiteSpace(filter.Search))
         {

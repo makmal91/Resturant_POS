@@ -1,5 +1,5 @@
 import React from 'react';
-import { fmt } from './reportFormatters';
+import { fmt, formatDate } from './reportFormatters';
 import type { AgingReportSummary } from './reportService';
 
 interface AgingSummaryCardsProps {
@@ -21,6 +21,9 @@ export default function AgingSummaryCards({ summary }: AgingSummaryCardsProps) {
       <div className="rounded-lg border border-gray-200 bg-white p-4">
         <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Total Outstanding</p>
         <p className="mt-1 text-2xl font-bold text-gray-900">{fmt(summary.totalOutstanding)}</p>
+        {summary.asOfDate && (
+          <p className="mt-1 text-xs text-gray-500">As of {formatDate(summary.asOfDate)}</p>
+        )}
       </div>
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {cards.map(({ key, label, color }) => (

@@ -24,6 +24,8 @@ const ReceivableAgingReportPage: React.FC = () => {
   const [agingBucket, setAgingBucket] = useState('');
   const [customerId, setCustomerId] = useState(0);
   const [customers, setCustomers] = useState<CustomerListItem[]>([]);
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
 
   useEffect(() => {
     if (branchId <= 0) {
@@ -44,6 +46,8 @@ const ReceivableAgingReportPage: React.FC = () => {
     defaultSortColumn: 'daysOverdue',
     agingBucket,
     customerId,
+    fromDate,
+    toDate,
   });
 
   const columns: Column<ReceivableAgingRow>[] = useMemo(() => [
@@ -74,7 +78,10 @@ const ReceivableAgingReportPage: React.FC = () => {
     <ReportPageShell
       title="Receivable Aging Report"
       description="Customer outstanding invoices grouped by aging buckets (calculated on server)."
-      showDateFilters={false}
+      fromDate={fromDate}
+      toDate={toDate}
+      onFromDateChange={(v) => { setFromDate(v); table.setPageNumber(1); }}
+      onToDateChange={(v) => { setToDate(v); table.setPageNumber(1); }}
       extraFilters={(
         <>
           <CustomerFilter

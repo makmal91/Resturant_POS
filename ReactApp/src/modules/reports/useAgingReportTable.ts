@@ -21,6 +21,8 @@ interface UseAgingReportTableOptions<T> {
   agingBucket?: string;
   customerId?: number;
   supplierId?: number;
+  fromDate?: string;
+  toDate?: string;
 }
 
 export function useAgingReportTable<T>({
@@ -33,6 +35,8 @@ export function useAgingReportTable<T>({
   agingBucket = '',
   customerId,
   supplierId,
+  fromDate = '',
+  toDate = '',
 }: UseAgingReportTableOptions<T>) {
   const [rows, setRows] = useState<T[]>([]);
   const [summary, setSummary] = useState<AgingReportSummary | null>(null);
@@ -67,6 +71,8 @@ export function useAgingReportTable<T>({
         agingBucket: agingBucket || undefined,
         customerId: customerId && customerId > 0 ? customerId : undefined,
         supplierId: supplierId && supplierId > 0 ? supplierId : undefined,
+        ...(fromDate ? { fromDate } : {}),
+        ...(toDate ? { toDate } : {}),
       });
       const payload = res.data;
       setRows(Array.isArray(payload?.data) ? payload.data : []);
@@ -82,7 +88,7 @@ export function useAgingReportTable<T>({
     } finally {
       setLoading(false);
     }
-  }, [branchId, enabled, fetcher, agingBucket, customerId, supplierId, pageNumber, pageSize, search, sortColumn, sortDirection]);
+  }, [branchId, enabled, fetcher, agingBucket, customerId, supplierId, fromDate, toDate, pageNumber, pageSize, search, sortColumn, sortDirection]);
 
   useEffect(() => {
     const timer = setTimeout(() => { void load(); }, search ? 300 : 0);
@@ -91,7 +97,7 @@ export function useAgingReportTable<T>({
 
   useEffect(() => {
     setPageNumber(1);
-  }, [branchId, agingBucket, customerId, supplierId, pageSize]);
+  }, [branchId, agingBucket, customerId, supplierId, fromDate, toDate, pageSize]);
 
   return {
     rows,
