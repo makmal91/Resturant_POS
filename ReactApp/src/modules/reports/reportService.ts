@@ -20,6 +20,10 @@ export interface ReportQueryParams {
   sortDirection?: 'asc' | 'desc';
   customerId?: number;
   supplierId?: number;
+  productId?: number;
+  categoryId?: number;
+  subCategoryId?: number;
+  brandId?: number;
   agingBucket?: string;
 }
 
@@ -91,6 +95,21 @@ export interface ProfitLossRow {
   expenses: number;
   netProfit: number;
   salesCount: number;
+}
+
+export interface ProfitLossReportSummary {
+  totalRevenue: number;
+  totalDiscounts: number;
+  totalTax: number;
+  totalCostOfGoodsSold: number;
+  totalGrossProfit: number;
+  totalExpenses: number;
+  totalNetProfit: number;
+  totalSalesCount: number;
+}
+
+export interface ProfitLossReportPagedResponse extends ReportPagedResponse<ProfitLossRow> {
+  summary: ProfitLossReportSummary;
 }
 
 export interface ReceivableAgingRow {
@@ -167,6 +186,42 @@ export interface SalesByProductRow {
   invoiceCount: number;
 }
 
+export interface ProductWiseSalesReportRow {
+  productId: number;
+  productName: string;
+  productCode: string;
+  sku: string;
+  categoryId: number;
+  categoryName: string;
+  subCategoryId?: number | null;
+  subCategoryName?: string | null;
+  brandId?: number | null;
+  brandName?: string | null;
+  totalQuantity: number;
+  totalBaseQuantity: number;
+  totalAmount: number;
+  totalDiscount: number;
+  totalTax: number;
+  totalCost: number;
+  grossProfit: number;
+  invoiceCount: number;
+}
+
+export interface ProductWiseSalesReportSummary {
+  totalProducts: number;
+  totalQuantity: number;
+  totalAmount: number;
+  totalDiscount: number;
+  totalTax: number;
+  totalCost: number;
+  grossProfit: number;
+  totalInvoices: number;
+}
+
+export interface ProductWiseSalesReportPagedResponse extends ReportPagedResponse<ProductWiseSalesReportRow> {
+  summary: ProductWiseSalesReportSummary;
+}
+
 export interface StockSummaryItem {
   productId: number;
   productName: string;
@@ -207,6 +262,12 @@ export const reportService = {
       ...bh(branchId),
     }),
 
+  getProductWiseSalesReport: (branchId: number, params: ReportQueryParams = {}) =>
+    apiClient.get<ProductWiseSalesReportPagedResponse>('/reports/product-wise-sales', {
+      params: reportParams(branchId, params),
+      ...bh(branchId),
+    }),
+
   getPurchaseReport: (branchId: number, params: ReportQueryParams = {}) =>
     apiClient.get<ReportPagedResponse<PurchaseReportRow>>('/reports/purchases', {
       params: reportParams(branchId, params),
@@ -226,7 +287,7 @@ export const reportService = {
     }),
 
   getProfitLossReport: (branchId: number, params: ReportQueryParams = {}) =>
-    apiClient.get<ReportPagedResponse<ProfitLossRow>>('/reports/profit-loss', {
+    apiClient.get<ProfitLossReportPagedResponse>('/reports/profit-loss', {
       params: reportParams(branchId, params),
       ...bh(branchId),
     }),

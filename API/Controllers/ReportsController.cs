@@ -62,6 +62,11 @@ public class ReportsController : ControllerBase
     public async Task<IActionResult> GetPayableAgingReport([FromQuery] ReportQueryParams q)
         => Ok(await _reportService.GetPayableAgingReportAsync(BuildFilter(q)));
 
+    [HttpGet("product-wise-sales")]
+    [RequirePermission(PermissionModules.ProductWiseSalesReport, PermissionActions.View)]
+    public async Task<IActionResult> GetProductWiseSalesReport([FromQuery] ReportQueryParams q)
+        => Ok(await _reportService.GetProductWiseSalesReportAsync(BuildFilter(q)));
+
     private ReportFilterDto BuildFilter(ReportQueryParams q)
     {
         var pageNumber = q.PageNumber ?? q.Page ?? 1;
@@ -78,6 +83,10 @@ public class ReportsController : ControllerBase
             ToDate = q.ToDate,
             CustomerId = q.CustomerId,
             SupplierId = q.SupplierId,
+            ProductId = q.ProductId,
+            CategoryId = q.CategoryId,
+            SubCategoryId = q.SubCategoryId,
+            BrandId = q.BrandId,
             AgingBucket = q.AgingBucket
         };
     }
@@ -97,6 +106,10 @@ public class ReportsController : ControllerBase
         public DateTime? ToDate { get; set; }
         public int? CustomerId { get; set; }
         public int? SupplierId { get; set; }
+        public int? ProductId { get; set; }
+        public int? CategoryId { get; set; }
+        public int? SubCategoryId { get; set; }
+        public int? BrandId { get; set; }
         public string? AgingBucket { get; set; }
     }
 

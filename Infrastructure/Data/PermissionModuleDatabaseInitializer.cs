@@ -205,13 +205,14 @@ public static class PermissionModuleSeeder
 
         // Reports
         new("Sales Report", PermissionModules.SalesReports, "Reports", 1, "/reports/sales", "SR"),
-        new("Purchase Report", PermissionModules.PurchaseReports, "Reports", 2, "/reports/purchases", "PR"),
-        new("Customer Outstanding", PermissionModules.CustomerOutstandingReport, "Reports", 3, "/reports/customer-outstanding", "CO"),
-        new("Supplier Payable", PermissionModules.SupplierPayableReport, "Reports", 4, "/reports/supplier-payable", "SP"),
-        new("Profit & Loss", PermissionModules.ProfitLossReport, "Reports", 5, "/reports/profit-loss", "PL"),
-        new("Stock Report", PermissionModules.StockReports, "Reports", 6, "/reports/stock", "StR"),
-        new("Receivable Aging", PermissionModules.CustomerReceivableAgingReport, "Reports", 7, "/reports/receivable-aging", "RA"),
-        new("Payable Aging", PermissionModules.SupplierPayableAgingReport, "Reports", 8, "/reports/payable-aging", "PA"),
+        new("Product Wise Sales", PermissionModules.ProductWiseSalesReport, "Reports", 2, "/reports/product-wise-sales", "PWS"),
+        new("Purchase Report", PermissionModules.PurchaseReports, "Reports", 3, "/reports/purchases", "PR"),
+        new("Customer Outstanding", PermissionModules.CustomerOutstandingReport, "Reports", 4, "/reports/customer-outstanding", "CO"),
+        new("Supplier Payable", PermissionModules.SupplierPayableReport, "Reports", 5, "/reports/supplier-payable", "SP"),
+        new("Profit & Loss", PermissionModules.ProfitLossReport, "Reports", 6, "/reports/profit-loss", "PL"),
+        new("Stock Report", PermissionModules.StockReports, "Reports", 7, "/reports/stock", "StR"),
+        new("Receivable Aging", PermissionModules.CustomerReceivableAgingReport, "Reports", 8, "/reports/receivable-aging", "RA"),
+        new("Payable Aging", PermissionModules.SupplierPayableAgingReport, "Reports", 9, "/reports/payable-aging", "PA"),
 
         // Settings
         new("System Settings", PermissionModules.SystemSettings, "Settings", 1, "/settings", "settings"),

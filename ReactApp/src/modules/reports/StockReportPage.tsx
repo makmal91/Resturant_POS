@@ -11,9 +11,12 @@ import {
   stockStatusLabel,
   stockStatusQtyColor,
 } from '../stock/stockService';
+import { StockAttractiveSummary } from './reportAttractiveSummaries';
 import ReportPageShell from './ReportPageShell';
+import { stockExportColumns } from './reportExportColumns';
 import { fmtQty, monthStart, todayStr } from './reportFormatters';
 import { reportService, type StockSummaryItem } from './reportService';
+import { useReportExport } from './useReportExport';
 
 const StockReportPage: React.FC = () => {
   const { selectedBranchId } = useBranchWriteAccess();
@@ -44,6 +47,20 @@ const StockReportPage: React.FC = () => {
     }).catch(() => setWarehouses([]));
   }, [branchId]);
 
+  const fetchExportPage = useCallback(async (page: number, size: number) => {
+    const res = await reportService.getStockSummary(branchId, {
+      fromDate,
+      toDate,
+      warehouseId: warehouseId === '' ? undefined : Number(warehouseId),
+      page,
+      pageSize: size,
+      search: search.trim() || undefined,
+      sortBy: sortColumn,
+      sortDirection,
+    });
+    return { data: res.data.items ?? [], totalRecords: res.data.totalRecords ?? 0 };
+  }, [branchId, fromDate, toDate, warehouseId, search, sortColumn, sortDirection]);
+
   const load = useCallback(async () => {
     if (branchId <= 0) return;
     setLoading(true);
@@ -72,6 +89,13 @@ const StockReportPage: React.FC = () => {
     }
   }, [branchId, fromDate, toDate, warehouseId, pageNumber, pageSize, search, sortColumn, sortDirection]);
 
+  const { exporting, onExport } = useReportExport(
+    `stock-report-${fromDate}-${toDate}`,
+    stockExportColumns,
+    fetchExportPage,
+    branchId > 0,
+  );
+
   useEffect(() => {
     const timer = setTimeout(() => { void load(); }, search ? 300 : 0);
     return () => clearTimeout(timer);
@@ -95,15 +119,23 @@ const StockReportPage: React.FC = () => {
       },
     },
     {
-      key: 'closingBalance',
+      key: 'status',
       header: 'Status',
       render: (v, row) => {
-        const q = Number(v ?? row.closingBalance ?? 0);
+        const q = Number(row.closingBalance ?? 0);
         const status = getStockStatus(q, row);
         return <Badge variant={stockStatusBadgeVariant(status)} size="sm" dot>{stockStatusLabel(status)}</Badge>;
       },
     },
   ], []);
+
+  const footerRow = useMemo(() => ({
+    label: 'Total',
+    values: {
+      productId: 'Total',
+      closingBalance: fmtQty(totalClosingBalance),
+    },
+  }), [totalClosingBalance]);
 
   if (branchId <= 0) {
     return (
@@ -139,6 +171,8 @@ const StockReportPage: React.FC = () => {
       error={error}
       loading={loading}
       onRefresh={load}
+      onExport={onExport}
+      exporting={exporting}
       columns={columns}
       rows={rows}
       searchPlaceholder="Search products..."
@@ -154,17 +188,13 @@ const StockReportPage: React.FC = () => {
       onPageSizeChange={(size) => { setPageSize(size); setPageNumber(1); }}
       onSearchChange={(value) => { setSearch(value); setPageNumber(1); }}
       onSortChange={(column, direction) => { setSortColumn(column); setSortDirection(direction); setPageNumber(1); }}
+      footerRow={rows.length > 0 ? footerRow : undefined}
       summary={(
-        <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-2">
-          <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-blue-700">
-            <p className="text-xs font-medium uppercase tracking-wide opacity-70">Products</p>
-            <p className="mt-1 text-xl font-bold">{totalRecords}</p>
-          </div>
-          <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-4 text-emerald-700">
-            <p className="text-xs font-medium uppercase tracking-wide opacity-70">Total Closing Balance</p>
-            <p className="mt-1 text-xl font-bold">{fmtQty(totalClosingBalance)}</p>
-          </div>
-        </div>
+        <StockAttractiveSummary
+          loading={loading}
+          productCount={totalRecords}
+          totalClosingBalance={totalClosingBalance}
+        />
       )}
     />
   );

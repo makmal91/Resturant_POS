@@ -1,12 +1,15 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Column } from '../../components/DataTable';
 import Badge from '../../components/Badge';
 import { useBranchWriteAccess } from '../../hooks/useBranchWriteAccess';
 import { hasBranchContext } from '../../types/permissions';
 import { safeString } from '../../utils/safeValues';
+import { SalesAttractiveSummary } from './reportAttractiveSummaries';
 import ReportPageShell from './ReportPageShell';
+import { salesExportColumns } from './reportExportColumns';
 import { fmt, formatDate, monthStart, todayStr } from './reportFormatters';
 import { reportService, type SalesReportRow, type SalesSummaryDto } from './reportService';
+import { useReportExport } from './useReportExport';
 import { useReportTable } from './useReportTable';
 
 const SalesReportPage: React.FC = () => {
@@ -15,6 +18,7 @@ const SalesReportPage: React.FC = () => {
   const [fromDate, setFromDate] = useState(monthStart);
   const [toDate, setToDate] = useState(todayStr);
   const [summary, setSummary] = useState<SalesSummaryDto | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
 
   const table = useReportTable<SalesReportRow>({
     branchId,
@@ -30,10 +34,32 @@ const SalesReportPage: React.FC = () => {
       setSummary(null);
       return;
     }
+    setSummaryLoading(true);
     void reportService.getSalesSummary(branchId, { fromDate, toDate })
       .then((res) => setSummary(res.data))
-      .catch(() => setSummary(null));
+      .catch(() => setSummary(null))
+      .finally(() => setSummaryLoading(false));
   }, [branchId, fromDate, toDate]);
+
+  const fetchExportPage = useCallback(async (pageNumber: number, pageSize: number) => {
+    const res = await reportService.getSalesReport(branchId, {
+      fromDate,
+      toDate,
+      pageNumber,
+      pageSize,
+      search: table.search.trim() || undefined,
+      sortColumn: table.sortColumn,
+      sortDirection: table.sortDirection,
+    });
+    return { data: res.data.data, totalRecords: res.data.totalRecords };
+  }, [branchId, fromDate, toDate, table.search, table.sortColumn, table.sortDirection]);
+
+  const { exporting, onExport } = useReportExport(
+    `sales-report-${fromDate}-${toDate}`,
+    salesExportColumns,
+    fetchExportPage,
+    branchId > 0,
+  );
 
   const columns: Column<SalesReportRow>[] = useMemo(() => [
     { key: 'invoiceNo', header: 'Invoice', sortable: true, render: (v) => <span className="font-mono text-xs">{safeString(v)}</span> },
@@ -49,6 +75,20 @@ const SalesReportPage: React.FC = () => {
       render: (v) => <Badge variant={v ? 'warning' : 'success'} size="sm">{v ? 'Credit' : 'Cash'}</Badge>,
     },
   ], []);
+
+  const footerRow = useMemo(() => {
+    if (!summary) return undefined;
+    const balanceDue = summary.totalSales - summary.totalPaid;
+    return {
+      label: 'Total',
+      values: {
+        invoiceNo: 'Total',
+        grandTotal: fmt(summary.totalSales),
+        paidAmount: fmt(summary.totalPaid),
+        balanceDue: fmt(balanceDue),
+      },
+    };
+  }, [summary]);
 
   if (branchId <= 0) {
     return (
@@ -69,6 +109,8 @@ const SalesReportPage: React.FC = () => {
       error={table.error}
       loading={table.loading}
       onRefresh={table.reload}
+      onExport={onExport}
+      exporting={exporting}
       columns={columns}
       rows={table.rows}
       searchPlaceholder="Search invoice or customer..."
@@ -84,21 +126,8 @@ const SalesReportPage: React.FC = () => {
       onPageSizeChange={table.onPageSizeChange}
       onSearchChange={table.onSearchChange}
       onSortChange={table.onSortChange}
-      summary={summary ? (
-        <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
-          {[
-            { label: 'Total Sales', value: fmt(summary.totalSales) },
-            { label: 'Invoices', value: String(summary.totalInvoices) },
-            { label: 'Cash', value: fmt(summary.totalCash) },
-            { label: 'Card', value: fmt(summary.totalCard) },
-          ].map(({ label, value }) => (
-            <div key={label} className="rounded-lg border border-gray-100 bg-white p-4">
-              <p className="text-xs font-medium text-gray-500">{label}</p>
-              <p className="mt-1 text-lg font-semibold text-gray-800">{value}</p>
-            </div>
-          ))}
-        </div>
-      ) : null}
+      footerRow={footerRow}
+      summary={<SalesAttractiveSummary summary={summary} loading={summaryLoading} />}
     />
   );
 };

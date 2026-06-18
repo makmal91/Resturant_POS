@@ -13,6 +13,10 @@ public class ReportFilterDto
     public DateTime? ToDate { get; set; }
     public int? CustomerId { get; set; }
     public int? SupplierId { get; set; }
+    public int? ProductId { get; set; }
+    public int? CategoryId { get; set; }
+    public int? SubCategoryId { get; set; }
+    public int? BrandId { get; set; }
 
     /// <summary>Aging bucket filter: 0-30, 31-60, 61-90, 90+</summary>
     public string? AgingBucket { get; set; }
@@ -134,6 +138,23 @@ public class ProfitLossRowDto
     public int SalesCount { get; set; }
 }
 
+public class ProfitLossReportSummaryDto
+{
+    public decimal TotalRevenue { get; set; }
+    public decimal TotalDiscounts { get; set; }
+    public decimal TotalTax { get; set; }
+    public decimal TotalCostOfGoodsSold { get; set; }
+    public decimal TotalGrossProfit { get; set; }
+    public decimal TotalExpenses { get; set; }
+    public decimal TotalNetProfit { get; set; }
+    public int TotalSalesCount { get; set; }
+}
+
+public class ProfitLossReportPagedResultDto : ReportPagedResultDto<ProfitLossRowDto>
+{
+    public ProfitLossReportSummaryDto Summary { get; set; } = new();
+}
+
 public class ReceivableAgingRowDto
 {
     public int InvoiceId { get; set; }
@@ -175,4 +196,43 @@ public class AgingReportSummaryDto
 public class AgingReportPagedResultDto<T> : ReportPagedResultDto<T>
 {
     public AgingReportSummaryDto Summary { get; set; } = new();
+}
+
+public class ProductWiseSalesReportRowDto
+{
+    public int ProductId { get; set; }
+    public string ProductName { get; set; } = string.Empty;
+    public string ProductCode { get; set; } = string.Empty;
+    public string Sku { get; set; } = string.Empty;
+    public int CategoryId { get; set; }
+    public string CategoryName { get; set; } = string.Empty;
+    public int? SubCategoryId { get; set; }
+    public string? SubCategoryName { get; set; }
+    public int? BrandId { get; set; }
+    public string? BrandName { get; set; }
+    public decimal TotalQuantity { get; set; }
+    public decimal TotalBaseQuantity { get; set; }
+    public decimal TotalAmount { get; set; }
+    public decimal TotalDiscount { get; set; }
+    public decimal TotalTax { get; set; }
+    public decimal TotalCost { get; set; }
+    public decimal GrossProfit { get; set; }
+    public int InvoiceCount { get; set; }
+}
+
+public class ProductWiseSalesReportSummaryDto
+{
+    public int TotalProducts { get; set; }
+    public decimal TotalQuantity { get; set; }
+    public decimal TotalAmount { get; set; }
+    public decimal TotalDiscount { get; set; }
+    public decimal TotalTax { get; set; }
+    public decimal TotalCost { get; set; }
+    public decimal GrossProfit { get; set; }
+    public int TotalInvoices { get; set; }
+}
+
+public class ProductWiseSalesReportPagedResultDto : ReportPagedResultDto<ProductWiseSalesReportRowDto>
+{
+    public ProductWiseSalesReportSummaryDto Summary { get; set; } = new();
 }

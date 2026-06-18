@@ -38,6 +38,10 @@ interface DataTableProps<T> {
   onSortChange?: (column: string, direction: 'asc' | 'desc') => void;
   pageSizeOptions?: number[];
   onPageSizeChange?: (pageSize: number) => void;
+  footerRow?: {
+    label?: string;
+    values?: Partial<Record<string, React.ReactNode>>;
+  };
 }
 
 function getVisiblePageNumbers(currentPage: number, totalPages: number): number[] {
@@ -76,6 +80,7 @@ function DataTable<T extends Record<string, any>>({
   onSortChange,
   pageSizeOptions,
   onPageSizeChange,
+  footerRow,
 }: DataTableProps<T>) {
   const [internalSearchTerm, setInternalSearchTerm] = useState('');
   const [internalCurrentPage, setInternalCurrentPage] = useState(1);
@@ -309,6 +314,25 @@ function DataTable<T extends Record<string, any>>({
               ))
             )}
           </tbody>
+          {footerRow && paginatedData.length > 0 && (
+            <tfoot>
+              <tr className="border-t-2 border-gray-200 bg-gray-50 font-semibold text-gray-800">
+                {columns.map((column, index) => {
+                  const key = column.key as string;
+                  const content = index === 0
+                    ? (footerRow.values?.[key] ?? footerRow.label ?? 'Total')
+                    : footerRow.values?.[key] ?? '—';
+
+                  return (
+                    <td key={key} className="px-6 py-3 whitespace-nowrap text-sm">
+                      {content}
+                    </td>
+                  );
+                })}
+                {actions.length > 0 && <td className="px-6 py-3" />}
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
 

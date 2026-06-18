@@ -312,7 +312,7 @@ public class ReportRepository : IReportRepository
         return PaginateList(rows.ToList(), pageNumber, pageSize);
     }
 
-    public async Task<ReportPagedResultDto<ProfitLossRowDto>> GetProfitLossReportAsync(ReportFilterDto filter)
+    public async Task<ProfitLossReportPagedResultDto> GetProfitLossReportAsync(ReportFilterDto filter)
     {
         var (pageNumber, pageSize) = filter.Normalize();
         var (from, toExclusive) = filter.ResolveDateRange();
@@ -439,13 +439,145 @@ public class ReportRepository : IReportRepository
 
         rows = ApplyProfitLossSort(rows, filter.SortColumn, filter.IsDescending());
 
+        var summary = new ProfitLossReportSummaryDto
+        {
+            TotalRevenue = rows.Sum(r => r.Revenue),
+            TotalDiscounts = rows.Sum(r => r.Discounts),
+            TotalTax = rows.Sum(r => r.Tax),
+            TotalCostOfGoodsSold = rows.Sum(r => r.CostOfGoodsSold),
+            TotalGrossProfit = rows.Sum(r => r.GrossProfit),
+            TotalExpenses = rows.Sum(r => r.Expenses),
+            TotalNetProfit = rows.Sum(r => r.NetProfit),
+            TotalSalesCount = rows.Sum(r => r.SalesCount),
+        };
+
         var totalRecords = rows.Count;
         var paged = rows
             .Skip((pageNumber - 1) * pageSize)
             .Take(pageSize)
             .ToList();
 
-        return ReportPagedResultDto<ProfitLossRowDto>.Create(paged, totalRecords, pageNumber, pageSize);
+        var result = ReportPagedResultDto<ProfitLossRowDto>.Create(paged, totalRecords, pageNumber, pageSize);
+        return new ProfitLossReportPagedResultDto
+        {
+            Data = result.Data,
+            TotalRecords = result.TotalRecords,
+            PageNumber = result.PageNumber,
+            PageSize = result.PageSize,
+            TotalPages = result.TotalPages,
+            Summary = summary,
+        };
+    }
+
+    public async Task<ProductWiseSalesReportPagedResultDto> GetProductWiseSalesReportAsync(ReportFilterDto filter)
+    {
+        var (pageNumber, pageSize) = filter.Normalize();
+        var (from, toExclusive) = filter.ResolveDateRange();
+
+        var itemQuery = _db.SaleInvoiceItems
+            .AsNoTracking()
+            .Where(i => i.BusinessId == filter.BusinessId
+                     && !i.IsDeleted
+                     && !i.SaleInvoice.IsDeleted
+                     && i.SaleInvoice.Status == SaleInvoiceStatus.Completed
+                     && i.SaleInvoice.SaleDate >= from
+                     && i.SaleInvoice.SaleDate < toExclusive);
+
+        if (filter.BranchId > 0)
+            itemQuery = itemQuery.Where(i => i.BranchId == filter.BranchId);
+
+        if (filter.ProductId is > 0)
+            itemQuery = itemQuery.Where(i => i.ProductId == filter.ProductId);
+
+        if (filter.CategoryId is > 0)
+            itemQuery = itemQuery.Where(i => i.Product.CategoryId == filter.CategoryId);
+
+        if (filter.SubCategoryId is > 0)
+            itemQuery = itemQuery.Where(i => i.Product.SubCategoryId == filter.SubCategoryId);
+
+        if (filter.BrandId is > 0)
+            itemQuery = itemQuery.Where(i => i.Product.BrandId == filter.BrandId);
+
+        var totalInvoices = await itemQuery
+            .Select(i => i.SaleInvoiceId)
+            .Distinct()
+            .CountAsync();
+
+        var grouped = itemQuery
+            .GroupBy(i => new
+            {
+                i.ProductId,
+                i.Product.ProductName,
+                i.Product.ProductCode,
+                i.Product.SKU,
+                i.Product.CategoryId,
+                CategoryName = i.Product.Category.Name,
+                i.Product.SubCategoryId,
+                SubCategoryName = i.Product.SubCategory != null ? i.Product.SubCategory.Name : null,
+                i.Product.BrandId,
+                BrandName = i.Product.Brand != null ? i.Product.Brand.Name : null,
+            })
+            .Select(g => new ProductWiseSalesReportRowDto
+            {
+                ProductId = g.Key.ProductId,
+                ProductName = g.Key.ProductName,
+                ProductCode = g.Key.ProductCode,
+                Sku = g.Key.SKU,
+                CategoryId = g.Key.CategoryId,
+                CategoryName = g.Key.CategoryName,
+                SubCategoryId = g.Key.SubCategoryId,
+                SubCategoryName = g.Key.SubCategoryName,
+                BrandId = g.Key.BrandId,
+                BrandName = g.Key.BrandName,
+                TotalQuantity = g.Sum(x => x.Quantity),
+                TotalBaseQuantity = g.Sum(x => x.BaseQuantity),
+                TotalAmount = g.Sum(x => x.LineTotal),
+                TotalDiscount = g.Sum(x => x.DiscountAmount),
+                TotalTax = g.Sum(x => x.TaxAmount),
+                TotalCost = g.Sum(x => x.BaseQuantity * x.Product.CostPrice),
+                GrossProfit = g.Sum(x => x.LineTotal) - g.Sum(x => x.BaseQuantity * x.Product.CostPrice),
+                InvoiceCount = g.Select(x => x.SaleInvoiceId).Distinct().Count(),
+            });
+
+        if (!string.IsNullOrWhiteSpace(filter.Search))
+        {
+            var term = filter.Search.Trim().ToLower();
+            grouped = grouped.Where(r =>
+                r.ProductName.ToLower().Contains(term) ||
+                r.ProductCode.ToLower().Contains(term) ||
+                r.Sku.ToLower().Contains(term) ||
+                r.CategoryName.ToLower().Contains(term) ||
+                (r.SubCategoryName != null && r.SubCategoryName.ToLower().Contains(term)) ||
+                (r.BrandName != null && r.BrandName.ToLower().Contains(term)));
+        }
+
+        var summaryRow = await grouped
+            .GroupBy(_ => 1)
+            .Select(g => new ProductWiseSalesReportSummaryDto
+            {
+                TotalProducts = g.Count(),
+                TotalQuantity = g.Sum(x => x.TotalQuantity),
+                TotalAmount = g.Sum(x => x.TotalAmount),
+                TotalDiscount = g.Sum(x => x.TotalDiscount),
+                TotalTax = g.Sum(x => x.TotalTax),
+                TotalCost = g.Sum(x => x.TotalCost),
+                GrossProfit = g.Sum(x => x.GrossProfit),
+                TotalInvoices = totalInvoices,
+            })
+            .FirstOrDefaultAsync() ?? new ProductWiseSalesReportSummaryDto { TotalInvoices = totalInvoices };
+
+        grouped = ApplyProductWiseSalesSort(grouped, filter.SortColumn, filter.IsDescending());
+        var paged = await PaginateAsync(grouped, pageNumber, pageSize);
+
+        return new ProductWiseSalesReportPagedResultDto
+        {
+            Data = paged.Data,
+            TotalRecords = paged.TotalRecords,
+            PageNumber = paged.PageNumber,
+            PageSize = paged.PageSize,
+            TotalPages = paged.TotalPages,
+            Summary = summaryRow,
+        };
     }
 
     public async Task<AgingReportPagedResultDto<ReceivableAgingRowDto>> GetReceivableAgingReportAsync(ReportFilterDto filter)
@@ -773,6 +905,56 @@ public class ReportRepository : IReportRepository
             .ToListAsync();
 
         return ReportPagedResultDto<T>.Create(data, totalRecords, pageNumber, pageSize);
+    }
+
+    private static IQueryable<ProductWiseSalesReportRowDto> ApplyProductWiseSalesSort(
+        IQueryable<ProductWiseSalesReportRowDto> query, string? sortColumn, bool descending)
+    {
+        return (sortColumn ?? "totalAmount").ToLowerInvariant() switch
+        {
+            "productname" or "product" => descending
+                ? query.OrderByDescending(r => r.ProductName)
+                : query.OrderBy(r => r.ProductName),
+            "productcode" or "code" => descending
+                ? query.OrderByDescending(r => r.ProductCode)
+                : query.OrderBy(r => r.ProductCode),
+            "sku" => descending
+                ? query.OrderByDescending(r => r.Sku)
+                : query.OrderBy(r => r.Sku),
+            "categoryname" or "category" => descending
+                ? query.OrderByDescending(r => r.CategoryName)
+                : query.OrderBy(r => r.CategoryName),
+            "subcategoryname" or "subcategory" => descending
+                ? query.OrderByDescending(r => r.SubCategoryName)
+                : query.OrderBy(r => r.SubCategoryName),
+            "brandname" or "brand" => descending
+                ? query.OrderByDescending(r => r.BrandName)
+                : query.OrderBy(r => r.BrandName),
+            "totalquantity" or "quantity" or "qty" => descending
+                ? query.OrderByDescending(r => r.TotalQuantity)
+                : query.OrderBy(r => r.TotalQuantity),
+            "totalamount" or "amount" or "sales" => descending
+                ? query.OrderByDescending(r => r.TotalAmount)
+                : query.OrderBy(r => r.TotalAmount),
+            "totaldiscount" or "discount" => descending
+                ? query.OrderByDescending(r => r.TotalDiscount)
+                : query.OrderBy(r => r.TotalDiscount),
+            "totaltax" or "tax" => descending
+                ? query.OrderByDescending(r => r.TotalTax)
+                : query.OrderBy(r => r.TotalTax),
+            "totalcost" or "cost" => descending
+                ? query.OrderByDescending(r => r.TotalCost)
+                : query.OrderBy(r => r.TotalCost),
+            "grossprofit" or "profit" => descending
+                ? query.OrderByDescending(r => r.GrossProfit)
+                : query.OrderBy(r => r.GrossProfit),
+            "invoicecount" or "invoices" => descending
+                ? query.OrderByDescending(r => r.InvoiceCount)
+                : query.OrderBy(r => r.InvoiceCount),
+            _ => descending
+                ? query.OrderByDescending(r => r.TotalAmount).ThenByDescending(r => r.ProductName)
+                : query.OrderBy(r => r.TotalAmount).ThenBy(r => r.ProductName),
+        };
     }
 
     private static IQueryable<SalesReportRowDto> ApplySalesSort(

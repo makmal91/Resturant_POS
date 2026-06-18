@@ -1,11 +1,15 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import type { Column } from '../../components/DataTable';
 import { useBranchWriteAccess } from '../../hooks/useBranchWriteAccess';
 import { hasBranchContext } from '../../types/permissions';
 import { safeString } from '../../utils/safeValues';
+import { CustomerOutstandingAttractiveSummary } from './reportAttractiveSummaries';
 import ReportPageShell from './ReportPageShell';
+import { customerOutstandingExportColumns } from './reportExportColumns';
 import { fmt, formatDate } from './reportFormatters';
 import { reportService, type CustomerOutstandingRow } from './reportService';
+import { useReportAggregates } from './useReportAggregates';
+import { useReportExport } from './useReportExport';
 import { useReportTable } from './useReportTable';
 
 const CustomerOutstandingReportPage: React.FC = () => {
@@ -20,6 +24,38 @@ const CustomerOutstandingReportPage: React.FC = () => {
     includeDates: false,
   });
 
+  const fetchAggregatePage = useCallback(async (pageNumber: number, pageSize: number) => {
+    const res = await reportService.getCustomerOutstandingReport(branchId, {
+      pageNumber,
+      pageSize,
+      search: table.search.trim() || undefined,
+      sortColumn: table.sortColumn,
+      sortDirection: table.sortDirection,
+    });
+    return { data: res.data.data, totalRecords: res.data.totalRecords };
+  }, [branchId, table.search, table.sortColumn, table.sortDirection]);
+
+  const aggregate = useCallback((rows: CustomerOutstandingRow[]) => ({
+    customerCount: rows.length,
+    totalOutstanding: rows.reduce((sum, row) => sum + Number(row.outstandingAmount ?? 0), 0),
+    totalOpening: rows.reduce((sum, row) => sum + Number(row.openingBalance ?? 0), 0),
+    totalInvoiceDue: rows.reduce((sum, row) => sum + Number(row.invoiceOutstanding ?? 0), 0),
+  }), []);
+
+  const { totals, loading: aggregatesLoading } = useReportAggregates({
+    enabled: branchId > 0,
+    deps: [branchId, table.search, table.sortColumn, table.sortDirection],
+    fetchPage: fetchAggregatePage,
+    aggregate,
+  });
+
+  const { exporting, onExport } = useReportExport(
+    'customer-outstanding-report',
+    customerOutstandingExportColumns,
+    fetchAggregatePage,
+    branchId > 0,
+  );
+
   const columns: Column<CustomerOutstandingRow>[] = useMemo(() => [
     { key: 'customerCode', header: 'Code', sortable: true },
     { key: 'customerName', header: 'Customer', sortable: true },
@@ -30,6 +66,19 @@ const CustomerOutstandingReportPage: React.FC = () => {
     { key: 'outstandingInvoices', header: 'Invoices', sortable: true },
     { key: 'lastSaleDate', header: 'Last Sale', sortable: true, render: (v) => formatDate(String(v ?? '')) },
   ], []);
+
+  const footerRow = useMemo(() => {
+    if (!totals) return undefined;
+    return {
+      label: 'Total',
+      values: {
+        customerCode: 'Total',
+        openingBalance: fmt(totals.totalOpening),
+        invoiceOutstanding: fmt(totals.totalInvoiceDue),
+        outstandingAmount: <span className="font-bold text-blue-700">{fmt(totals.totalOutstanding)}</span>,
+      },
+    };
+  }, [totals]);
 
   if (branchId <= 0) {
     return (
@@ -47,6 +96,8 @@ const CustomerOutstandingReportPage: React.FC = () => {
       error={table.error}
       loading={table.loading}
       onRefresh={table.reload}
+      onExport={onExport}
+      exporting={exporting}
       columns={columns}
       rows={table.rows}
       searchPlaceholder="Search customer..."
@@ -62,6 +113,16 @@ const CustomerOutstandingReportPage: React.FC = () => {
       onPageSizeChange={table.onPageSizeChange}
       onSearchChange={table.onSearchChange}
       onSortChange={table.onSortChange}
+      footerRow={footerRow}
+      summary={(
+        <CustomerOutstandingAttractiveSummary
+          loading={aggregatesLoading}
+          customerCount={totals?.customerCount ?? 0}
+          totalOutstanding={totals?.totalOutstanding ?? 0}
+          totalOpening={totals?.totalOpening ?? 0}
+          totalInvoiceDue={totals?.totalInvoiceDue ?? 0}
+        />
+      )}
     />
   );
 };

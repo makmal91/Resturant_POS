@@ -21,7 +21,7 @@ public class ReportService : IReportService
     public Task<ReportPagedResultDto<SupplierPayableRowDto>> GetSupplierPayableReportAsync(ReportFilterDto filter)
         => _repository.GetSupplierPayableReportAsync(filter);
 
-    public Task<ReportPagedResultDto<ProfitLossRowDto>> GetProfitLossReportAsync(ReportFilterDto filter)
+    public Task<ProfitLossReportPagedResultDto> GetProfitLossReportAsync(ReportFilterDto filter)
         => _repository.GetProfitLossReportAsync(filter);
 
     public Task<AgingReportPagedResultDto<ReceivableAgingRowDto>> GetReceivableAgingReportAsync(ReportFilterDto filter)
@@ -29,4 +29,7 @@ public class ReportService : IReportService
 
     public Task<AgingReportPagedResultDto<PayableAgingRowDto>> GetPayableAgingReportAsync(ReportFilterDto filter)
         => _repository.GetPayableAgingReportAsync(filter);
+
+    public Task<ProductWiseSalesReportPagedResultDto> GetProductWiseSalesReportAsync(ReportFilterDto filter)
+        => _repository.GetProductWiseSalesReportAsync(filter);
 }

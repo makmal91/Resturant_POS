@@ -1,10 +1,14 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import type { Column } from '../../components/DataTable';
 import { useBranchWriteAccess } from '../../hooks/useBranchWriteAccess';
 import { hasBranchContext } from '../../types/permissions';
 import ReportPageShell from './ReportPageShell';
+import { SupplierPayableAttractiveSummary } from './reportAttractiveSummaries';
+import { supplierPayableExportColumns } from './reportExportColumns';
 import { fmt, formatDate } from './reportFormatters';
 import { reportService, type SupplierPayableRow } from './reportService';
+import { useReportAggregates } from './useReportAggregates';
+import { useReportExport } from './useReportExport';
 import { useReportTable } from './useReportTable';
 
 const SupplierPayableReportPage: React.FC = () => {
@@ -19,6 +23,38 @@ const SupplierPayableReportPage: React.FC = () => {
     includeDates: false,
   });
 
+  const fetchAggregatePage = useCallback(async (pageNumber: number, pageSize: number) => {
+    const res = await reportService.getSupplierPayableReport(branchId, {
+      pageNumber,
+      pageSize,
+      search: table.search.trim() || undefined,
+      sortColumn: table.sortColumn,
+      sortDirection: table.sortDirection,
+    });
+    return { data: res.data.data, totalRecords: res.data.totalRecords };
+  }, [branchId, table.search, table.sortColumn, table.sortDirection]);
+
+  const aggregate = useCallback((rows: SupplierPayableRow[]) => ({
+    supplierCount: rows.length,
+    totalPayable: rows.reduce((sum, row) => sum + Number(row.payableAmount ?? 0), 0),
+    totalInvoices: rows.reduce((sum, row) => sum + Number(row.outstandingInvoices ?? 0), 0),
+    totalInvoiceDue: rows.reduce((sum, row) => sum + Number(row.invoicePayable ?? 0), 0),
+  }), []);
+
+  const { totals, loading: aggregatesLoading } = useReportAggregates({
+    enabled: branchId > 0,
+    deps: [branchId, table.search, table.sortColumn, table.sortDirection],
+    fetchPage: fetchAggregatePage,
+    aggregate,
+  });
+
+  const { exporting, onExport } = useReportExport(
+    'supplier-payable-report',
+    supplierPayableExportColumns,
+    fetchAggregatePage,
+    branchId > 0,
+  );
+
   const columns: Column<SupplierPayableRow>[] = useMemo(() => [
     { key: 'supplierCode', header: 'Code', sortable: true },
     { key: 'supplierName', header: 'Supplier', sortable: true },
@@ -28,6 +64,19 @@ const SupplierPayableReportPage: React.FC = () => {
     { key: 'outstandingInvoices', header: 'Invoices', sortable: true },
     { key: 'lastPurchaseDate', header: 'Last Purchase', sortable: true, render: (v) => formatDate(String(v ?? '')) },
   ], []);
+
+  const footerRow = useMemo(() => {
+    if (!totals) return undefined;
+    return {
+      label: 'Total',
+      values: {
+        supplierCode: 'Total',
+        invoicePayable: fmt(totals.totalInvoiceDue),
+        payableAmount: <span className="font-bold text-orange-700">{fmt(totals.totalPayable)}</span>,
+        outstandingInvoices: String(totals.totalInvoices),
+      },
+    };
+  }, [totals]);
 
   if (branchId <= 0) {
     return (
@@ -45,6 +94,8 @@ const SupplierPayableReportPage: React.FC = () => {
       error={table.error}
       loading={table.loading}
       onRefresh={table.reload}
+      onExport={onExport}
+      exporting={exporting}
       columns={columns}
       rows={table.rows}
       searchPlaceholder="Search supplier..."
@@ -60,6 +111,15 @@ const SupplierPayableReportPage: React.FC = () => {
       onPageSizeChange={table.onPageSizeChange}
       onSearchChange={table.onSearchChange}
       onSortChange={table.onSortChange}
+      footerRow={footerRow}
+      summary={(
+        <SupplierPayableAttractiveSummary
+          loading={aggregatesLoading}
+          supplierCount={totals?.supplierCount ?? 0}
+          totalPayable={totals?.totalPayable ?? 0}
+          totalInvoices={totals?.totalInvoices ?? 0}
+        />
+      )}
     />
   );
 };

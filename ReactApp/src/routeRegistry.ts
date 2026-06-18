@@ -44,6 +44,7 @@ import ReceivableAgingReportPage from './modules/reports/ReceivableAgingReportPa
 import ProfitLossReportPage from './modules/reports/ProfitLossReportPage';
 import PurchaseReportPage from './modules/reports/PurchaseReportPage';
 import SalesReportPage from './modules/reports/SalesReportPage';
+import ProductWiseSalesReportPage from './modules/reports/ProductWiseSalesReportPage';
 import StockReportPage from './modules/reports/StockReportPage';
 import SupplierPayableReportPage from './modules/reports/SupplierPayableReportPage';
 import SettingsPage from './modules/settings/SettingsPage';
@@ -77,6 +78,7 @@ export const routeRegistry: RouteDefinition[] = [
   { path: '/purchase', label: 'Purchase', component: PurchasePage, module: 'Purchase' },
   { path: '/stock', label: 'Stock', component: StockLedgerPage, module: 'Stock' },
   { path: '/reports/sales', label: 'Sales Report', component: SalesReportPage, module: 'Sales Reports' },
+  { path: '/reports/product-wise-sales', label: 'Product Wise Sales', component: ProductWiseSalesReportPage, module: 'Product Wise Sales Report' },
   { path: '/reports/purchases', label: 'Purchase Report', component: PurchaseReportPage, module: 'Purchase Reports' },
   { path: '/reports/customer-outstanding', label: 'Customer Outstanding', component: CustomerOutstandingReportPage, module: 'Customer Outstanding Report' },
   { path: '/reports/supplier-payable', label: 'Supplier Payable', component: SupplierPayableReportPage, module: 'Supplier Payable Report' },

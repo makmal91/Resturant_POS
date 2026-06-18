@@ -29,6 +29,13 @@ interface ReportPageShellProps<T extends Record<string, unknown>> {
   onPageSizeChange: (size: number) => void;
   onSearchChange: (value: string) => void;
   onSortChange: (column: string, direction: 'asc' | 'desc') => void;
+  footerRow?: {
+    label?: string;
+    values?: Partial<Record<string, React.ReactNode>>;
+  };
+  onExport?: () => Promise<void>;
+  exporting?: boolean;
+  exportLabel?: string;
 }
 
 export default function ReportPageShell<T extends Record<string, unknown>>({
@@ -59,6 +66,10 @@ export default function ReportPageShell<T extends Record<string, unknown>>({
   onPageSizeChange,
   onSearchChange,
   onSortChange,
+  footerRow,
+  onExport,
+  exporting = false,
+  exportLabel = 'Export CSV',
 }: ReportPageShellProps<T>) {
   return (
     <div className="print-area">
@@ -73,14 +84,26 @@ export default function ReportPageShell<T extends Record<string, unknown>>({
           <h1 className="mb-2 text-3xl font-bold text-gray-900">{title}</h1>
           <p className="text-gray-600">{description}</p>
         </div>
-        <button
-          type="button"
-          onClick={() => void onRefresh()}
-          disabled={loading}
-          className="inline-flex items-center self-start rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 print:hidden disabled:opacity-60"
-        >
-          {loading ? 'Loading…' : 'Refresh'}
-        </button>
+        <div className="flex flex-wrap items-center gap-2 self-start print:hidden">
+          {onExport && (
+            <button
+              type="button"
+              onClick={() => void onExport()}
+              disabled={loading || exporting}
+              className="inline-flex items-center rounded-md border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 shadow-sm hover:bg-emerald-100 disabled:opacity-60"
+            >
+              {exporting ? 'Exporting…' : exportLabel}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => void onRefresh()}
+            disabled={loading}
+            className="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-60"
+          >
+            {loading ? 'Loading…' : 'Refresh'}
+          </button>
+        </div>
       </div>
 
       <div className="mb-6 grid grid-cols-1 gap-4 rounded-xl border border-gray-100 bg-white p-5 shadow-sm print:hidden sm:grid-cols-2 lg:grid-cols-4">
@@ -132,6 +155,7 @@ export default function ReportPageShell<T extends Record<string, unknown>>({
         sortColumn={sortColumn}
         sortDirection={sortDirection}
         onSortChange={onSortChange}
+        footerRow={footerRow}
       />
     </div>
   );

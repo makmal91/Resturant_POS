@@ -1,15 +1,18 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Column } from '../../components/DataTable';
 import Badge from '../../components/Badge';
 import { useBranchWriteAccess } from '../../hooks/useBranchWriteAccess';
 import { hasBranchContext } from '../../types/permissions';
 import { safeString } from '../../utils/safeValues';
 import { customerService, type CustomerListItem } from '../customer/customerService';
-import AgingSummaryCards, { AgingBucketFilter, CustomerFilter } from './AgingSummaryCards';
+import { AgingBucketFilter, CustomerFilter } from './AgingSummaryCards';
+import { AgingAttractiveSummary } from './reportAttractiveSummaries';
 import ReportPageShell from './ReportPageShell';
+import { receivableAgingExportColumns } from './reportExportColumns';
 import { fmt, formatDate } from './reportFormatters';
 import { reportService, type ReceivableAgingRow } from './reportService';
 import { useAgingReportTable } from './useAgingReportTable';
+import { useReportExport } from './useReportExport';
 
 const bucketVariant = (bucket: string) => {
   if (bucket === '0-30') return 'success' as const;
@@ -50,6 +53,28 @@ const ReceivableAgingReportPage: React.FC = () => {
     toDate,
   });
 
+  const fetchExportPage = useCallback(async (pageNumber: number, pageSize: number) => {
+    const res = await reportService.getReceivableAgingReport(branchId, {
+      pageNumber,
+      pageSize,
+      search: table.search.trim() || undefined,
+      sortColumn: table.sortColumn,
+      sortDirection: table.sortDirection,
+      agingBucket: agingBucket || undefined,
+      customerId: customerId > 0 ? customerId : undefined,
+      ...(fromDate ? { fromDate } : {}),
+      ...(toDate ? { toDate } : {}),
+    });
+    return { data: res.data.data, totalRecords: res.data.totalRecords };
+  }, [branchId, table.search, table.sortColumn, table.sortDirection, agingBucket, customerId, fromDate, toDate]);
+
+  const { exporting, onExport } = useReportExport(
+    'receivable-aging-report',
+    receivableAgingExportColumns,
+    fetchExportPage,
+    branchId > 0,
+  );
+
   const columns: Column<ReceivableAgingRow>[] = useMemo(() => [
     { key: 'customerName', header: 'Customer', sortable: true },
     { key: 'invoiceNo', header: 'Invoice No', sortable: true, render: (v) => <span className="font-mono text-xs">{safeString(v)}</span> },
@@ -65,6 +90,17 @@ const ReceivableAgingReportPage: React.FC = () => {
       render: (v) => <Badge variant={bucketVariant(String(v))} size="sm">{String(v)}</Badge>,
     },
   ], []);
+
+  const footerRow = useMemo(() => {
+    if (!table.summary) return undefined;
+    return {
+      label: 'Total',
+      values: {
+        customerName: 'Total',
+        outstanding: <span className="font-bold text-blue-700">{fmt(table.summary.totalOutstanding)}</span>,
+      },
+    };
+  }, [table.summary]);
 
   if (branchId <= 0) {
     return (
@@ -95,10 +131,12 @@ const ReceivableAgingReportPage: React.FC = () => {
           />
         </>
       )}
-      summary={<AgingSummaryCards summary={table.summary} />}
+      summary={<AgingAttractiveSummary summary={table.summary} variant="receivable" loading={table.loading} />}
       error={table.error}
       loading={table.loading}
       onRefresh={table.reload}
+      onExport={onExport}
+      exporting={exporting}
       columns={columns}
       rows={table.rows}
       searchPlaceholder="Search customer or invoice..."
@@ -114,6 +152,7 @@ const ReceivableAgingReportPage: React.FC = () => {
       onPageSizeChange={table.onPageSizeChange}
       onSearchChange={table.onSearchChange}
       onSortChange={table.onSortChange}
+      footerRow={footerRow}
     />
   );
 };

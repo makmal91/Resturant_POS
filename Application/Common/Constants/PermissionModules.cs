@@ -34,6 +34,7 @@ public static class PermissionModules
     public const string Cities = "Cities";
     public const string StockTransfer = "Stock Transfer";
     public const string SalesReports = "Sales Reports";
+    public const string ProductWiseSalesReport = "Product Wise Sales Report";
     public const string PurchaseReports = "Purchase Reports";
     public const string StockReports = "Stock Reports";
     public const string CustomerOutstandingReport = "Customer Outstanding Report";
@@ -78,6 +79,7 @@ public static class PermissionModules
         PartyLedger,
         Dashboard,
         SalesReports,
+        ProductWiseSalesReport,
         PurchaseReports,
         StockReports,
         CustomerOutstandingReport,

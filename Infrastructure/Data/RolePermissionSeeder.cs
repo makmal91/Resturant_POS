@@ -160,7 +160,7 @@ public static class RolePermissionSeeder
                     PermissionModules.Users or PermissionModules.Roles or PermissionModules.Businesses =>
                         (module, false, false, false, false, false, false),
                     PermissionModules.Reports or PermissionModules.Dashboard or
-                    PermissionModules.SalesReports or PermissionModules.PurchaseReports or
+                    PermissionModules.SalesReports or PermissionModules.ProductWiseSalesReport or PermissionModules.PurchaseReports or
                     PermissionModules.StockReports or PermissionModules.CustomerOutstandingReport or
                     PermissionModules.SupplierPayableReport or PermissionModules.ProfitLossReport or
                     PermissionModules.CustomerReceivableAgingReport or PermissionModules.SupplierPayableAgingReport =>
