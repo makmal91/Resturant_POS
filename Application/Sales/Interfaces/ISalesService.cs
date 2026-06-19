@@ -5,7 +5,7 @@ namespace POSSystem.Application.Sales.Interfaces;
 
 public interface ISalesService
 {
-    Task<PosProductLookupDto?> GetProductByBarcodeAsync(string barcode, int businessId, int branchId);
+    Task<PosProductLookupDto?> GetProductByBarcodeAsync(string barcode, int businessId, int branchId, int? warehouseId = null);
     Task<List<PosProductLookupDto>> SearchProductsAsync(string query, int businessId, int branchId);
     Task<List<PosSearchGroupDto>> SearchProductsGroupedAsync(string query, int businessId, int branchId, int? warehouseId);
     Task<List<PosCustomerDto>> SearchCustomersAsync(string query, int businessId, int branchId);

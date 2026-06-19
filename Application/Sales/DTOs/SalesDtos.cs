@@ -26,6 +26,9 @@ public class PosProductLookupDto
     public string? MatchedVariantSize { get; set; }
     public string? MatchedVariantColor { get; set; }
     public decimal? MatchedVariantSellingPrice { get; set; }
+    public decimal Stock { get; set; }
+    public bool AllowNegativeStock { get; set; }
+    public string BaseUnitName { get; set; } = string.Empty;
     public List<PosProductUnitDto> AvailableUnits { get; set; } = new();
     public List<PosProductVariantDto> AvailableVariants { get; set; } = new();
 }
@@ -74,6 +77,7 @@ public class PosSearchGroupDto
     public decimal RetailPrice { get; set; }
     public decimal WholesalePrice { get; set; }
     public decimal Stock { get; set; }
+    public bool AllowNegativeStock { get; set; }
     public bool IsDiscountAllowed { get; set; }
     public ProductDiscountType? DiscountType { get; set; }
     public decimal DiscountValue { get; set; }

@@ -4,6 +4,7 @@ using POSSystem.Application.Common.Interfaces;
 using POSSystem.Application.Product.DTOs;
 using POSSystem.Application.Product.Interfaces;
 using POSSystem.Application.Stock.Interfaces;
+using POSSystem.Application.Unit.Interfaces;
 using POSSystem.Application.Warehouse.Interfaces;
 using POSSystem.Domain;
 using ProductEntity = POSSystem.Domain.Product;
@@ -17,19 +18,22 @@ public class ProductService : IProductService
     private readonly IStockLedgerRepository _stockLedgerRepository;
     private readonly IWarehouseRepository _warehouseRepository;
     private readonly ILowStockAlertService _lowStockAlertService;
+    private readonly IUnitRepository _unitRepository;
 
     public ProductService(
         IProductRepository repository,
         ICodeGeneratorService codeGenerator,
         IStockLedgerRepository stockLedgerRepository,
         IWarehouseRepository warehouseRepository,
-        ILowStockAlertService lowStockAlertService)
+        ILowStockAlertService lowStockAlertService,
+        IUnitRepository unitRepository)
     {
         _repository = repository;
         _codeGenerator = codeGenerator;
         _stockLedgerRepository = stockLedgerRepository;
         _warehouseRepository = warehouseRepository;
         _lowStockAlertService = lowStockAlertService;
+        _unitRepository = unitRepository;
     }
 
     public async Task<PagedResultDto<ProductListDto>> SearchProductsAsync(ProductSearchRequestDto request)
@@ -82,7 +86,7 @@ public class ProductService : IProductService
             OpeningStockVariantWise = dto.OpeningStockVariantWise && dto.IsVariantEnabled
         };
 
-        ReplaceUnits(product, dto.Units, dto.BusinessId, dto.BranchId);
+        await ReplaceUnitsAsync(product, dto.Units, dto.BusinessId, dto.BranchId);
         ReplaceVariants(product, dto.IsVariantEnabled ? dto.Variants : new List<ProductVariantWriteDto>(), dto.BusinessId, dto.BranchId);
         await ReplaceBarcodesAsync(product, dto.Barcodes, dto.BusinessId, dto.BranchId);
         await EnsurePrimaryBarcodeAsync(product, dto.BusinessId, dto.BranchId);
@@ -130,7 +134,7 @@ public class ProductService : IProductService
         product.AllowNegativeStock = dto.AllowNegativeStock;
         product.EnableLowStockAlert = dto.EnableLowStockAlert;
         product.LowStockAlertLevel = dto.EnableLowStockAlert ? dto.LowStockAlertLevel : null;
-        ReplaceUnits(product, dto.Units, dto.BusinessId, dto.BranchId);
+        await ReplaceUnitsAsync(product, dto.Units, dto.BusinessId, dto.BranchId);
         ReplaceVariants(product, dto.IsVariantEnabled ? dto.Variants : new List<ProductVariantWriteDto>(), dto.BusinessId, dto.BranchId);
         await ReplaceBarcodesAsync(product, dto.Barcodes, dto.BusinessId, dto.BranchId);
 
@@ -142,7 +146,7 @@ public class ProductService : IProductService
     {
         var product = await GetProductOrThrowAsync(id, businessId, branchId);
         ValidateUnits(units);
-        ReplaceUnits(product, units, businessId, branchId);
+        await ReplaceUnitsAsync(product, units, businessId, branchId);
         await _repository.SaveChangesAsync();
         return await MapDetailDto(product);
     }
@@ -430,22 +434,42 @@ public class ProductService : IProductService
         }
     }
 
-    private static void ReplaceUnits(ProductEntity product, List<ProductUnitWriteDto> units, int businessId, int branchId)
+    private async Task ReplaceUnitsAsync(ProductEntity product, List<ProductUnitWriteDto> units, int businessId, int branchId)
     {
+        var masterUnits = await _unitRepository.GetAllAsync(businessId, branchId, status: true);
+        var factorByName = masterUnits.ToDictionary(
+            u => u.Name.Trim(),
+            u => u.ConversionFactor,
+            StringComparer.OrdinalIgnoreCase);
+
         product.Units.Clear();
         foreach (var unit in units)
         {
+            var unitName = unit.UnitName.Trim();
+            if (!factorByName.TryGetValue(unitName, out var conversionFactor))
+                throw new InvalidOperationException($"Unit '{unitName}' was not found in unit master.");
+
             product.Units.Add(new ProductUnit
             {
                 BusinessId = businessId,
                 BranchId = branchId,
-                UnitName = unit.UnitName.Trim(),
-                ConversionFactor = unit.ConversionFactor,
-                IsBaseUnit = unit.IsBaseUnit,
-                CostPrice = unit.CostPrice,
-                SellingPrice = unit.SellingPrice,
-                WholesalePrice = unit.WholesalePrice
+                UnitName = unitName,
+                ConversionFactor = conversionFactor > 0 ? conversionFactor : 1m,
+                IsBaseUnit = unit.IsBaseUnit
             });
+        }
+
+        RecalculateUnitPrices(product);
+    }
+
+    private static void RecalculateUnitPrices(ProductEntity product)
+    {
+        foreach (var unit in product.Units)
+        {
+            var factor = unit.ConversionFactor > 0 ? unit.ConversionFactor : 1m;
+            unit.CostPrice = product.CostPrice * factor;
+            unit.SellingPrice = product.SellingPrice * factor;
+            unit.WholesalePrice = product.WholesalePrice * factor;
         }
     }
 

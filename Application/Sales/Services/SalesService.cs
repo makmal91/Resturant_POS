@@ -44,13 +44,22 @@ public class SalesService : ISalesService
         _codeGenerator = codeGenerator;
     }
 
-    public async Task<PosProductLookupDto?> GetProductByBarcodeAsync(string barcode, int businessId, int branchId)
+    public async Task<PosProductLookupDto?> GetProductByBarcodeAsync(
+        string barcode, int businessId, int branchId, int? warehouseId = null)
     {
         var product = await _salesRepository.GetProductByBarcodeAsync(barcode, businessId, branchId);
         if (product == null) return null;
 
         var matchedBarcode = product.Barcodes.FirstOrDefault(b => b.BarcodeValue == barcode);
-        return MapProductToLookup(product, matchedBarcode, barcode);
+        decimal stock = 0;
+        if (warehouseId.HasValue && warehouseId.Value > 0)
+        {
+            var variantId = matchedBarcode?.ProductVariantId;
+            stock = await _stockLedgerRepository.GetCurrentStockAsync(
+                businessId, branchId, product.Id, variantId, warehouseId.Value);
+        }
+
+        return MapProductToLookup(product, matchedBarcode, barcode, stock);
     }
 
     public async Task<List<PosProductLookupDto>> SearchProductsAsync(string query, int businessId, int branchId)
@@ -58,7 +67,7 @@ public class SalesService : ISalesService
         if (string.IsNullOrWhiteSpace(query)) return new List<PosProductLookupDto>();
 
         var products = await _salesRepository.SearchProductsAsync(query.Trim(), businessId, branchId, 20);
-        return products.Select(p => MapProductToLookup(p, null, string.Empty)).ToList();
+        return products.Select(p => MapProductToLookup(p, null, string.Empty, 0)).ToList();
     }
 
     public async Task<List<PosSearchGroupDto>> SearchProductsGroupedAsync(
@@ -90,6 +99,7 @@ public class SalesService : ISalesService
                 RetailPrice    = p.SellingPrice,
                 WholesalePrice = p.WholesalePrice,
                 Stock          = noVariantStock,
+                AllowNegativeStock = p.AllowNegativeStock,
                 IsDiscountAllowed = p.IsDiscountAllowed,
                 DiscountType   = p.DiscountType,
                 DiscountValue  = p.DiscountValue,
@@ -274,6 +284,8 @@ public class SalesService : ISalesService
         };
 
         var resolvedItems = await ResolveSaleItemsAsync(dto.Items, dto.PricingType, dto.BusinessId, dto.BranchId);
+        await ValidateStockAvailabilityFromResolvedAsync(dto.BusinessId, dto.BranchId, dto.WarehouseId, resolvedItems);
+
         var invoice = BuildInvoice(invoiceNo, createDto, resolvedItems);
         invoice.Status = SaleInvoiceStatus.Held;
         invoice.HeldNote = dto.HeldNote;
@@ -408,19 +420,31 @@ public class SalesService : ISalesService
     private async Task ValidateStockAvailabilityFromResolvedAsync(
         int businessId, int branchId, int warehouseId, List<ResolvedSaleLineItem> items)
     {
-        var productIds = items.Select(i => i.ProductId).Distinct();
+        var productIds = items.Select(i => i.ProductId).Distinct().ToList();
         var settings = await _productRepository.GetStockSettingsByIdsAsync(businessId, branchId, productIds);
 
         var requiredByKey = new Dictionary<string, decimal>();
         foreach (var item in items)
         {
-            if (!settings.TryGetValue(item.ProductId, out var productSettings) || productSettings.AllowNegativeStock)
+            if (settings.TryGetValue(item.ProductId, out var productSettings) && productSettings.AllowNegativeStock)
                 continue;
 
             var key = $"{item.ProductId}:{item.VariantId ?? 0}";
             requiredByKey[key] = requiredByKey.GetValueOrDefault(key) + item.BaseQuantity;
         }
 
+        if (requiredByKey.Count == 0)
+            return;
+
+        var productCache = new Dictionary<int, ProductEntity>();
+        foreach (var productId in requiredByKey.Keys.Select(k => int.Parse(k.Split(':')[0])).Distinct())
+        {
+            var product = await _productRepository.GetByIdAsync(productId, businessId, branchId);
+            if (product != null)
+                productCache[productId] = product;
+        }
+
+        var insufficient = new List<string>();
         foreach (var (key, requiredQty) in requiredByKey)
         {
             var parts = key.Split(':');
@@ -432,8 +456,29 @@ public class SalesService : ISalesService
                 businessId, branchId, productId, variant, warehouseId);
 
             if (requiredQty > available)
-                throw new InvalidOperationException("Insufficient stock for this product.");
+            {
+                productCache.TryGetValue(productId, out var product);
+                var productName = product?.ProductName ?? $"Product #{productId}";
+                var variantName = variant.HasValue
+                    ? product?.Variants.FirstOrDefault(v => v.Id == variant.Value && !v.IsDeleted)?.VariantName
+                    : null;
+                var baseUnitName = product?.Units.FirstOrDefault(u => u.IsBaseUnit && !u.IsDeleted)?.UnitName
+                    ?? product?.Units.FirstOrDefault(u => !u.IsDeleted)?.UnitName
+                    ?? "base unit";
+
+                var label = variantName != null ? $"{productName} ({variantName})" : productName;
+                insufficient.Add($"{label}: required {requiredQty:N2} {baseUnitName}, available {available:N2} {baseUnitName}");
+            }
         }
+
+        if (insufficient.Count == 0)
+            return;
+
+        var message = insufficient.Count == 1
+            ? $"Insufficient stock — {insufficient[0]}."
+            : "Insufficient stock:\n" + string.Join("\n", insufficient.Select((line, i) => $"{i + 1}. {line}"));
+
+        throw new InvalidOperationException(message);
     }
 
     private async Task ValidateStockAvailabilityAsync(
@@ -634,7 +679,8 @@ public class SalesService : ISalesService
 
     // ─── Mapping ──────────────────────────────────────────────────────────────
 
-    private static PosProductLookupDto MapProductToLookup(ProductEntity product, ProductBarcode? matchedBarcode, string barcodeValue)
+    private static PosProductLookupDto MapProductToLookup(
+        ProductEntity product, ProductBarcode? matchedBarcode, string barcodeValue, decimal stock)
     {
         var matchedVariant = matchedBarcode?.ProductVariantId.HasValue == true
             ? product.Variants.FirstOrDefault(v => v.Id == matchedBarcode.ProductVariantId)
@@ -643,6 +689,9 @@ public class SalesService : ISalesService
         var matchedUnit = matchedBarcode?.ProductUnitId.HasValue == true
             ? product.Units.FirstOrDefault(u => u.Id == matchedBarcode.ProductUnitId)
             : product.Units.FirstOrDefault(u => u.IsBaseUnit);
+
+        var baseUnit = product.Units.FirstOrDefault(u => u.IsBaseUnit && !u.IsDeleted)
+            ?? product.Units.FirstOrDefault(u => !u.IsDeleted);
 
         decimal retailPrice = matchedVariant?.SellingPriceOverride ?? product.SellingPrice;
         if (matchedUnit?.SellingPrice.HasValue == true) retailPrice = matchedUnit.SellingPrice.Value;
@@ -671,6 +720,9 @@ public class SalesService : ISalesService
             MatchedVariantSize = matchedVariant?.Size,
             MatchedVariantColor = matchedVariant?.Color,
             MatchedVariantSellingPrice = matchedVariant?.SellingPriceOverride,
+            Stock = stock,
+            AllowNegativeStock = product.AllowNegativeStock,
+            BaseUnitName = baseUnit?.UnitName ?? string.Empty,
             AvailableUnits = product.Units
                 .Where(u => !u.IsDeleted)
                 .Select(u => new PosProductUnitDto

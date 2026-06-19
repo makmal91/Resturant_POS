@@ -41,6 +41,9 @@ export interface PosProductLookup {
   matchedVariantSize: string | null;
   matchedVariantColor: string | null;
   matchedVariantSellingPrice: number | null;
+  stock?: number;
+  allowNegativeStock?: boolean;
+  baseUnitName?: string;
   availableUnits: PosProductUnit[];
   availableVariants: PosProductVariant[];
 }
@@ -76,6 +79,7 @@ export interface PosSearchGroup {
   retailPrice: number;
   wholesalePrice: number;
   stock: number;
+  allowNegativeStock?: boolean;
   isDiscountAllowed: boolean;
   discountType: 'Percentage' | 'Fixed' | null;
   discountValue: number;
@@ -246,6 +250,9 @@ export interface CartItem {
   itemNote: string | null;
   availableUnits: PosProductUnit[];
   availableVariants: PosProductVariant[];
+  stockBase: number;
+  allowNegativeStock: boolean;
+  baseUnitName: string;
 }
 
 // ─── Helper: derive cart key ────────────────────────────────────────────────
@@ -261,6 +268,87 @@ export const computeLineTotal = (item: Pick<CartItem, 'quantity' | 'unitPrice' |
   const net = gross - disc;
   const tax = item.taxPercent > 0 ? (net * item.taxPercent) / 100 : 0;
   return Math.round((net + tax) * 100) / 100;
+};
+
+export const getCartBaseQty = (
+  cart: CartItem[],
+  productId: number,
+  variantId: number | null,
+): number =>
+  cart
+    .filter((c) => c.productId === productId && (c.variantId ?? 0) === (variantId ?? 0))
+    .reduce((sum, c) => sum + c.quantity * c.conversionFactor, 0);
+
+export const checkStockForCartLine = (
+  cart: CartItem[],
+  productId: number,
+  variantId: number | null,
+  variantName: string | null,
+  productName: string,
+  additionalQty: number,
+  conversionFactor: number,
+  stockBase: number,
+  allowNegativeStock: boolean,
+  baseUnitName: string,
+  excludeCartKey?: string,
+): string | null => {
+  if (allowNegativeStock) return null;
+
+  const cartForProduct = excludeCartKey
+    ? cart.filter((c) => c.cartKey !== excludeCartKey)
+    : cart;
+  const alreadyInCart = getCartBaseQty(cartForProduct, productId, variantId);
+  const needed = alreadyInCart + additionalQty * conversionFactor;
+
+  if (needed <= stockBase) return null;
+
+  const remaining = Math.max(0, stockBase - alreadyInCart);
+  const unitLabel = baseUnitName || 'base unit';
+  const label = variantName ? `${productName} (${variantName})` : productName;
+  return `Insufficient stock for ${label}. Required ${needed.toFixed(2)} ${unitLabel}, available ${remaining.toFixed(2)} ${unitLabel}.`;
+};
+
+export const validateCartStock = (cart: CartItem[]): string | null => {
+  const grouped = new Map<string, {
+    needed: number;
+    stock: number;
+    allowNegativeStock: boolean;
+    label: string;
+    unit: string;
+  }>();
+
+  for (const item of cart) {
+    if (item.allowNegativeStock) continue;
+
+    const key = `${item.productId}:${item.variantId ?? 0}`;
+    const label = item.variantName ? `${item.productName} (${item.variantName})` : item.productName;
+    const needed = item.quantity * item.conversionFactor;
+    const existing = grouped.get(key);
+
+    if (existing) {
+      existing.needed += needed;
+    } else {
+      grouped.set(key, {
+        needed,
+        stock: item.stockBase,
+        allowNegativeStock: item.allowNegativeStock,
+        label,
+        unit: item.baseUnitName || 'base unit',
+      });
+    }
+  }
+
+  const errors: string[] = [];
+  for (const entry of grouped.values()) {
+    if (entry.needed > entry.stock) {
+      errors.push(`${entry.label}: required ${entry.needed.toFixed(2)} ${entry.unit}, available ${entry.stock.toFixed(2)} ${entry.unit}`);
+    }
+  }
+
+  if (errors.length === 0) return null;
+  return errors.length === 1
+    ? `Insufficient stock — ${errors[0]}.`
+    : `Insufficient stock:\n${errors.map((line, i) => `${i + 1}. ${line}`).join('\n')}`;
 };
 
 // ─── Helper: resolve unit selling price from ProductUnit ────────────────────
@@ -354,7 +442,10 @@ export const lookupToCartItem = (lookup: PosProductLookup, pricingType: 'Retail'
     lineTotal: 0,
     itemNote: null,
     availableUnits: lookup.availableUnits,
-    availableVariants: lookup.availableVariants
+    availableVariants: lookup.availableVariants,
+    stockBase: lookup.stock ?? 0,
+    allowNegativeStock: lookup.allowNegativeStock ?? false,
+    baseUnitName: lookup.baseUnitName ?? lookup.availableUnits.find((u) => u.isBaseUnit)?.unitName ?? 'base unit',
   };
   item.lineTotal = computeLineTotal(item);
   return item;
@@ -371,6 +462,7 @@ export const groupRowToLookup = (
   const variantLookup = variant
     ? group.variants.find((v) => v.variantId === variant.variantId) ?? variant
     : null;
+  const stockBase = variant?.stock ?? group.stock;
   const productRetail = variant?.retailPrice ?? baseUnit?.sellingPrice ?? group.retailPrice;
   const productWholesale = variant?.wholesalePrice ?? baseUnit?.wholesalePrice ?? group.wholesalePrice;
   const price = pricingType === 'Wholesale' ? productWholesale : productRetail;
@@ -395,6 +487,9 @@ export const groupRowToLookup = (
     matchedVariantSize: variant?.size ?? null,
     matchedVariantColor: variant?.color ?? null,
     matchedVariantSellingPrice: variantLookup ? price : null,
+    stock: stockBase,
+    allowNegativeStock: group.allowNegativeStock ?? false,
+    baseUnitName: baseUnit?.unitName ?? 'base unit',
     availableUnits: group.units,
     availableVariants: group.variants.map(v => ({
       variantId: v.variantId,
@@ -413,9 +508,9 @@ export const groupRowToLookup = (
 const bh = (branchId: number) => ({ headers: { 'X-Branch-Id': String(branchId) } });
 
 export const posService = {
-  getProductByBarcode: (barcode: string, branchId: number) =>
+  getProductByBarcode: (barcode: string, branchId: number, warehouseId?: number) =>
     apiClient.get<PosProductLookup>(`/sales/product/barcode/${encodeURIComponent(barcode)}`, {
-      params: { branchId },
+      params: { branchId, ...(warehouseId ? { warehouseId } : {}) },
       ...bh(branchId),
     }),
 

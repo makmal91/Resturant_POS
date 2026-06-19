@@ -130,6 +130,23 @@ export interface ProductListResponse {
   pageSize: number;
 }
 
+/** Derives per-unit prices from base prices and each unit's conversion factor. */
+export const recalculateUnitPrices = (
+  units: ProductUnitPayload[],
+  baseCostPrice: number,
+  baseSellingPrice: number,
+  baseWholesalePrice: number,
+): ProductUnitPayload[] =>
+  units.map((unit) => {
+    const factor = unit.conversionFactor > 0 ? unit.conversionFactor : 1;
+    return {
+      ...unit,
+      costPrice: baseCostPrice * factor,
+      sellingPrice: baseSellingPrice * factor,
+      wholesalePrice: baseWholesalePrice * factor,
+    };
+  });
+
 const branchRequestConfig = (branchId: number) => ({
   headers: { 'X-Branch-Id': String(branchId) },
 });

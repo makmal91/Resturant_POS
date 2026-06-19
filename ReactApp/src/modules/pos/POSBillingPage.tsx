@@ -23,6 +23,8 @@ import {
   groupRowToLookup,
   applyUnitToCartItem,
   resolveSaleUnitPrice,
+  checkStockForCartLine,
+  validateCartStock,
 } from './posService';
 import { ReceiptPrintModal } from '../../components/receipt';
 import { getApiErrorMessage } from '../../services/api';
@@ -279,6 +281,7 @@ const POSBillingPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<PosSearchGroup[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState('');
   const [expandedGroups, setExpandedGroups] = useState<Set<number>>(new Set());
   const [showPayment, setShowPayment] = useState(false);
   const [paymentLoading, setPaymentLoading] = useState(false);
@@ -324,35 +327,45 @@ const POSBillingPage: React.FC = () => {
       .catch(() => {/* walk-in may not exist yet — that's ok */});
   }, [branchId, effectiveBranchId]);
 
-  // ── Keyboard shortcuts ──
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'F2') { e.preventDefault(); barcodeRef.current?.focus(); barcodeRef.current?.select(); }
-      if (e.key === 'F3') { e.preventDefault(); searchRef.current?.focus(); searchRef.current?.select(); }
-      if (e.key === 'F4') { e.preventDefault(); if (cart.length > 0 && warehouseId) setShowPayment(true); }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [cart, warehouseId]);
-
   // ── Auto-focus barcode ──
   useEffect(() => { setTimeout(() => barcodeRef.current?.focus(), 200); }, []);
 
   // ── Product search (grouped with variants) ──
   useEffect(() => {
-    if (!debouncedSearch.trim()) { setSearchResults([]); setExpandedGroups(new Set()); return; }
+    setSearchError('');
+
+    if (!debouncedSearch.trim()) {
+      setSearchResults([]);
+      setExpandedGroups(new Set());
+      setSearchLoading(false);
+      return;
+    }
+
+    let cancelled = false;
     setSearchLoading(true);
     const searchBranchId = effectiveBranchId > 0 ? effectiveBranchId : branchId;
-    if (!hasBranchContext(searchBranchId)) { setSearchResults([]); setExpandedGroups(new Set()); return; }
+    if (!hasBranchContext(searchBranchId)) {
+      setSearchResults([]);
+      setExpandedGroups(new Set());
+      setSearchLoading(false);
+      return;
+    }
+
     posService.searchProductsGrouped(debouncedSearch, searchBranchId, warehouseId || undefined)
       .then((r) => {
+        if (cancelled) return;
         setSearchResults(r.data);
-        // Auto-expand if only one product returned, or if any product has variants
         const ids = new Set(r.data.filter(g => g.isVariantEnabled).map(g => g.productId));
         setExpandedGroups(ids);
       })
-      .catch(() => setSearchResults([]))
-      .finally(() => setSearchLoading(false));
+      .catch(() => {
+        if (!cancelled) setSearchResults([]);
+      })
+      .finally(() => {
+        if (!cancelled) setSearchLoading(false);
+      });
+
+    return () => { cancelled = true; };
   }, [debouncedSearch, branchId, effectiveBranchId, warehouseId]);
 
   // ── Customer search ──
@@ -366,20 +379,56 @@ const POSBillingPage: React.FC = () => {
   }, [debouncedCustomer, branchId, effectiveBranchId]);
 
   // ── Cart helpers ──
-  const addToCart = useCallback((lookup: PosProductLookup) => {
+  const addToCart = useCallback((lookup: PosProductLookup): { success: boolean; error?: string } => {
     const item = lookupToCartItem(lookup, pricingType);
-    setCart((prev) => {
-      const idx = prev.findIndex((c) => c.cartKey === item.cartKey);
-      if (idx >= 0) {
+    const idx = cart.findIndex((c) => c.cartKey === item.cartKey);
+
+    if (idx >= 0) {
+      setCart((prev) => {
+        const i = prev.findIndex((c) => c.cartKey === item.cartKey);
+        if (i < 0) return prev;
+        const row = prev[i];
         const updated = [...prev];
-        const existing = updated[idx];
-        updated[idx] = { ...existing, quantity: existing.quantity + 1, lineTotal: computeLineTotal({ ...existing, quantity: existing.quantity + 1 }) };
+        updated[i] = { ...row, quantity: row.quantity + 1, lineTotal: computeLineTotal({ ...row, quantity: row.quantity + 1 }) };
         return updated;
-      }
-      return [...prev, item];
-    });
+      });
+      setBarcodeError('');
+      setError('');
+      return { success: true };
+    }
+
+    const stockErr = checkStockForCartLine(
+      cart,
+      item.productId,
+      item.variantId,
+      item.variantName,
+      item.productName,
+      1,
+      item.conversionFactor,
+      item.stockBase,
+      item.allowNegativeStock,
+      item.baseUnitName,
+    );
+    if (stockErr) {
+      return { success: false, error: stockErr };
+    }
+
+    setCart((prev) => [...prev, item]);
     setBarcodeError('');
-  }, [pricingType]);
+    setError('');
+    return { success: true };
+  }, [pricingType, cart]);
+
+  const tryAddFromSearch = useCallback((lookup: PosProductLookup, closeSearch: () => void) => {
+    const result = addToCart(lookup);
+    if (!result.success) {
+      setSearchError(result.error ?? 'Cannot add this product.');
+      searchRef.current?.focus();
+      return;
+    }
+    setSearchError('');
+    closeSearch();
+  }, [addToCart]);
 
   const updateItemUnit = useCallback((key: string, unitId: number) => {
     setCart((prev) =>
@@ -413,7 +462,9 @@ const POSBillingPage: React.FC = () => {
 
   const updateQuantity = (key: string, qty: number) => {
     if (qty <= 0) { removeFromCart(key); return; }
-    setCart((prev) => prev.map((c) => c.cartKey === key ? { ...c, quantity: qty, lineTotal: computeLineTotal({ ...c, quantity: qty }) } : c));
+    setCart((prev) =>
+      prev.map((c) => c.cartKey === key ? { ...c, quantity: qty, lineTotal: computeLineTotal({ ...c, quantity: qty }) } : c)
+    );
   };
 
   const updateItemDiscount = (key: string, percent: number) => {
@@ -446,6 +497,29 @@ const POSBillingPage: React.FC = () => {
 
   const grandTotal = Math.max(0, subTotal - totalItemDiscount - billDiscount + totalTax);
 
+  const cartStockError = useMemo(() => validateCartStock(cart), [cart]);
+
+  const openPayment = useCallback(() => {
+    if (cart.length === 0 || !warehouseId) return;
+    if (cartStockError) {
+      setError(cartStockError);
+      return;
+    }
+    setError('');
+    setShowPayment(true);
+  }, [cart.length, warehouseId, cartStockError]);
+
+  // ── Keyboard shortcuts ──
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'F2') { e.preventDefault(); barcodeRef.current?.focus(); barcodeRef.current?.select(); }
+      if (e.key === 'F3') { e.preventDefault(); searchRef.current?.focus(); searchRef.current?.select(); }
+      if (e.key === 'F4') { e.preventDefault(); openPayment(); }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [openPayment]);
+
   // ── Barcode scan ──
   const handleBarcodeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -454,9 +528,18 @@ const POSBillingPage: React.FC = () => {
     if (!warehouseId) { setBarcodeError('Select a warehouse first.'); return; }
     setBarcodeLoading(true); setBarcodeError('');
     try {
-      const res = await posService.getProductByBarcode(code, effectiveBranchId > 0 ? effectiveBranchId : branchId);
-      addToCart(res.data);
+      const res = await posService.getProductByBarcode(
+        code,
+        effectiveBranchId > 0 ? effectiveBranchId : branchId,
+        warehouseId ?? undefined,
+      );
+      const result = addToCart(res.data);
+      if (!result.success) {
+        setBarcodeError(result.error ?? 'Cannot add this product.');
+        return;
+      }
       setBarcodeInput('');
+      setBarcodeError('');
     } catch {
       setBarcodeError(`No product found for "${code}"`);
     } finally {
@@ -468,6 +551,13 @@ const POSBillingPage: React.FC = () => {
   // ── Payment ──
   const handlePaymentConfirm = async (method: 'Cash' | 'Card' | 'Mixed' | 'Credit', paid: number, cash: number, card: number) => {
     if (!warehouseId || effectiveBranchId <= 0) return;
+
+    const stockErr = validateCartStock(cart);
+    if (stockErr) {
+      setError(stockErr);
+      setShowPayment(false);
+      return;
+    }
 
     const missingVariant = cart.find(
       (c) => c.availableVariants.length > 0 && (c.variantId == null || c.variantId <= 0)
@@ -496,6 +586,7 @@ const POSBillingPage: React.FC = () => {
       clearCart();
     } catch (err) {
       setError(getApiErrorMessage(err, 'Failed to save invoice. Please try again.'));
+      setShowPayment(false);
     } finally {
       setPaymentLoading(false);
     }
@@ -504,6 +595,11 @@ const POSBillingPage: React.FC = () => {
   // ── Hold Bill ──
   const handleHoldBill = async () => {
     if (cart.length === 0 || !warehouseId || effectiveBranchId <= 0) return;
+    const stockErr = validateCartStock(cart);
+    if (stockErr) {
+      setError(stockErr);
+      return;
+    }
     const note = window.prompt('Hold note (optional):') ?? undefined;
     try {
       await posService.holdBill({ heldNote: note, customerId: customer?.id ?? null, warehouseId, pricingType, discountAmount: billDiscount, businessId, branchId: effectiveBranchId, items: cart.map((c) => ({ productId: c.productId, variantId: c.variantId, unitId: c.unitId, quantity: c.quantity, conversionFactor: c.conversionFactor, unitPrice: c.unitPrice, discountPercent: c.discountPercent, discountAmount: c.discountAmount, taxPercent: c.taxPercent, itemNote: c.itemNote ?? undefined })) });
@@ -518,7 +614,8 @@ const POSBillingPage: React.FC = () => {
       variantId: i.variantId, variantName: i.variantName, variantSize: i.variantSize, variantColor: i.variantColor,
       unitId: i.unitId, unitName: i.unitName, conversionFactor: i.conversionFactor ?? 1, quantity: i.quantity, unitPrice: i.unitPrice,
       discountPercent: i.discountPercent, discountAmount: i.discountAmount, taxPercent: i.taxPercent,
-      lineTotal: i.lineTotal, itemNote: i.itemNote, availableUnits: [], availableVariants: []
+      lineTotal: i.lineTotal, itemNote: i.itemNote, availableUnits: [], availableVariants: [],
+      stockBase: 0, allowNegativeStock: true, baseUnitName: 'base unit',
     })));
     setWarehouseId(bill.warehouseId);
     setDiscountMode('amount');
@@ -586,9 +683,15 @@ const POSBillingPage: React.FC = () => {
 
           {/* Error banner */}
           {error && (
-            <div className="mx-4 mt-3 px-4 py-2.5 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm flex items-center justify-between">
-              <span>{error}</span>
-              <button onClick={() => setError('')} className="text-red-400 hover:text-red-600 ml-3 text-lg leading-none">×</button>
+            <div className="mx-4 mt-3 px-4 py-2.5 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm flex items-start justify-between">
+              <span className="whitespace-pre-line">{error}</span>
+              <button onClick={() => setError('')} className="text-red-400 hover:text-red-600 ml-3 text-lg leading-none shrink-0">×</button>
+            </div>
+          )}
+
+          {cartStockError && (
+            <div className="mx-4 mt-3 px-4 py-2.5 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg text-sm">
+              <span className="whitespace-pre-line">{cartStockError}</span>
             </div>
           )}
 
@@ -689,7 +792,10 @@ const POSBillingPage: React.FC = () => {
                 ref={searchRef}
                 type="text"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setSearchError('');
+                }}
                 placeholder="Name / code / SKU…"
                 autoComplete="off"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition"
@@ -698,6 +804,9 @@ const POSBillingPage: React.FC = () => {
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs animate-pulse">…</span>
               )}
             </div>
+            {searchError && (
+              <p className="mt-1 text-red-500 text-xs whitespace-pre-line">⚠ {searchError}</p>
+            )}
 
             {/* ── Grouped search dropdown ── */}
             {searchResults.length > 0 && (
@@ -720,8 +829,7 @@ const POSBillingPage: React.FC = () => {
                               return next;
                             });
                           } else {
-                            addToCart(groupRowToLookup(group, null, pricingType));
-                            closeSearch();
+                            tryAddFromSearch(groupRowToLookup(group, null, pricingType), closeSearch);
                           }
                         }}
                       >
@@ -761,8 +869,7 @@ const POSBillingPage: React.FC = () => {
                               <button
                                 key={v.variantId}
                                 onClick={() => {
-                                  addToCart(groupRowToLookup(group, v, pricingType));
-                                  closeSearch();
+                                  tryAddFromSearch(groupRowToLookup(group, v, pricingType), closeSearch);
                                 }}
                                 className="w-full flex items-center gap-2 px-6 py-2 hover:bg-blue-50 transition text-left border-b border-gray-100 last:border-0"
                               >
@@ -977,15 +1084,17 @@ const POSBillingPage: React.FC = () => {
           {/* ── Action buttons — pushed to the bottom ── */}
           <div className="mt-auto px-4 py-3 space-y-2 border-t border-gray-100">
             <button
-              onClick={() => setShowPayment(true)}
-              disabled={cart.length === 0 || !warehouseId}
+              onClick={openPayment}
+              disabled={cart.length === 0 || !warehouseId || !!cartStockError}
+              title={cartStockError ?? undefined}
               className="w-full py-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-base shadow-sm transition flex items-center justify-center gap-2"
             >
               💳 Checkout
               <kbd className="text-xs font-normal bg-blue-500 px-1.5 py-0.5 rounded opacity-80">[F4]</kbd>
             </button>
             <div className="flex gap-2">
-              <button onClick={handleHoldBill} disabled={cart.length === 0 || !warehouseId}
+              <button onClick={handleHoldBill} disabled={cart.length === 0 || !warehouseId || !!cartStockError}
+                title={cartStockError ?? undefined}
                 className="flex-1 py-2 rounded-lg border border-amber-200 bg-amber-50 hover:bg-amber-100 disabled:opacity-40 text-amber-700 font-semibold text-sm transition">
                 ⏸ Hold
               </button>
@@ -1056,6 +1165,10 @@ const CartRow: React.FC<CartRowProps> = React.memo(({ item, idx, onUpdateQty, on
   const [qtyInput, setQtyInput] = useState(String(item.quantity));
   const [discInput, setDiscInput] = useState(String(item.discountPercent));
   const qtyRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!editingQty) setQtyInput(String(item.quantity));
+  }, [item.quantity, editingQty]);
 
   const handleQtyClick = () => {
     setEditingQty(true);

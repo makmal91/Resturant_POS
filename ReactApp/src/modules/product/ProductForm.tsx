@@ -6,6 +6,7 @@ import {
   ProductUnitPayload,
   ProductVariantPayload,
   ProductOpeningStockLine,
+  recalculateUnitPrices,
 } from './productService';
 import { getApiErrorMessage } from '../../services/api';
 import { CODE_MODULES, codeGeneratorService } from '../../services/codeGeneratorService';
@@ -62,13 +63,28 @@ const emptyBarcode = (): ProductBarcodePayload => ({
   isPrimary: false,
 });
 
+const syncUnitsWithMaster = (
+  units: ProductUnitPayload[],
+  options: ProductOption[],
+  costPrice: number,
+  sellingPrice: number,
+  wholesalePrice: number,
+): ProductUnitPayload[] => {
+  const synced = units.map((unit) => {
+    const master = options.find((option) => option.name === unit.unitName);
+    if (!master) return unit;
+    return { ...unit, conversionFactor: master.conversionFactor ?? 1 };
+  });
+  return recalculateUnitPrices(synced, costPrice, sellingPrice, wholesalePrice);
+};
+
 type ProductFormTab = 'basic' | 'pricing' | 'stock' | 'units' | 'variants' | 'barcodes';
 
 const formTabs: Array<{ id: ProductFormTab; label: string; helper: string }> = [
   { id: 'basic', label: 'Basic Info', helper: 'Name, category, brand' },
+  { id: 'pricing', label: 'Pricing', helper: 'Retail, wholesale, discount' },
   { id: 'units', label: 'Units', helper: 'Base and alternate units' },
   { id: 'variants', label: 'Variants', helper: 'Size, color, SKU' },
-  { id: 'pricing', label: 'Pricing', helper: 'Retail, wholesale, discount' },
   { id: 'stock', label: 'Stock', helper: 'Opening stock & alerts' },
   { id: 'barcodes', label: 'Barcodes & Images', helper: 'Codes and photos' },
 ];
@@ -157,7 +173,15 @@ const ProductForm: React.FC<ProductFormProps> = ({
         discountType: initialData.discountType ?? 'Percentage',
         discountValue: initialData.discountValue,
         branchId: initialData.branchId,
-        units: initialData.units.length ? initialData.units : [{ ...emptyUnit(), unitName: defaultUnitName, isBaseUnit: true }],
+        units: initialData.units.length
+          ? syncUnitsWithMaster(
+              initialData.units,
+              unitOptions,
+              initialData.costPrice,
+              initialData.sellingPrice,
+              initialData.wholesalePrice,
+            )
+          : [{ ...emptyUnit(), unitName: defaultUnitName, isBaseUnit: true, conversionFactor: unitOptions.find((o) => o.name === defaultUnitName)?.conversionFactor ?? 1 }],
         variants: initialData.variants ?? [],
         barcodes: initialData.barcodes ?? [],
         allowNegativeStock: initialData.allowNegativeStock ?? false,
@@ -177,18 +201,44 @@ const ProductForm: React.FC<ProductFormProps> = ({
         brandId: null,
         units:
           prev.units.length > 0
-            ? prev.units.map((unit) => ({
-                ...unit,
-                unitName: unit.unitName || defaultUnitName,
-              }))
-            : [{ ...emptyUnit(), unitName: defaultUnitName, isBaseUnit: true }],
+            ? syncUnitsWithMaster(
+                prev.units.map((unit) => ({
+                  ...unit,
+                  unitName: unit.unitName || defaultUnitName,
+                })),
+                unitOptions,
+                prev.costPrice,
+                prev.sellingPrice,
+                prev.wholesalePrice,
+              )
+            : syncUnitsWithMaster(
+                [{ ...emptyUnit(), unitName: defaultUnitName, isBaseUnit: true }],
+                unitOptions,
+                prev.costPrice,
+                prev.sellingPrice,
+                prev.wholesalePrice,
+              ),
       }));
     }
     setPrimaryImageFile(null);
     setImageFiles([]);
     setError('');
     setActiveTab('basic');
-  }, [branchId, categories, defaultUnitName, initialData]);
+  }, [branchId, categories, defaultUnitName, initialData, unitOptions]);
+
+  useEffect(() => {
+    if (unitOptions.length === 0) return;
+    setFormData((prev) => ({
+      ...prev,
+      units: syncUnitsWithMaster(
+        prev.units,
+        unitOptions,
+        prev.costPrice,
+        prev.sellingPrice,
+        prev.wholesalePrice,
+      ),
+    }));
+  }, [unitOptions]);
 
   const filteredSubCategories = subCategories.filter((item) => item.categoryId === Number(formData.categoryId));
 
@@ -467,20 +517,36 @@ const ProductForm: React.FC<ProductFormProps> = ({
   };
 
   const updateUnit = (index: number, changes: Partial<ProductUnitPayload>) => {
-    setFormData((prev) => ({
-      ...prev,
-      units: prev.units.map((unit, unitIndex) => {
+    setFormData((prev) => {
+      const units = prev.units.map((unit, unitIndex) => {
         if (unitIndex !== index) return unit;
         return { ...unit, ...changes };
-      }),
-    }));
+      });
+      return {
+        ...prev,
+        units: recalculateUnitPrices(units, prev.costPrice, prev.sellingPrice, prev.wholesalePrice),
+      };
+    });
   };
 
   const setBaseUnit = (index: number) => {
-    setFormData((prev) => ({
-      ...prev,
-      units: prev.units.map((unit, unitIndex) => ({ ...unit, isBaseUnit: unitIndex === index })),
-    }));
+    setFormData((prev) => {
+      const units = prev.units.map((unit, unitIndex) => ({ ...unit, isBaseUnit: unitIndex === index }));
+      return {
+        ...prev,
+        units: recalculateUnitPrices(units, prev.costPrice, prev.sellingPrice, prev.wholesalePrice),
+      };
+    });
+  };
+
+  const updateBasePrices = (changes: Partial<Pick<ProductPayload, 'costPrice' | 'sellingPrice' | 'wholesalePrice'>>) => {
+    setFormData((prev) => {
+      const next = { ...prev, ...changes };
+      return {
+        ...next,
+        units: recalculateUnitPrices(next.units, next.costPrice, next.sellingPrice, next.wholesalePrice),
+      };
+    });
   };
 
   const updateVariant = (index: number, changes: Partial<ProductVariantPayload>) => {
@@ -529,6 +595,11 @@ const ProductForm: React.FC<ProductFormProps> = ({
 
     if (formData.units.some((unit) => !unit.unitName.trim() || Number(unit.conversionFactor) <= 0)) {
       showValidationError('Every unit needs a name and a conversion factor greater than zero.', 'units');
+      return;
+    }
+
+    if (unitOptions.length > 0 && formData.units.some((unit) => !unitOptions.some((option) => option.name === unit.unitName))) {
+      showValidationError('Every unit must be selected from Unit Master.', 'units');
       return;
     }
 
@@ -595,11 +666,16 @@ const ProductForm: React.FC<ProductFormProps> = ({
               quantity: Number(line.quantity ?? 0),
             }))
           : [],
-        units: formData.units.map((unit) => ({
-          ...unit,
-          unitName: unit.unitName.trim(),
-          conversionFactor: Number(unit.conversionFactor),
-        })),
+        units: recalculateUnitPrices(
+          formData.units.map((unit) => ({
+            ...unit,
+            unitName: unit.unitName.trim(),
+            conversionFactor: Number(unit.conversionFactor),
+          })),
+          Number(formData.costPrice ?? 0),
+          Number(formData.sellingPrice ?? 0),
+          Number(formData.wholesalePrice ?? 0),
+        ),
         variants: formData.isVariantEnabled
           ? formData.variants
               .filter((variant) => variant.variantName.trim())
@@ -754,17 +830,67 @@ const ProductForm: React.FC<ProductFormProps> = ({
         </section>
         )}
 
+        {activeTab === 'pricing' && (
+        <section className="space-y-5">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">Pricing & Discount</h3>
+            <p className="mt-1 text-sm text-gray-500">
+              Set base-unit prices. All unit prices are calculated automatically using each unit&apos;s conversion factor.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            {(['costPrice', 'sellingPrice', 'wholesalePrice'] as const).map((field) => (
+              <div key={field}>
+                <label className="mb-1 block text-sm font-medium text-gray-700">{field === 'costPrice' ? 'Base Cost Price' : field === 'sellingPrice' ? 'Base Selling Price' : 'Base Wholesale Price'}</label>
+                <input type="number" min={0} step="0.01" value={Number(formData[field] ?? 0)} onChange={(event) => updateBasePrices({ [field]: Number(event.target.value || 0) })} className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none" />
+              </div>
+            ))}
+          </div>
+          <label className="flex items-center gap-2 text-sm text-gray-700">
+            <input type="checkbox" checked={formData.isDiscountAllowed} onChange={(event) => setFormData((prev) => ({ ...prev, isDiscountAllowed: event.target.checked }))} />
+            Discount allowed
+          </label>
+          {formData.isDiscountAllowed && (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <select value={formData.discountType ?? 'Percentage'} onChange={(event) => setFormData((prev) => ({ ...prev, discountType: event.target.value as 'Percentage' | 'Fixed' }))} className="rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none">
+                <option value="Percentage">Percentage</option>
+                <option value="Fixed">Fixed</option>
+              </select>
+              <input type="number" min={0} step="0.01" value={Number(formData.discountValue ?? 0)} onChange={(event) => setFormData((prev) => ({ ...prev, discountValue: Number(event.target.value || 0) }))} className="rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none" />
+            </div>
+          )}
+        </section>
+        )}
+
         {activeTab === 'units' && (
         <section className="space-y-5">
           <div>
             <h3 className="text-lg font-semibold text-gray-900">Units</h3>
             <p className="mt-1 text-sm text-gray-500">
-              Add all sellable/purchase units. Exactly one unit must be marked as the base unit.
+              Select units from Unit Master. Conversion factor and prices are set automatically.
+              Exactly one unit must be marked as the base unit.
             </p>
           </div>
-        <DynamicSection title="Units" onAdd={() => setFormData((prev) => ({ ...prev, units: [...prev.units, emptyUnit()] }))}>
+        <DynamicSection title="Units" onAdd={() => setFormData((prev) => ({
+          ...prev,
+          units: recalculateUnitPrices(
+            [...prev.units, emptyUnit()],
+            prev.costPrice,
+            prev.sellingPrice,
+            prev.wholesalePrice,
+          ),
+        }))}>
+          <div className="hidden gap-3 px-3 text-xs font-semibold uppercase tracking-wide text-gray-500 md:grid md:grid-cols-8">
+            <span className="md:col-span-2">Unit</span>
+            <span>Factor</span>
+            <span>Cost</span>
+            <span>Selling</span>
+            <span>Wholesale</span>
+            <span>Base</span>
+            <span>Action</span>
+          </div>
           {formData.units.map((unit, index) => (
-            <div key={index} className="grid grid-cols-1 gap-3 rounded-lg border border-gray-200 p-3 md:grid-cols-7">
+            <div key={index} className="grid grid-cols-1 gap-3 rounded-lg border border-gray-200 p-3 md:grid-cols-8">
               <select
                 value={unit.unitName}
                 onChange={(event) => {
@@ -778,17 +904,31 @@ const ProductForm: React.FC<ProductFormProps> = ({
               >
                 <option value="">Select unit</option>
                 {unitOptions.map((option) => (
-                  <option key={option.id} value={option.name}>{option.name}</option>
+                  <option key={option.id} value={option.name}>
+                    {option.name}
+                  </option>
                 ))}
-                {unit.unitName && !unitOptions.some((option) => option.name === unit.unitName) ? (
-                  <option value={unit.unitName}>{unit.unitName}</option>
-                ) : null}
               </select>
-              <input type="number" min={0.0001} step="0.0001" value={unit.conversionFactor} onChange={(event) => updateUnit(index, { conversionFactor: Number(event.target.value || 1) })} className="rounded border px-3 py-2" />
-              <input type="number" step="0.01" placeholder="Cost" value={unit.costPrice ?? ''} onChange={(event) => updateUnit(index, { costPrice: event.target.value ? Number(event.target.value) : null })} className="rounded border px-3 py-2" />
-              <input type="number" step="0.01" placeholder="Selling" value={unit.sellingPrice ?? ''} onChange={(event) => updateUnit(index, { sellingPrice: event.target.value ? Number(event.target.value) : null })} className="rounded border px-3 py-2" />
+              <input
+                type="number"
+                readOnly
+                value={unit.conversionFactor}
+                className="rounded border bg-gray-50 px-3 py-2 text-gray-700"
+                title="From Unit Master"
+              />
+              <input type="number" step="0.01" readOnly value={unit.costPrice ?? 0} className="rounded border bg-gray-50 px-3 py-2 text-gray-700" title="Auto-calculated from base cost price" />
+              <input type="number" step="0.01" readOnly value={unit.sellingPrice ?? 0} className="rounded border bg-gray-50 px-3 py-2 text-gray-700" title="Auto-calculated from base selling price" />
+              <input type="number" step="0.01" readOnly value={unit.wholesalePrice ?? 0} className="rounded border bg-gray-50 px-3 py-2 text-gray-700" title="Auto-calculated from base wholesale price" />
               <label className="flex items-center gap-2 text-sm"><input type="radio" checked={unit.isBaseUnit} onChange={() => setBaseUnit(index)} /> Base</label>
-              <button type="button" onClick={() => setFormData((prev) => ({ ...prev, units: prev.units.filter((_, i) => i !== index) }))} className="rounded border px-3 py-2 text-sm text-red-600">Remove</button>
+              <button type="button" onClick={() => setFormData((prev) => ({
+                ...prev,
+                units: recalculateUnitPrices(
+                  prev.units.filter((_, i) => i !== index),
+                  prev.costPrice,
+                  prev.sellingPrice,
+                  prev.wholesalePrice,
+                ),
+              }))} className="rounded border px-3 py-2 text-sm text-red-600">Remove</button>
             </div>
           ))}
         </DynamicSection>
@@ -890,38 +1030,6 @@ const ProductForm: React.FC<ProductFormProps> = ({
             <p className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
               After adding variants, go to the <strong>Stock</strong> tab to set opening stock per variant.
             </p>
-          )}
-        </section>
-        )}
-
-        {activeTab === 'pricing' && (
-        <section className="space-y-5">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">Pricing & Discount</h3>
-            <p className="mt-1 text-sm text-gray-500">
-              Set product-level prices. Unit and variant prices can override these values where needed.
-            </p>
-          </div>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            {(['costPrice', 'sellingPrice', 'wholesalePrice'] as const).map((field) => (
-              <div key={field}>
-                <label className="mb-1 block text-sm font-medium text-gray-700">{field === 'costPrice' ? 'Cost Price' : field === 'sellingPrice' ? 'Selling Price' : 'Wholesale Price'}</label>
-                <input type="number" min={0} step="0.01" value={Number(formData[field] ?? 0)} onChange={(event) => setFormData((prev) => ({ ...prev, [field]: Number(event.target.value || 0) }))} className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none" />
-              </div>
-            ))}
-          </div>
-          <label className="flex items-center gap-2 text-sm text-gray-700">
-            <input type="checkbox" checked={formData.isDiscountAllowed} onChange={(event) => setFormData((prev) => ({ ...prev, isDiscountAllowed: event.target.checked }))} />
-            Discount allowed
-          </label>
-          {formData.isDiscountAllowed && (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <select value={formData.discountType ?? 'Percentage'} onChange={(event) => setFormData((prev) => ({ ...prev, discountType: event.target.value as 'Percentage' | 'Fixed' }))} className="rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none">
-                <option value="Percentage">Percentage</option>
-                <option value="Fixed">Fixed</option>
-              </select>
-              <input type="number" min={0} step="0.01" value={Number(formData.discountValue ?? 0)} onChange={(event) => setFormData((prev) => ({ ...prev, discountValue: Number(event.target.value || 0) }))} className="rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none" />
-            </div>
           )}
         </section>
         )}

@@ -62,7 +62,11 @@ public class SalesController : ControllerBase
     /// Look up a product by barcode — optimised for scanner input (&lt;200ms target).
     /// </summary>
     [HttpGet("product/barcode/{barcode}")]
-    public async Task<IActionResult> GetProductByBarcode(string barcode, [FromQuery] int? branchId, [FromQuery] int? businessId)
+    public async Task<IActionResult> GetProductByBarcode(
+        string barcode,
+        [FromQuery] int? branchId,
+        [FromQuery] int? businessId,
+        [FromQuery] int? warehouseId)
     {
         if (string.IsNullOrWhiteSpace(barcode))
             return BadRequest(new { message = "Barcode is required." });
@@ -70,7 +74,8 @@ public class SalesController : ControllerBase
         var resolvedBusinessId = this.ResolveBusinessId(businessId);
         var resolvedBranchId = this.ResolveBranchId(branchId);
 
-        var product = await _salesService.GetProductByBarcodeAsync(barcode.Trim(), resolvedBusinessId, resolvedBranchId);
+        var product = await _salesService.GetProductByBarcodeAsync(
+            barcode.Trim(), resolvedBusinessId, resolvedBranchId, warehouseId);
         if (product == null)
             return NotFound(new { message = $"No product found for barcode '{barcode}'." });
 
