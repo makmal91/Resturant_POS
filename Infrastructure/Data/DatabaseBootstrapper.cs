@@ -50,9 +50,7 @@ public static class DatabaseBootstrapper
 
     private static async Task EnsureDatabaseExistsAsync(IConfiguration configuration, ILogger logger)
     {
-        var connectionString = configuration.GetConnectionString("DefaultConnection");
-        if (string.IsNullOrWhiteSpace(connectionString))
-            throw new InvalidOperationException("Connection string 'DefaultConnection' is not configured.");
+        var connectionString = configuration.GetRequiredConnectionString();
 
         var builder = new SqlConnectionStringBuilder(connectionString);
         var databaseName = builder.InitialCatalog;
