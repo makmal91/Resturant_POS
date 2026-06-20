@@ -8,6 +8,7 @@ public sealed class LicenseGateMiddleware
     private static readonly PathString[] ExcludedPathPrefixes =
     [
         new("/api/auth/login"),
+        new("/api/health"),
         new("/api/licenses/status"),
         new("/swagger"),
         new("/notificationHub"),

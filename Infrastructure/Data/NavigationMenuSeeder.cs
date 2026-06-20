@@ -115,52 +115,53 @@ public static class NavigationMenuSeeder
         ("/ledger/suppliers", "SL"),
     ];
 
-    private static Task PatchExistingMenusAsync(POSDbContext context, ILogger logger)
+    private static async Task PatchExistingMenusAsync(POSDbContext context, ILogger logger)
     {
-        var patches = new List<Task>
-        {
-            ExecuteRawSeedAsync(
-                context,
-                logger,
-                "Hide Record Transaction menu",
-                """
-                UPDATE [Menus] SET [IsActive] = 0
-                WHERE [Route] = N'/cashflow/transaction';
-                """),
-            ExecuteRawSeedAsync(
-                context,
-                logger,
-                "Hide legacy /masters routes",
-                """
-                UPDATE [Menus] SET [IsActive] = 0
-                WHERE [Route] LIKE N'/masters/%'
-                   OR [Route] = N'/settings/expense-categories';
-                """),
-            ExecuteRawSeedAsync(
-                context,
-                logger,
-                "Suppliers ModuleName",
-                """
-                UPDATE [Menus] SET [ModuleName] = N'Suppliers'
-                WHERE [Route] = N'/suppliers' AND ([ModuleName] IS NULL OR [ModuleName] = N'');
-                """),
-            ExecuteRawSeedAsync(
-                context,
-                logger,
-                "Units ModuleName",
-                """
-                UPDATE [Menus] SET [ModuleName] = N'Units'
-                WHERE [Route] = N'/units' AND ([ModuleName] IS NULL OR [ModuleName] = N'');
-                """),
-            ExecuteRawSeedAsync(
-                context,
-                logger,
-                "Dashboard ModuleName",
-                """
-                UPDATE [Menus] SET [ModuleName] = N'Dashboard'
-                WHERE [Route] = N'/' AND ([ModuleName] IS NULL OR [ModuleName] = N'POS Billing');
-                """)
-        };
+        await ExecuteRawSeedAsync(
+            context,
+            logger,
+            "Hide Record Transaction menu",
+            """
+            UPDATE [Menus] SET [IsActive] = 0
+            WHERE [Route] = N'/cashflow/transaction';
+            """);
+
+        await ExecuteRawSeedAsync(
+            context,
+            logger,
+            "Hide legacy /masters routes",
+            """
+            UPDATE [Menus] SET [IsActive] = 0
+            WHERE [Route] LIKE N'/masters/%'
+               OR [Route] = N'/settings/expense-categories';
+            """);
+
+        await ExecuteRawSeedAsync(
+            context,
+            logger,
+            "Suppliers ModuleName",
+            """
+            UPDATE [Menus] SET [ModuleName] = N'Suppliers'
+            WHERE [Route] = N'/suppliers' AND ([ModuleName] IS NULL OR [ModuleName] = N'');
+            """);
+
+        await ExecuteRawSeedAsync(
+            context,
+            logger,
+            "Units ModuleName",
+            """
+            UPDATE [Menus] SET [ModuleName] = N'Units'
+            WHERE [Route] = N'/units' AND ([ModuleName] IS NULL OR [ModuleName] = N'');
+            """);
+
+        await ExecuteRawSeedAsync(
+            context,
+            logger,
+            "Dashboard ModuleName",
+            """
+            UPDATE [Menus] SET [ModuleName] = N'Dashboard'
+            WHERE [Route] = N'/' AND ([ModuleName] IS NULL OR [ModuleName] = N'POS Billing');
+            """);
 
         foreach (var (route, icon) in IconPatches)
         {
@@ -168,10 +169,8 @@ public static class NavigationMenuSeeder
                 UPDATE [Menus] SET [Icon] = N'{icon}'
                 WHERE [Route] = N'{route}';
                 """;
-            patches.Add(ExecuteRawSeedAsync(context, logger, $"Icon:{route}", sql));
+            await ExecuteRawSeedAsync(context, logger, $"Icon:{route}", sql);
         }
-
-        return Task.WhenAll(patches);
     }
 
     private static Task SeedGroupAsync(POSDbContext context, ILogger logger, MenuSeedEntry group)

@@ -101,6 +101,11 @@ Set `ASPNETCORE_ENVIRONMENT=Production` on the server. Swagger is disabled autom
   "ConnectionStrings": {
     "DefaultConnection": "Server=PROD_SQL;Database=POSSystem;User Id=pos_app;Password=***;TrustServerCertificate=True;"
   },
+  "Database": {
+    "ApplyMigrationsOnStartup": true,
+    "ApplySchemaPatchesOnStartup": true,
+    "RunSeedOnStartup": false
+  },
   "Jwt": {
     "Key": "GENERATE_A_NEW_32+_CHAR_RANDOM_SECRET",
     "Issuer": "POSSystem",
@@ -130,6 +135,7 @@ ASP.NET Core accepts nested config via double underscore:
 | Setting | Environment variable |
 |---------|----------------------|
 | Connection string | `ConnectionStrings__DefaultConnection` |
+| Run seed on startup | `Database__RunSeedOnStartup` |
 | JWT secret | `Jwt__Key` |
 | License AES key | `License__AesKeyBase64` |
 | CORS origin (array index) | `Frontend__AllowedOrigins__0` |
@@ -163,17 +169,29 @@ Ensure the process identity can **read/write** the `licenses/` folder (for admin
 The API will on first run:
 
 1. Create the database if it does not exist
-2. Apply EF migrations
-3. Run schema/seed initializers
+2. Apply EF migrations (when `Database:ApplyMigrationsOnStartup` is `true`)
+3. Apply idempotent schema patches (when `Database:ApplySchemaPatchesOnStartup` is `true`)
 4. Load and validate `licenses/system.lic`
 
-Monitor logs on first deploy for migration or license errors.
+**Reference data is not seeded on every startup.** On a **new** customer database, run seed **once** after the API starts successfully:
+
+| Method | When to use |
+|--------|-------------|
+| `Database:RunSeedOnStartup: true` for one restart | Fresh install; set back to `false` after |
+| `dotnet POSSystem.API.dll --seed-database` | Scripted first deploy |
+| `POST /api/database/seed` (System Admin) | Re-seed modules/menus without config change |
+
+Seed includes: default roles, admin user (`admin` / `Admin@123`), modules, menus, units, walk-in customers, and role permissions.
+
+Monitor logs on first deploy for migration, seed, or license errors.
 
 ---
 
 ## 6. Database Migrations (Production)
 
-Migrations live in `Infrastructure/Migrations/`. By default the API applies them on startup via `DatabaseBootstrapper.MigrateAsync()`.
+Migrations live in `Infrastructure/Migrations/`. By default the API applies them on startup when `Database:ApplyMigrationsOnStartup` is `true`.
+
+Routine upgrades should keep `Database:RunSeedOnStartup` as **`false`** so startup stays fast and idempotent seed SQL does not run on every restart.
 
 ### Option A — Automatic (default)
 
@@ -217,20 +235,32 @@ All migrations should show as applied. Check API startup logs for `Database migr
 - [ ] New migration files included in the release build
 - [ ] Tested against a staging copy of production data
 - [ ] Migrations applied (auto on startup, or manual/script)
+- [ ] On **new** database: seed run once (`RunSeedOnStartup`, `--seed-database`, or `POST /api/database/seed`)
 - [ ] API starts without migration errors
 
 ---
 
 ## 7. License — Production Flow
 
-Run on the **secure admin machine** (with `PrivateKeyPem`), not on the customer server:
+Run on the **secure admin machine** (with `PrivateKeyPem` in `Tools/prod-license/appsettings.json`), not on the customer server:
 
 ```powershell
-cd Tools\LicenseGenerator
-dotnet run -- --years 1 --customer "Customer Name" --max-businesses 1 --max-branches 5 --max-users 20
+cd D:\AKHSSOFT\Projects\Resturant_POS
+
+# Generate (must use --production)
+dotnet run --project Tools/LicenseGenerator -- --production --config-dir Tools/prod-license --years 1 --customer "Customer Name" --max-businesses 1 --max-branches 5 --max-users 20 --output API/licenses/system.lic
+
+# Verify before copying to server
+dotnet run --project Tools/LicenseGenerator -- verify --production --config-dir API --license API/licenses/system.lic
 ```
 
-Deliver `system.lic` to the client securely (portal, encrypted email, USB — **not Git**).
+Copy to server:
+- `API/appsettings.json` → `PublicKeyPem` + `AesKeyBase64` (no `PrivateKeyPem`)
+- `API/licenses/system.lic`
+
+**Do not** run the generator without `--production` for customer delivery — it uses dev keys from `appsettings.Development.json` and causes `License signature verification failed` on the server.
+
+Full guide: [docs/LICENSE_COMPLETE_SETUP.md](docs/LICENSE_COMPLETE_SETUP.md)
 
 ### Install on customer system
 
@@ -261,6 +291,7 @@ Or check the **System License** page for expiry and usage limits.
 - [ ] HTTPS enabled (TLS certificate valid)
 - [ ] Frontend loads at production URL
 - [ ] Login works (not blocked by license middleware)
+- [ ] On fresh install: database seed completed before UAT
 - [ ] `GET /api/licenses/status` returns valid, unexpired license
 - [ ] CORS: browser can call API from production frontend origin
 - [ ] SignalR hubs connect (`/notificationHub`, `/orderHub`) if used
@@ -347,7 +378,7 @@ Keep a copy of the previous `publish\api` folder and DB backup until smoke tests
 
 | Issue | Fix |
 |-------|-----|
-| API returns license blocked | Install valid `system.lic`; confirm `AllowMissingInDevelopment: false` and keys match the signing key |
+| API returns license blocked / won't start | Run `verify` locally; ensure `--production` was used; keys in server `appsettings.json` must match `Tools/prod-license`; copy fresh `system.lic`; set `ASPNETCORE_ENVIRONMENT=Production` |
 | 401 on all requests after deploy | Check `Jwt:Key` matches what tokens were issued with; users must re-login after JWT key change |
 | CORS errors in browser | Add exact production origin (scheme + host + port) to `Frontend:AllowedOrigins` |
 | Frontend calls wrong API | Rebuild with correct `VITE_API_BASE_URL`; `/api` only works with same-origin proxy |

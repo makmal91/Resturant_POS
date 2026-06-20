@@ -84,13 +84,7 @@ public static class PartyLedgerInitializer
             IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_supplierledger_business_branch_reference_type' AND object_id = OBJECT_ID(N'[dbo].[SupplierLedgerTransactions]'))
                 CREATE INDEX [idx_supplierledger_business_branch_reference_type]
                     ON [dbo].[SupplierLedgerTransactions]([BusinessId], [BranchId], [ReferenceId], [Type]);
-            """,
             """
-            IF NOT EXISTS (SELECT 1 FROM [dbo].[PermissionModules] WHERE [ModuleName] = N'Party Ledger' AND [IsDeleted] = 0)
-                INSERT INTO [dbo].[PermissionModules] ([ModuleName], [BusinessId], [BranchId], [CreatedDate], [IsDeleted])
-                VALUES (N'Party Ledger', 1, 1, GETUTCDATE(), 0);
-            """,
-            SeedPartyLedgerMenusSql()
         };
 
         foreach (var batch in batches)
@@ -105,34 +99,4 @@ public static class PartyLedgerInitializer
             }
         }
     }
-
-    private static string SeedPartyLedgerMenusSql() => """
-        DECLARE @accountsGroupId INT;
-        SELECT TOP 1 @accountsGroupId = [Id] FROM [dbo].[Menus]
-        WHERE [Name] = N'Accounts' AND [ParentId] IS NULL AND [IsDeleted] = 0;
-
-        IF @accountsGroupId IS NOT NULL
-        BEGIN
-            IF NOT EXISTS (SELECT 1 FROM [dbo].[Menus] WHERE [Route] = N'/ledger/customers' AND [Name] = N'Receive Payment' AND [IsDeleted] = 0)
-                INSERT INTO [dbo].[Menus] ([Name], [Route], [Icon], [ModuleName], [ParentId], [DisplayOrder], [BusinessId], [BranchId], [CreatedDate], [IsDeleted])
-                VALUES (N'Receive Payment', N'/ledger/customers', N'RP', N'Party Ledger', @accountsGroupId, 6, 1, 1, GETUTCDATE(), 0);
-
-            IF NOT EXISTS (SELECT 1 FROM [dbo].[Menus] WHERE [Route] = N'/ledger/suppliers' AND [Name] = N'Pay Supplier' AND [IsDeleted] = 0)
-                INSERT INTO [dbo].[Menus] ([Name], [Route], [Icon], [ModuleName], [ParentId], [DisplayOrder], [BusinessId], [BranchId], [CreatedDate], [IsDeleted])
-                VALUES (N'Pay Supplier', N'/ledger/suppliers', N'PS', N'Party Ledger', @accountsGroupId, 7, 1, 1, GETUTCDATE(), 0);
-
-            UPDATE [dbo].[Menus] SET [Route] = N'/ledger/customers'
-                WHERE [Route] = N'/ledger/customer-payment' AND [IsDeleted] = 0;
-            UPDATE [dbo].[Menus] SET [Route] = N'/ledger/suppliers'
-                WHERE [Route] = N'/ledger/supplier-payment' AND [IsDeleted] = 0;
-
-            IF NOT EXISTS (SELECT 1 FROM [dbo].[Menus] WHERE [Route] = N'/ledger/customers' AND [Name] = N'Customer Ledger' AND [IsDeleted] = 0)
-                INSERT INTO [dbo].[Menus] ([Name], [Route], [Icon], [ModuleName], [ParentId], [DisplayOrder], [BusinessId], [BranchId], [CreatedDate], [IsDeleted])
-                VALUES (N'Customer Ledger', N'/ledger/customers', N'CL', N'Party Ledger', @accountsGroupId, 8, 1, 1, GETUTCDATE(), 0);
-
-            IF NOT EXISTS (SELECT 1 FROM [dbo].[Menus] WHERE [Route] = N'/ledger/suppliers' AND [IsDeleted] = 0)
-                INSERT INTO [dbo].[Menus] ([Name], [Route], [Icon], [ModuleName], [ParentId], [DisplayOrder], [BusinessId], [BranchId], [CreatedDate], [IsDeleted])
-                VALUES (N'Supplier Ledger', N'/ledger/suppliers', N'SL', N'Party Ledger', @accountsGroupId, 9, 1, 1, GETUTCDATE(), 0);
-        END
-        """;
 }

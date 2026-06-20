@@ -28,4 +28,9 @@ public static class MiddlewareExtensions
     {
         return app.UseMiddleware<LicenseEnforcementMiddleware>();
     }
+
+    public static IApplicationBuilder UseRequestLoggingMiddleware(this IApplicationBuilder app)
+    {
+        return app.UseMiddleware<RequestLoggingMiddleware>();
+    }
 }

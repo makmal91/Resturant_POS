@@ -66,9 +66,137 @@ Log in as **System Admin** → **System Settings → System License** to view st
 
 ---
 
-## OPTION B — Manual setup (production-style)
+## OPTION B — Production setup (recommended)
 
-Use this when you want full control or a **production key pair** on a secure admin PC.
+Use a **separate config folder** so `appsettings.Development.json` never overrides production keys.
+
+### Why this matters
+
+If you run the generator from `API/` without `--production`, it loads **both**:
+
+1. `appsettings.json`
+2. `appsettings.Development.json` ← **overrides** production keys
+
+The license is then signed with the **dev private key**, but the server uses **production public key** → API crashes on startup:
+
+```
+License signature verification failed.
+```
+
+---
+
+### Step 1 — Create production config folder (one time)
+
+Create **`Tools/prod-license/appsettings.json`** on your secure admin machine:
+
+```json
+{
+  "License": {
+    "Directory": "licenses",
+    "FileName": "system.lic",
+    "AesKeyBase64": "YOUR_32_BYTE_BASE64_AES_KEY",
+    "PublicKeyPem": "-----BEGIN RSA PUBLIC KEY-----\nMIIBCgKCAQEA...\n-----END RSA PUBLIC KEY-----",
+    "PrivateKeyPem": "-----BEGIN RSA PRIVATE KEY-----\nMIIE...\n-----END RSA PRIVATE KEY-----",
+    "DefaultValidityMonths": 0,
+    "DefaultValidityYears": 10
+  }
+}
+```
+
+Generate keys with:
+
+```powershell
+cd D:\AKHSSOFT\Projects\Resturant_POS\Tools\LicenseGenerator
+dotnet run -- generate-keys
+```
+
+- Put **PublicKeyPem** + **AesKeyBase64** in `API/appsettings.json` (server deploy)
+- Put **all three** (including **PrivateKeyPem**) in `Tools/prod-license/appsettings.json` (generator only)
+
+> `Tools/prod-license/appsettings.json` is in `.gitignore` — never commit private keys.
+
+---
+
+### Step 2 — Configure POS server (`API/appsettings.json`)
+
+```json
+"License": {
+  "Directory": "licenses",
+  "FileName": "system.lic",
+  "AesKeyBase64": "SAME_AES_KEY_AS_prod-license",
+  "PublicKeyPem": "SAME_PUBLIC_KEY_AS_prod-license",
+  "AllowMissingInDevelopment": false,
+  "DefaultValidityMonths": 0,
+  "DefaultValidityYears": 10
+}
+```
+
+**Do not add `PrivateKeyPem` on the server.**
+
+**Do not leave placeholders** like `REPLACE_WITH_RSA_PUBLIC_KEY_PEM` — the API will fail in production.
+
+---
+
+### Step 3 — Generate production license
+
+Always use **`--production`** and **`--config-dir Tools/prod-license`**:
+
+```powershell
+cd D:\AKHSSOFT\Projects\Resturant_POS
+
+dotnet run --project Tools/LicenseGenerator -- --production --config-dir Tools/prod-license --customer "Customer Name" --years 10 --output API/licenses/system.lic
+```
+
+Other examples:
+
+```powershell
+# 1 year
+dotnet run --project Tools/LicenseGenerator -- --production --config-dir Tools/prod-license --years 1 --customer "Acme Restaurant"
+
+# 6 months with limits
+dotnet run --project Tools/LicenseGenerator -- --production --config-dir Tools/prod-license --months 6 --customer "Pizza Hub" --max-businesses 2 --max-branches 5 --max-users 25
+```
+
+---
+
+### Step 4 — Verify before deploy (required)
+
+```powershell
+dotnet run --project Tools/LicenseGenerator -- verify --production --config-dir API --license API/licenses/system.lic
+```
+
+Expected output:
+
+```
+License verification OK.
+  Customer: Customer Name
+  Expires : 2036-06-19
+```
+
+If verify fails locally, it **will fail on the server** — fix keys before copying files.
+
+---
+
+### Step 5 — Deploy to server
+
+Copy these two to the production API folder:
+
+| Local file | Server path |
+|------------|-------------|
+| `API/appsettings.json` (License section) | `{API}/appsettings.json` |
+| `API/licenses/system.lic` | `{API}/licenses/system.lic` |
+
+Also ensure:
+
+- `ASPNETCORE_ENVIRONMENT=Production`
+- **Do not** deploy `appsettings.Development.json`
+- Republish if using `publish/api`: `dotnet publish API/POSSystem.API.csproj -c Release -o publish/api`
+
+---
+
+## OPTION C — Manual setup (legacy)
+
+Use this only if you cannot use `Tools/prod-license/`.
 
 ### Step 1 — Generate RSA key pair + AES key
 
@@ -153,6 +281,9 @@ Edit **`API/appsettings.json`** on the **server** (production):
 ---
 
 ### Step 4 — Generate a license file
+
+> **Production:** use OPTION B above (`--production --config-dir Tools/prod-license`).  
+> **Development only:** commands below read `appsettings.Development.json` and may sign with dev keys.
 
 From `Tools\LicenseGenerator`:
 
@@ -270,14 +401,55 @@ GET http://localhost:5000/api/licenses/status
 | Command | Purpose |
 |---------|---------|
 | `dotnet run -- help` | Show all options |
-| `dotnet run -- init-dev` | Auto RSA + AES + config + system.lic (dev) |
+| `dotnet run -- init-dev` | Auto RSA + AES + config + system.lic (dev only) |
 | `dotnet run -- generate-keys` | Print new RSA public/private + AES key |
-| `dotnet run -- --months 1 --customer "X"` | 1-month license |
-| `dotnet run -- --years 1 --customer "X"` | 1-year license |
+| `dotnet run -- verify --production --config-dir API --license API/licenses/system.lic` | Test license matches server config |
+| `dotnet run -- --production --config-dir Tools/prod-license --years 10 --customer "X"` | **Production** license |
+| `dotnet run -- --months 1 --customer "X"` | Dev license (uses Development.json) |
+| `dotnet run -- --years 1 --customer "X"` | Dev license (uses Development.json) |
 
 ---
 
 ## Troubleshooting
+
+### `License signature verification failed` (API won't start)
+
+**Symptom:**
+
+```
+Failed to load license file.
+System.InvalidOperationException: License signature verification failed.
+```
+
+**Cause:** The `system.lic` file was **not signed** with the private key that matches `PublicKeyPem` on the server. Common reasons:
+
+| Mistake | What happened |
+|---------|----------------|
+| Generator run without `--production` | Signed with dev `PrivateKeyPem` from `appsettings.Development.json` |
+| Different keys on server | Server `appsettings.json` has different `PublicKeyPem` / `AesKeyBase64` than used when generating |
+| Placeholder keys on server | `REPLACE_WITH_RSA_PUBLIC_KEY_PEM` still in production `appsettings.json` |
+| Old `system.lic` on server | New keys generated but old license file not replaced |
+| Wrong PEM format on server | Public key pasted as one line without `\n` between PEM lines |
+| `ASPNETCORE_ENVIRONMENT=Development` on server | Loads `appsettings.Development.json` with different keys |
+
+**Fix (step by step):**
+
+1. Ensure `Tools/prod-license/appsettings.json` has the **matching** private + public + AES keys.
+2. Copy **PublicKeyPem** and **AesKeyBase64** from prod-license config into `API/appsettings.json`.
+3. Regenerate license:
+   ```powershell
+   dotnet run --project Tools/LicenseGenerator -- --production --config-dir Tools/prod-license --customer "Customer" --years 10 --output API/licenses/system.lic
+   ```
+4. Verify locally:
+   ```powershell
+   dotnet run --project Tools/LicenseGenerator -- verify --production --config-dir API --license API/licenses/system.lic
+   ```
+5. Copy **both** updated `appsettings.json` (License section) and `licenses/system.lic` to server.
+6. Set `ASPNETCORE_ENVIRONMENT=Production`, restart API.
+
+**Remember:** `PrivateKeyPem` is **never** deployed to the server — only used on the admin machine to sign licenses.
+
+---
 
 ### `No supported key formats were found`
 
@@ -321,29 +493,43 @@ Check output line: `Period : 1 month`
 **Cause:** Missing/invalid `system.lic` or wrong public/AES keys on server.
 
 **Fix:**
-1. Ensure `PublicKeyPem` + `AesKeyBase64` on server **match** the generator keys used to sign the `.lic`
-2. Re-upload valid `system.lic` as System Admin
+1. Run `verify` command locally before deploy (see OPTION B)
+2. Ensure `PublicKeyPem` + `AesKeyBase64` on server **match** the keys in `Tools/prod-license/appsettings.json`
+3. Re-upload valid `system.lic` as System Admin or copy to `licenses/system.lic`
 
 ---
 
-## Example: end-to-end for one customer
+## Example: end-to-end for one customer (production)
 
 ```powershell
 # 1. Admin machine — one-time keys
 cd Tools\LicenseGenerator
 dotnet run -- generate-keys
-# → Save public key, private key, AES key
+# → Save keys into Tools/prod-license/appsettings.json (all 3)
+# → Copy PublicKeyPem + AesKeyBase64 into API/appsettings.json
 
-# 2. Paste keys into appsettings.Development.json (generator config)
+# 2. Generate production license
+cd D:\AKHSSOFT\Projects\Resturant_POS
+dotnet run --project Tools/LicenseGenerator -- --production --config-dir Tools/prod-license --years 1 --customer "Karachi Biryani House" --max-businesses 1 --max-branches 5 --max-users 15
 
-# 3. Generate 1-year license for customer
-dotnet run -- --years 1 --customer "Karachi Biryani House" --max-businesses 1 --max-branches 5 --max-users 15
+# 3. Verify before delivery
+dotnet run --project Tools/LicenseGenerator -- verify --production --config-dir API --license API/licenses/system.lic
 
-# 4. Deliver API\licenses\system.lic to customer (email/USB/portal)
-
-# 5. Customer server — appsettings.json with PublicKeyPem + AesKeyBase64 only
-# 6. Customer uploads .lic via System Admin → System License
+# 4. Deliver API\licenses\system.lic + appsettings.json License section to customer server
+# 5. Customer: ASPNETCORE_ENVIRONMENT=Production, restart API
 ```
+
+---
+
+## Example: development only (legacy)
+
+```powershell
+cd Tools\LicenseGenerator
+dotnet run -- init-dev
+dotnet run -- --years 1 --customer "Local Dev Customer"
+```
+
+Uses `appsettings.Development.json` — **not** for production delivery.
 
 ---
 

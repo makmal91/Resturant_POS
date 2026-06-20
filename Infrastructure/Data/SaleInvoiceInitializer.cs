@@ -107,33 +107,6 @@ public static class SaleInvoiceInitializer
                 ALTER TABLE [dbo].[SaleInvoices] ADD [VoidedAt] DATETIME2 NULL;
             IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[SaleInvoices]') AND name = N'VoidedByName')
                 ALTER TABLE [dbo].[SaleInvoices] ADD [VoidedByName] NVARCHAR(200) NULL;
-            """,
-            """
-            IF NOT EXISTS (SELECT 1 FROM [dbo].[PermissionModules] WHERE [ModuleName] = N'Sales')
-                INSERT INTO [dbo].[PermissionModules] ([ModuleName], [BusinessId], [BranchId], [CreatedDate], [IsDeleted])
-                VALUES (N'Sales', 1, 1, GETUTCDATE(), 0);
-            """,
-            """
-            IF NOT EXISTS (SELECT 1 FROM [dbo].[Menus] WHERE [Route] = N'/pos' AND [IsDeleted] = 0)
-            BEGIN
-                DECLARE @opsGroupId INT;
-                SELECT TOP 1 @opsGroupId = [Id] FROM [dbo].[Menus]
-                WHERE [Name] = N'Operations' AND [ParentId] IS NULL AND [IsDeleted] = 0;
-                IF @opsGroupId IS NOT NULL
-                    INSERT INTO [dbo].[Menus] ([Name], [Route], [Icon], [ModuleName], [ParentId], [DisplayOrder], [BusinessId], [BranchId], [CreatedDate], [IsDeleted])
-                    VALUES (N'POS Billing', N'/pos', N'🏪', N'POS Billing', @opsGroupId, 0, 1, 1, GETUTCDATE(), 0);
-            END
-            """,
-            """
-            IF NOT EXISTS (SELECT 1 FROM [dbo].[Menus] WHERE [Route] = N'/sales-invoices' AND [IsDeleted] = 0)
-            BEGIN
-                DECLARE @opsGrpId INT;
-                SELECT TOP 1 @opsGrpId = [Id] FROM [dbo].[Menus]
-                WHERE [Name] = N'Operations' AND [ParentId] IS NULL AND [IsDeleted] = 0;
-                IF @opsGrpId IS NOT NULL
-                    INSERT INTO [dbo].[Menus] ([Name], [Route], [Icon], [ModuleName], [ParentId], [DisplayOrder], [BusinessId], [BranchId], [CreatedDate], [IsDeleted])
-                    VALUES (N'Invoice History', N'/sales-invoices', N'📋', N'Sales', @opsGrpId, 1, 1, 1, GETUTCDATE(), 0);
-            END
             """
         };
 

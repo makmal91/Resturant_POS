@@ -78,12 +78,22 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+// When hosted as IIS sub-application at /api, IIS strips the /api prefix before the request
+// reaches Kestrel. Controllers use [Route("api/[controller]")], so restore the prefix.
+app.Use((context, next) =>
+{
+    var path = context.Request.Path.Value ?? string.Empty;
+    if (!path.StartsWith("/api", StringComparison.OrdinalIgnoreCase))
+        context.Request.Path = new PathString("/api" + path);
+    return next();
+});
+
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<POSDbContext>();
     var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
     var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("DatabaseInitializer");
-    await DatabaseBootstrapper.InitializeAsync(db, configuration, logger);
+    await DatabaseBootstrapper.InitializeAsync(db, configuration, logger, args);
 }
 
 var licenseService = app.Services.GetRequiredService<ILicenseService>();
@@ -96,11 +106,15 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+app.UseGlobalExceptionMiddleware();
+app.UseRequestLoggingMiddleware();
+
+if (builder.Configuration.GetValue("Hosting:UseHttpsRedirection", false))
+{
+    app.UseHttpsRedirection();
+}
 
 app.UseCors("FrontendPolicy");
-
-app.UseGlobalExceptionMiddleware();
 
 app.UseAuthentication();
 app.UseLicenseGateMiddleware();
@@ -113,4 +127,15 @@ app.MapControllers();
 app.MapHub<NotificationHub>("/notificationHub");
 app.MapHub<OrderHub>("/orderHub");
 
-app.Run();
+try
+{
+    app.Run();
+}
+catch (Exception ex)
+{
+    using var crashScope = app.Services.CreateScope();
+    var crashDb = crashScope.ServiceProvider.GetRequiredService<POSDbContext>();
+    var crashLogger = crashScope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("Application");
+    await BootstrapExceptionLogger.LogAsync(crashDb, crashLogger, ex, "Application", actionName: "HostStart");
+    throw;
+}

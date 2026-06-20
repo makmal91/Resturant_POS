@@ -105,11 +105,9 @@ public static class UnitMasterDatabaseInitializer
                 logger.LogWarning(ex, "Unit master schema batch skipped or partially applied.");
             }
         }
-
-        await SeedDefaultUnitsAsync(context, logger);
     }
 
-    private static async Task SeedDefaultUnitsAsync(POSDbContext context, ILogger logger)
+    internal static async Task SeedDefaultUnitsAsync(POSDbContext context, ILogger logger)
     {
         try
         {
@@ -117,7 +115,7 @@ public static class UnitMasterDatabaseInitializer
                 return;
 
             var branchesExists = await context.Database
-                .SqlQueryRaw<int>("SELECT CASE WHEN OBJECT_ID(N'dbo.Branches', N'U') IS NOT NULL THEN 1 ELSE 0 END")
+                .SqlQueryRaw<int>("SELECT CASE WHEN OBJECT_ID(N'dbo.Branches', N'U') IS NOT NULL THEN 1 ELSE 0 END AS [Value]")
                 .FirstOrDefaultAsync();
             if (branchesExists == 0)
             {

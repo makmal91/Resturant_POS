@@ -10,6 +10,7 @@ public class PermissionAuthorizationMiddleware
     private static readonly PathString[] ExcludedPathPrefixes =
     [
         new("/api/auth/login"),
+        new("/api/health"),
         new("/swagger"),
         new("/notificationHub"),
         new("/orderHub")

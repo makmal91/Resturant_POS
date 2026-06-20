@@ -266,10 +266,12 @@ public static class PurchaseWarehouseInitializer
         IF OBJECT_ID(N'[dbo].[Suppliers]', N'U') IS NOT NULL
            AND COL_LENGTH(N'dbo.Suppliers', N'Code') IS NOT NULL
            AND COL_LENGTH(N'dbo.Suppliers', N'SupplierCode') IS NOT NULL
-            UPDATE [dbo].[Suppliers]
-            SET [SupplierCode] = [Code]
-            WHERE ([SupplierCode] IS NULL OR [SupplierCode] = N'')
-              AND [Code] IS NOT NULL AND [Code] <> N'';
+            EXEC(N'
+                UPDATE [dbo].[Suppliers]
+                SET [SupplierCode] = [Code]
+                WHERE ([SupplierCode] IS NULL OR [SupplierCode] = N'''')
+                  AND [Code] IS NOT NULL AND [Code] <> N'''';
+            ');
         """;
 
     private static string SyncLegacyPurchasesSchemaSql() => """

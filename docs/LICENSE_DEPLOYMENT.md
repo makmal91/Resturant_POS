@@ -70,6 +70,8 @@ These paths are listed in `.gitignore`:
 ```
 API/licenses/*.lic
 !API/licenses/.gitkeep
+Tools/prod-license/appsettings.json
+Tools/prod-license/licenses/
 ```
 
 ---
@@ -96,31 +98,35 @@ Restart the API after generation.
 
 ## Generate Licenses (Admin Tool)
 
-Run from `Tools\LicenseGenerator`:
+Run from repo root or `Tools\LicenseGenerator`:
 
 ```powershell
-dotnet run -- help
+dotnet run --project Tools/LicenseGenerator -- help
 ```
 
-### Monthly license
+### Production license (required for server deploy)
+
+Use a dedicated config folder with **private key** — never read `appsettings.Development.json`:
 
 ```powershell
+# 1. Create Tools/prod-license/appsettings.json (see LICENSE_COMPLETE_SETUP.md)
+
+# 2. Generate
+dotnet run --project Tools/LicenseGenerator -- --production --config-dir Tools/prod-license --years 10 --customer "Customer Name" --output API/licenses/system.lic
+
+# 3. Verify before deploy
+dotnet run --project Tools/LicenseGenerator -- verify --production --config-dir API --license API/licenses/system.lic
+```
+
+### Development license (local only)
+
+```powershell
+cd Tools\LicenseGenerator
+dotnet run -- init-dev
 dotnet run -- --months 1 --customer "Customer Name"
-dotnet run -- --months=6 --customer "Customer Name"
 ```
 
-### Yearly license
-
-```powershell
-dotnet run -- --years 1 --customer "Customer Name"
-dotnet run -- --years=10 --customer "Customer Name"
-```
-
-### With limits
-
-```powershell
-dotnet run -- --months 12 --customer "Pizza Hub" --max-businesses 2 --max-branches 5 --max-users 20
-```
+> **Warning:** Commands without `--production` load `appsettings.Development.json` and sign with dev keys. That license will **not** work on a production server with different keys.
 
 ### Important syntax
 
@@ -143,11 +149,19 @@ Keep **PrivateKeyPem** only on the license generator machine (never on the POS s
 
 ## Production Deployment Flow
 
-### Step 1 — Generate license (separate secure system)
+### Step 1 — Generate license (secure admin machine)
 
-1. Configure `PrivateKeyPem`, `PublicKeyPem`, and `AesKeyBase64` on the admin generator.
-2. Run the generator with customer name, period, and limits.
-3. Output: `system.lic`
+1. Create `Tools/prod-license/appsettings.json` with `PrivateKeyPem`, `PublicKeyPem`, and `AesKeyBase64`.
+2. Copy `PublicKeyPem` + `AesKeyBase64` into `API/appsettings.json` (no private key).
+3. Generate with `--production`:
+   ```powershell
+   dotnet run --project Tools/LicenseGenerator -- --production --config-dir Tools/prod-license --years 1 --customer "Customer Name"
+   ```
+4. Verify:
+   ```powershell
+   dotnet run --project Tools/LicenseGenerator -- verify --production --config-dir API --license API/licenses/system.lic
+   ```
+5. Output: `API/licenses/system.lic`
 
 ### Step 2 — Deliver license to client
 
@@ -172,6 +186,18 @@ On the server, set in `appsettings.json` (or environment / secrets vault):
 
 - **No `PrivateKeyPem`** on production.
 - Place `system.lic` in `API/licenses/` **or** upload via admin UI.
+
+Also set database startup (see [SETUP_REMINDER.md](../SETUP_REMINDER.md) and [PRODUCTION_RELEASE_REMINDER.md](../PRODUCTION_RELEASE_REMINDER.md)):
+
+```json
+"Database": {
+  "ApplyMigrationsOnStartup": true,
+  "ApplySchemaPatchesOnStartup": true,
+  "RunSeedOnStartup": false
+}
+```
+
+On a **new** database, run seed once after first successful API start (`RunSeedOnStartup: true` for one restart, `dotnet POSSystem.API.dll --seed-database`, or `POST /api/database/seed` as System Admin). Keep `RunSeedOnStartup` `false` for routine restarts.
 
 ### Step 4 — Install license (client system)
 
@@ -262,15 +288,29 @@ Enforced by:
 cd Tools\LicenseGenerator
 dotnet run -- init-dev
 
-# 1-month production-style license
-dotnet run -- --months 1 --customer "Acme" --max-businesses 1 --max-branches 3 --max-users 10
+# Production license (use prod-license config folder)
+dotnet run --project Tools/LicenseGenerator -- --production --config-dir Tools/prod-license --years 1 --customer "Acme"
 
-# 1-year license
-dotnet run -- --years 1 --customer "Acme"
+# Verify license matches API appsettings before deploy
+dotnet run --project Tools/LicenseGenerator -- verify --production --config-dir API --license API/licenses/system.lic
 
 # New RSA/AES keys (admin machine only)
-dotnet run -- generate-keys
+dotnet run --project Tools/LicenseGenerator -- generate-keys
 ```
+
+---
+
+## Common production error
+
+**`License signature verification failed`** — the `.lic` file was signed with a different private key than the `PublicKeyPem` on the server.
+
+Typical causes:
+- Generator run without `--production` (used dev keys from `appsettings.Development.json`)
+- Server `appsettings.json` still has `REPLACE_WITH_...` placeholders
+- Old `system.lic` not replaced after generating new keys
+- `ASPNETCORE_ENVIRONMENT=Development` on server loading wrong config
+
+Full fix: [LICENSE_COMPLETE_SETUP.md — Troubleshooting](./LICENSE_COMPLETE_SETUP.md#license-signature-verification-failed-api-wont-start)
 
 ---
 
@@ -284,4 +324,4 @@ Document your internal process here:
 
 ---
 
-*Last updated: June 2026*
+*Last updated: June 2026 — added `--production`, `verify`, signature troubleshooting*

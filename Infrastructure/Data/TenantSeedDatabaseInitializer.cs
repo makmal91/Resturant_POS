@@ -135,10 +135,12 @@ public static class TenantSeedDatabaseInitializer
             SET IDENTITY_INSERT [Businesses] OFF;
         END
         IF COL_LENGTH(N'[dbo].[Businesses]', N'CurrencyId') IS NOT NULL
-            UPDATE [Businesses]
-            SET [CurrencyId] = 1, [Currency] = N'PKR', [TimeZone] = N'Asia/Karachi'
-            WHERE [Id] = {DefaultBusinessId}
-              AND ([CurrencyId] IS NULL OR [CurrencyId] <= 0 OR [Currency] <> N'PKR');
+            EXEC(N'
+                UPDATE [Businesses]
+                SET [CurrencyId] = 1, [Currency] = N''PKR'', [TimeZone] = N''Asia/Karachi''
+                WHERE [Id] = {DefaultBusinessId}
+                  AND ([CurrencyId] IS NULL OR [CurrencyId] <= 0 OR [Currency] <> N''PKR'');
+            ');
         """;
 
     private static string SeedBranchSql() => $"""
@@ -311,9 +313,12 @@ public static class TenantSeedDatabaseInitializer
     {
         try
         {
+            const string adminEmail = "info@infoakhsoft.com";
             var adminExists = await context.Users
                 .IgnoreQueryFilters()
-                .AnyAsync(u => u.Username.ToLower() == AdminUsername && !u.IsDeleted);
+                .AnyAsync(u => !u.IsDeleted &&
+                    (u.Username.ToLower() == AdminUsername.ToLower() ||
+                     u.Email.ToLower() == adminEmail.ToLower()));
 
             if (adminExists)
                 return;

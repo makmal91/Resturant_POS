@@ -8,6 +8,8 @@
 # Build outputs
 bin/
 obj/
+publish/
+_build_out/
 *.exe
 *.dll
 *.pdb
@@ -32,6 +34,8 @@ logs/
 # License — customer files and secrets (see docs/LICENSE_DEPLOYMENT.md)
 API/licenses/*.lic
 !API/licenses/.gitkeep
+Tools/prod-license/appsettings.json
+Tools/prod-license/licenses/
 
 # Local overrides with private keys (optional pattern)
 **/appsettings.*.local.json

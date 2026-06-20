@@ -70,11 +70,9 @@ public static class VariantMasterDatabaseInitializer
                 logger.LogWarning(ex, "Variant master schema batch skipped or partially applied.");
             }
         }
-
-        await SeedDefaultSizesAndColorsAsync(context, logger);
     }
 
-    private static async Task SeedDefaultSizesAndColorsAsync(POSDbContext context, ILogger logger)
+    internal static async Task SeedDefaultSizesAndColorsAsync(POSDbContext context, ILogger logger)
     {
         try
         {

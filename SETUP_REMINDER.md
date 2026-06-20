@@ -61,7 +61,27 @@ Edit `API/appsettings.json` (or use `API/appsettings.Development.json` for local
 }
 ```
 
-The API creates the database and applies migrations on startup via `DatabaseBootstrapper`. You can also run migrations manually (see [§ Database Migrations](#database-migrations)).
+The API creates the database and applies migrations on startup via `DatabaseBootstrapper`. Reference data (roles, admin user, modules, menus, units, etc.) is **not** inserted on every startup — run seed once when setting up a new database (see [§ Database seed](#database-seed)).
+
+### Database startup options
+
+In `API/appsettings.json`:
+
+```json
+"Database": {
+  "ApplyMigrationsOnStartup": true,
+  "ApplySchemaPatchesOnStartup": true,
+  "RunSeedOnStartup": false
+}
+```
+
+| Setting | Default | Purpose |
+|---------|---------|---------|
+| `ApplyMigrationsOnStartup` | `true` | Run EF Core migrations |
+| `ApplySchemaPatchesOnStartup` | `true` | Idempotent runtime schema patches |
+| `RunSeedOnStartup` | `false` | Insert default roles, admin, modules, menus, units, walk-in customers |
+
+You can also run migrations manually (see [§ Database Migrations](#database-migrations)).
 
 ### Run the API
 
@@ -120,7 +140,9 @@ VITE_API_TIMEOUT_MS=15000
 
 ---
 
-## 6. Default Login (Seeded)
+## 6. Default Login (after seed)
+
+Default credentials exist only after you run database seed once:
 
 | Field | Value |
 |-------|-------|
@@ -128,6 +150,32 @@ VITE_API_TIMEOUT_MS=15000
 | Password | `Admin@123` |
 
 Change this password after first login in non-dev environments.
+
+### Database seed
+
+Run **once** on a new or empty database (roles, modules, menus, default admin, units, walk-in customers):
+
+**Option A — config (one startup):**
+
+```json
+"Database": { "RunSeedOnStartup": true }
+```
+
+Set back to `false` after seed completes.
+
+**Option B — CLI:**
+
+```powershell
+cd API
+dotnet run -- --seed-database
+```
+
+**Option C — API (System Admin, after first login or if admin already exists):**
+
+```http
+POST /api/database/seed
+Authorization: Bearer <token>
+```
 
 ---
 
@@ -137,6 +185,7 @@ Change this password after first login in non-dev environments.
 - [ ] Connection string updated for your machine
 - [ ] `dotnet run -- init-dev` completed (license tool)
 - [ ] API running on port **5226**
+- [ ] Database seed run once (`RunSeedOnStartup: true`, `--seed-database`, or `POST /api/database/seed`)
 - [ ] `npm install` done in `ReactApp`
 - [ ] Frontend running on port **5173**
 - [ ] Login works at http://localhost:5173
@@ -215,7 +264,7 @@ dotnet ef migrations script <FromMigration> --project Infrastructure --startup-p
 dotnet ef migrations remove --project Infrastructure --startup-project API
 ```
 
-> **Note:** On `dotnet run`, `DatabaseBootstrapper` calls `MigrateAsync()` automatically. Manual `database update` is useful when you want to migrate before starting the API or when debugging migration issues.
+> **Note:** On `dotnet run`, `DatabaseBootstrapper` applies migrations and schema patches automatically when enabled in `Database:ApplyMigrationsOnStartup` / `Database:ApplySchemaPatchesOnStartup`. Seed runs only when `Database:RunSeedOnStartup` is `true` or you call `POST /api/database/seed`. Manual `database update` is useful when you want to migrate before starting the API or when debugging migration issues.
 
 ---
 
@@ -256,6 +305,8 @@ dotnet run -- --months 12 --customer "Customer Name"
 | DB connection failed | Check SQL Server name, enable TCP, use `TrustServerCertificate=True` for local dev |
 | `/api` 404 from frontend | Start API first; confirm proxy target is `http://localhost:5226` |
 | Migration warnings on startup | Run `dotnet ef database update --project Infrastructure --startup-project API`; check API logs |
+| Login fails on fresh DB | Run database seed once (see [§ Database seed](#database-seed)) |
+| Repeated seed / slow startup | Keep `Database:RunSeedOnStartup` as `false`; seed only on demand |
 | `dotnet ef` not found | Run `dotnet tool install --global dotnet-ef` |
 
 ---

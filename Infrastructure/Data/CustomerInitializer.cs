@@ -57,7 +57,32 @@ public static class CustomerInitializer
                 CREATE INDEX [idx_customer_walkin] ON [dbo].[Customers] ([BusinessId], [BranchId], [IsWalkIn]);
             """,
 
-            // ── Seed Walk-in Customer for every active branch ──
+            // ── Patch Customers menu to use Customers module ──
+            """
+            UPDATE [dbo].[Menus]
+            SET [ModuleName] = N'Customers'
+            WHERE [Route] = N'/customers'
+              AND ([ModuleName] IS NULL OR [ModuleName] = N'');
+            """
+        };
+
+        foreach (var sql in batches)
+        {
+            try
+            {
+                await context.Database.ExecuteSqlRawAsync(sql);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "CustomerInitializer batch skipped or partially applied.");
+            }
+        }
+    }
+
+    public static async Task SeedWalkInCustomersAsync(POSDbContext context, ILogger logger)
+    {
+        var batches = new[]
+        {
             """
             INSERT INTO [dbo].[Customers]
                 ([CustomerCode], [Name], [Phone], [Email], [Address], [CustomerType], [Status], [IsWalkIn],
@@ -77,28 +102,11 @@ public static class CustomerInitializer
                     AND c.[IsDeleted] = 0
               );
             """,
-
-            // Migrate legacy walk-in codes
             """
             UPDATE [dbo].[Customers]
             SET [CustomerCode] = N'CUS-00000', [Name] = N'Walk-In Customer'
             WHERE [IsWalkIn] = 1 AND [IsDeleted] = 0
               AND ([CustomerCode] = N'WALK-IN' OR [CustomerCode] = N'' OR [Name] = N'Walk-in Customer');
-            """,
-
-            // ── Ensure Customers permission module exists ──
-            """
-            IF NOT EXISTS (SELECT 1 FROM [dbo].[PermissionModules] WHERE [ModuleName] = N'Customers')
-                INSERT INTO [dbo].[PermissionModules] ([ModuleName], [BusinessId], [BranchId], [CreatedDate], [IsDeleted])
-                VALUES (N'Customers', 1, 1, GETUTCDATE(), 0);
-            """,
-
-            // ── Patch Customers menu to use Customers module ──
-            """
-            UPDATE [dbo].[Menus]
-            SET [ModuleName] = N'Customers'
-            WHERE [Route] = N'/customers'
-              AND ([ModuleName] IS NULL OR [ModuleName] = N'');
             """
         };
 
@@ -110,7 +118,7 @@ public static class CustomerInitializer
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "CustomerInitializer batch skipped or partially applied.");
+                logger.LogWarning(ex, "Walk-in customer seed batch skipped or partially applied.");
             }
         }
     }

@@ -25,14 +25,15 @@ if (args.Length > 0 && string.Equals(args[0], "init-dev", StringComparison.Ordin
     return;
 }
 
-var apiDirectory = ResolveApiDirectory(ReadArg(args, "--config-dir", string.Empty));
-var configuration = new ConfigurationBuilder()
-    .SetBasePath(apiDirectory)
-    .AddJsonFile("appsettings.json", optional: true)
-    .AddJsonFile("appsettings.Development.json", optional: true)
-    .Build();
+if (args.Length > 0 && string.Equals(args[0], "verify", StringComparison.OrdinalIgnoreCase))
+{
+    VerifyLicense(args);
+    return;
+}
 
-var options = configuration.GetSection(LicenseOptions.SectionName).Get<LicenseOptions>() ?? new LicenseOptions();
+var productionOnly = HasFlag(args, "--production");
+var apiDirectory = ResolveConfigDirectory(ReadArg(args, "--config-dir", string.Empty), productionOnly);
+var options = LoadLicenseOptions(apiDirectory, productionOnly);
 
 if (string.IsNullOrWhiteSpace(options.PrivateKeyPem))
 {
@@ -186,6 +187,55 @@ static async Task WriteLicenseFileAsync(
     Console.WriteLine($"Limits: businesses={payload.MaxBusinesses}, branches/business={payload.MaxBranchesPerBusiness}, users={payload.MaxUsers}");
 }
 
+static void VerifyLicense(string[] args)
+{
+    var productionOnly = HasFlag(args, "--production");
+    var configDirectory = ResolveConfigDirectory(ReadArg(args, "--config-dir", string.Empty), productionOnly);
+    var options = LoadLicenseOptions(configDirectory, productionOnly);
+    var licensePath = ReadArg(args, "--license", Path.Combine(configDirectory, "licenses", options.FileName));
+
+    if (!File.Exists(licensePath))
+        throw new FileNotFoundException($"License file not found: {licensePath}");
+
+    if (string.IsNullOrWhiteSpace(options.PublicKeyPem) ||
+        options.PublicKeyPem.Contains("REPLACE_WITH", StringComparison.OrdinalIgnoreCase))
+    {
+        throw new InvalidOperationException("PublicKeyPem is missing or still a placeholder in config.");
+    }
+
+    if (string.IsNullOrWhiteSpace(options.AesKeyBase64) ||
+        options.AesKeyBase64.Contains("REPLACE_WITH", StringComparison.OrdinalIgnoreCase))
+    {
+        throw new InvalidOperationException("AesKeyBase64 is missing or still a placeholder in config.");
+    }
+
+    var content = File.ReadAllText(licensePath);
+    var document = LicenseCrypto.ParseDocument(content);
+    var payload = LicenseCrypto.DecryptAndVerify(document, options);
+
+    Console.WriteLine("License verification OK.");
+    Console.WriteLine($"  Config : {Path.GetFullPath(configDirectory)}");
+    Console.WriteLine($"  License: {Path.GetFullPath(licensePath)}");
+    Console.WriteLine($"  Customer: {payload.CustomerName}");
+    Console.WriteLine($"  Expires : {payload.ExpiresAt:yyyy-MM-dd}");
+}
+
+static LicenseOptions LoadLicenseOptions(string configDirectory, bool productionOnly)
+{
+    var builder = new ConfigurationBuilder()
+        .SetBasePath(configDirectory)
+        .AddJsonFile("appsettings.json", optional: false);
+
+    if (!productionOnly)
+        builder.AddJsonFile("appsettings.Development.json", optional: true);
+
+    var configuration = builder.Build();
+    return configuration.GetSection(LicenseOptions.SectionName).Get<LicenseOptions>() ?? new LicenseOptions();
+}
+
+static bool HasFlag(string[] args, string flag)
+    => args.Any(arg => string.Equals(arg, flag, StringComparison.OrdinalIgnoreCase));
+
 static void PrintUsage()
 {
     Console.WriteLine("License Generator");
@@ -193,7 +243,11 @@ static void PrintUsage()
     Console.WriteLine("Commands:");
     Console.WriteLine("  dotnet run -- init-dev");
     Console.WriteLine("  dotnet run -- generate-keys");
+    Console.WriteLine("  dotnet run -- verify --production --config-dir <folder>");
     Console.WriteLine("  dotnet run -- help");
+    Console.WriteLine();
+    Console.WriteLine("Generate production license (reads appsettings.json only):");
+    Console.WriteLine("  dotnet run -- --production --config-dir Tools/prod-license --customer \"Acme\" --years 10");
     Console.WriteLine();
     Console.WriteLine("Generate license (monthly or yearly):");
     Console.WriteLine("  dotnet run -- --months 1 --customer \"Acme\"");
@@ -202,6 +256,7 @@ static void PrintUsage()
     Console.WriteLine("  dotnet run -- --years=10 --customer \"Acme\"");
     Console.WriteLine();
     Console.WriteLine("Options:");
+    Console.WriteLine("  --production       Use appsettings.json only (required for production licenses)");
     Console.WriteLine("  --months, --month   Validity in months (space or equals: --months 1 / --months=1)");
     Console.WriteLine("  --years, --year     Validity in years (space or equals: --years 1 / --years=1)");
     Console.WriteLine("  --customer         Customer / tenant name");
@@ -209,14 +264,16 @@ static void PrintUsage()
     Console.WriteLine("  --max-branches     Branch limit per business");
     Console.WriteLine("  --max-users        User limit");
     Console.WriteLine("  --output           Output .lic path");
-    Console.WriteLine("  --config-dir       Path to API folder");
+    Console.WriteLine("  --config-dir       Folder containing appsettings.json");
+    Console.WriteLine("  --license          Path to .lic file (verify command only)");
     Console.WriteLine();
     Console.WriteLine("Notes:");
+    Console.WriteLine("  For production, use --production so appsettings.Development.json is ignored.");
     Console.WriteLine("  --months takes priority over --years when both are provided.");
     Console.WriteLine("  If neither is passed, appsettings DefaultValidityMonths / DefaultValidityYears is used.");
 }
 
-static string ResolveApiDirectory(string explicitPath)
+static string ResolveConfigDirectory(string explicitPath, bool productionOnly)
 {
     if (!string.IsNullOrWhiteSpace(explicitPath))
     {
@@ -224,7 +281,13 @@ static string ResolveApiDirectory(string explicitPath)
         if (Directory.Exists(resolved) && File.Exists(Path.Combine(resolved, "appsettings.json")))
             return resolved;
 
-        throw new DirectoryNotFoundException($"API config directory not found: {resolved}");
+        throw new DirectoryNotFoundException($"Config directory not found: {resolved}");
+    }
+
+    if (productionOnly)
+    {
+        throw new InvalidOperationException(
+            "Pass --config-dir for production license generation (e.g. Tools/prod-license).");
     }
 
     foreach (var startDirectory in new[] { Directory.GetCurrentDirectory(), AppContext.BaseDirectory })
@@ -243,6 +306,9 @@ static string ResolveApiDirectory(string explicitPath)
     throw new DirectoryNotFoundException(
         "Could not locate the API project folder. Run from the repo root, or pass --config-dir <path-to-API>.");
 }
+
+static string ResolveApiDirectory(string explicitPath)
+    => ResolveConfigDirectory(explicitPath, productionOnly: false);
 
 static void GenerateKeys()
 {

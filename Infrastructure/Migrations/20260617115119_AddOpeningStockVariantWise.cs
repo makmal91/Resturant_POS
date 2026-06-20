@@ -11,12 +11,10 @@ namespace POSSystem.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<bool>(
-                name: "OpeningStockVariantWise",
-                table: "Products",
-                type: "bit",
-                nullable: false,
-                defaultValue: false);
+            migrationBuilder.Sql("""
+                IF COL_LENGTH(N'dbo.Products', N'OpeningStockVariantWise') IS NULL
+                    ALTER TABLE [Products] ADD [OpeningStockVariantWise] bit NOT NULL CONSTRAINT [DF_Products_OpeningStockVariantWise] DEFAULT CAST(0 AS bit);
+                """);
 
             migrationBuilder.UpdateData(
                 table: "Branches",
@@ -36,9 +34,20 @@ namespace POSSystem.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "OpeningStockVariantWise",
-                table: "Products");
+            migrationBuilder.Sql("""
+                IF COL_LENGTH(N'dbo.Products', N'OpeningStockVariantWise') IS NOT NULL
+                BEGIN
+                    DECLARE @dfName NVARCHAR(128);
+                    SELECT @dfName = dc.name
+                    FROM sys.default_constraints dc
+                    INNER JOIN sys.columns c ON dc.parent_object_id = c.object_id AND dc.parent_column_id = c.column_id
+                    WHERE dc.parent_object_id = OBJECT_ID(N'dbo.Products')
+                      AND c.name = N'OpeningStockVariantWise';
+                    IF @dfName IS NOT NULL
+                        EXEC(N'ALTER TABLE [Products] DROP CONSTRAINT [' + @dfName + N']');
+                    ALTER TABLE [Products] DROP COLUMN [OpeningStockVariantWise];
+                END
+                """);
 
             migrationBuilder.UpdateData(
                 table: "Branches",

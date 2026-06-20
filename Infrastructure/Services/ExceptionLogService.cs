@@ -44,7 +44,11 @@ public class ExceptionLogService : IExceptionLogService
         }
         catch (Exception logEx)
         {
-            _logger.LogError(logEx, "Failed to persist exception log.");
+            _logger.LogCritical(
+                logEx,
+                "Failed to persist exception log. Original error: {OriginalMessage}. " +
+                "Ensure EF migrations are applied (ExceptionLogs table).",
+                ex.Message);
         }
     }
 }

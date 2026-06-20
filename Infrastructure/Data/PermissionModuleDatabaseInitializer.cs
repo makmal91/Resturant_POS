@@ -129,12 +129,20 @@ public static class PermissionModuleDatabaseInitializer
         }
 
         await EnsureModuleKeyIndexAsync(context, logger);
-        await PermissionModuleSeeder.SeedDefaultModulesAsync(context, logger);
     }
 }
 
 public static class PermissionModuleSeeder
 {
+    public static int ExpectedModuleCount => DefaultModules.Length;
+
+    public static IReadOnlyList<string> ExpectedModuleKeys =>
+        DefaultModules
+            .Where(m => !string.IsNullOrWhiteSpace(m.ModuleKey))
+            .Select(m => m.ModuleKey)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
     private sealed record ModuleSeedEntry(
         string ModuleName,
         string ModuleKey,
@@ -225,21 +233,34 @@ public static class PermissionModuleSeeder
 
     public static async Task SeedDefaultModulesAsync(POSDbContext context, ILogger logger)
     {
-        var keyToId = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        await PermissionModuleDatabaseInitializer.EnsureSchemaAsync(context, logger);
 
         foreach (var group in DefaultModules.Where(m => m.ParentKey == null))
-        {
-            var id = await EnsureModuleAsync(context, logger, group, null);
-            if (id > 0)
-                keyToId[group.ModuleName] = id;
-        }
+            await EnsureModuleAsync(context, logger, group, null);
 
+        var keyToId = await LoadTopLevelModuleIdsAsync(context);
+
+        var skipped = 0;
         foreach (var module in DefaultModules.Where(m => m.ParentKey != null))
         {
             if (!keyToId.TryGetValue(module.ParentKey!, out var parentId))
+            {
+                logger.LogError(
+                    "Module seed skipped {ModuleName}: parent group '{ParentKey}' not found in database.",
+                    module.ModuleName,
+                    module.ParentKey);
+                skipped++;
                 continue;
+            }
 
             await EnsureModuleAsync(context, logger, module, parentId);
+        }
+
+        if (skipped > 0)
+        {
+            logger.LogWarning(
+                "Module seed completed with {Skipped} skipped child module(s). Re-run seed after fixing parent groups.",
+                skipped);
         }
 
         await DeactivateLegacyModulesAsync(context, logger);
@@ -247,6 +268,30 @@ public static class PermissionModuleSeeder
         await DeactivateEmptyMasterDataGroupAsync(context, logger);
         await BackfillRolePermissionModuleIdsAsync(context, logger);
         await ModuleFormSeeder.SeedDefaultFormsAsync(context, logger);
+
+        var activeCount = await context.PermissionModules
+            .IgnoreQueryFilters()
+            .CountAsync(m => !m.IsDeleted && m.IsActive);
+        logger.LogInformation(
+            "Module seed finished: {ActiveCount} active modules (expected {ExpectedCount}).",
+            activeCount,
+            DefaultModules.Length);
+    }
+
+    private static async Task<Dictionary<string, int>> LoadTopLevelModuleIdsAsync(POSDbContext context)
+    {
+        var topLevelNames = DefaultModules
+            .Where(m => m.ParentKey == null)
+            .Select(m => m.ModuleName)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var rows = await context.PermissionModules
+            .IgnoreQueryFilters()
+            .Where(m => !m.IsDeleted && m.ParentModuleId == null && topLevelNames.Contains(m.ModuleName))
+            .Select(m => new { m.ModuleName, m.Id })
+            .ToListAsync();
+
+        return rows.ToDictionary(r => r.ModuleName, r => r.Id, StringComparer.OrdinalIgnoreCase);
     }
 
     private static async Task DeactivateLegacyModulesAsync(POSDbContext context, ILogger logger)
@@ -380,7 +425,7 @@ public static class PermissionModuleSeeder
                 entry.State = EntityState.Detached;
             }
 
-            logger.LogWarning(ex, "Failed to seed module {ModuleName}", module.ModuleName);
+            logger.LogError(ex, "Failed to seed module {ModuleName} (key: {ModuleKey}).", module.ModuleName, module.ModuleKey);
             return 0;
         }
     }

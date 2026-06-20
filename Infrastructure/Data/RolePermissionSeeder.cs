@@ -77,6 +77,43 @@ public static class RolePermissionSeeder
         }
 
         await EnsureCashierDashboardAccessAsync(context, logger);
+        await BackfillRolePermissionModuleIdsAsync(context, logger);
+    }
+
+    private static async Task BackfillRolePermissionModuleIdsAsync(POSDbContext context, ILogger logger)
+    {
+        try
+        {
+            var modules = await context.PermissionModules
+                .AsNoTracking()
+                .Where(m => !m.IsDeleted && m.ModuleKey != string.Empty)
+                .Select(m => new { m.Id, m.ModuleKey, m.ModuleName })
+                .ToListAsync();
+
+            var byKey = modules.ToDictionary(m => m.ModuleKey, m => m.Id, StringComparer.OrdinalIgnoreCase);
+            var byName = modules.ToDictionary(m => m.ModuleName, m => m.Id, StringComparer.OrdinalIgnoreCase);
+
+            var permissions = await context.RolePermissions
+                .IgnoreQueryFilters()
+                .Where(rp => rp.ModuleId == null && !rp.IsDeleted)
+                .ToListAsync();
+
+            foreach (var permission in permissions)
+            {
+                if (byKey.TryGetValue(permission.ModuleName, out var moduleId) ||
+                    byName.TryGetValue(permission.ModuleName, out moduleId))
+                {
+                    permission.ModuleId = moduleId;
+                }
+            }
+
+            if (permissions.Count > 0)
+                await context.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to backfill RolePermission ModuleId values after seed.");
+        }
     }
 
     private static async Task EnsureCashierDashboardAccessAsync(POSDbContext context, ILogger logger)
