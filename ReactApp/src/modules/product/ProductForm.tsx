@@ -711,7 +711,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
         productCode: formData.productCode?.trim() ?? '',
         sku: formData.sku?.trim() ?? '',
         description: formData.description?.trim() ?? '',
-        branchId,
+        branchId: effectiveBranchId > 0 ? effectiveBranchId : branchId,
         categoryId: Number(formData.categoryId),
         subCategoryId: formData.subCategoryId ? Number(formData.subCategoryId) : null,
         brandId: formData.brandId ? Number(formData.brandId) : null,

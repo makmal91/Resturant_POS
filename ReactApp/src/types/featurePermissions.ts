@@ -24,11 +24,13 @@ export const MODULE_FEATURE_MAP: Record<string, FeatureKey> = {
   Stock: FEATURE_KEYS.STOCK,
   'Stock Transfer': FEATURE_KEYS.STOCK,
   'Stock Reports': FEATURE_KEYS.STOCK,
+  Barcodes: FEATURE_KEYS.BARCODE,
   Sizes: FEATURE_KEYS.VARIANT,
   Colors: FEATURE_KEYS.VARIANT,
 }
 
 export const ROUTE_FEATURE_MAP: Record<string, FeatureKey> = {
+  '/barcodes': FEATURE_KEYS.BARCODE,
   '/units': FEATURE_KEYS.UNIT,
   '/settings/sizes': FEATURE_KEYS.VARIANT,
   '/settings/colors': FEATURE_KEYS.VARIANT,

@@ -21,6 +21,7 @@ using POSSystem.Application.Sales.Interfaces;
 using POSSystem.Application.Customer.Interfaces;
 using POSSystem.Application.CashFlow.Interfaces;
 using POSSystem.Application.Ledger.Interfaces;
+using POSSystem.Application.Barcode.Interfaces;
 using POSSystem.Application.CodeSequence.Interfaces;
 using POSSystem.Application.Common.Interfaces;
 using POSSystem.Application.License.Interfaces;
@@ -49,6 +50,7 @@ public static class ServiceRegistration
         services.AddScoped<IRecipeRepository, RecipeRepository>();
         services.AddScoped<IBrandRepository, BrandRepository>();
         services.AddScoped<IProductRepository, ProductRepository>();
+        services.AddScoped<IBarcodePrintRepository, BarcodePrintRepository>();
         services.AddScoped<IUnitRepository, UnitRepository>();
         services.AddScoped<IBusinessRepository, BusinessRepository>();
         services.AddScoped<IBranchRepository, BranchRepository>();

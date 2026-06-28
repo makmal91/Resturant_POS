@@ -72,6 +72,8 @@ public class ProductRepository : IProductRepository
             "sellingprice" or "price" => descending ? query.OrderByDescending(p => p.SellingPrice) : query.OrderBy(p => p.SellingPrice),
             "status" => descending ? query.OrderByDescending(p => p.Status) : query.OrderBy(p => p.Status),
             "branchname" => descending ? query.OrderByDescending(p => p.Branch!.Name) : query.OrderBy(p => p.Branch!.Name),
+            "id" => descending ? query.OrderByDescending(p => p.Id) : query.OrderBy(p => p.Id),
+            "createdat" or "createddate" => descending ? query.OrderByDescending(p => p.CreatedAt) : query.OrderBy(p => p.CreatedAt),
             _ => descending ? query.OrderByDescending(p => p.ProductName) : query.OrderBy(p => p.ProductName),
         };
 

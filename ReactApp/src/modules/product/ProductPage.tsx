@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import Badge from '../../components/Badge';
 import AuthenticatedImage from '../../components/AuthenticatedImage';
 import { getApiErrorMessage } from '../../services/api';
@@ -45,6 +46,7 @@ const ProductPage: React.FC = () => {
   const unitFeatureEnabled = useHasFeature(FEATURE_KEYS.UNIT);
   const variantFeatureEnabled = useHasFeature(FEATURE_KEYS.VARIANT);
   const stockFeatureEnabled = useHasFeature(FEATURE_KEYS.STOCK);
+  const barcodeFeatureEnabled = useHasFeature(FEATURE_KEYS.BARCODE);
 
   const branchId = selectedBranchId && selectedBranchId > 0 ? selectedBranchId : 0;
   const pageSize = 10;
@@ -121,7 +123,14 @@ const ProductPage: React.FC = () => {
     }
   }, [branchId, showNotification, unitFeatureEnabled]);
 
-  const loadProducts = useCallback(async () => {
+  const loadProducts = useCallback(async (options?: {
+    page?: number;
+    search?: string;
+    categoryId?: number | null;
+    subCategoryId?: number | null;
+    brandId?: number | null;
+    status?: boolean | null;
+  }) => {
     if (branchId <= 0) {
       setProducts([]);
       setTotalPages(0);
@@ -129,14 +138,23 @@ const ProductPage: React.FC = () => {
       return;
     }
 
+    const activePage = options?.page ?? page;
+    const activeSearch = options?.search !== undefined ? options.search : search;
+    const activeCategoryId = options?.categoryId !== undefined ? options.categoryId : categoryFilter;
+    const activeSubCategoryId = options?.subCategoryId !== undefined ? options.subCategoryId : subCategoryFilter;
+    const activeBrandId = options?.brandId !== undefined ? options.brandId : brandFilter;
+    const activeStatus = options?.status !== undefined ? options.status : statusFilter;
+
     setLoading(true);
     try {
-      const response = await productService.getAll(branchId, page, pageSize, {
-        search: search.trim() || undefined,
-        categoryId: categoryFilter,
-        subCategoryId: subCategoryFilter,
-        brandId: brandFilter,
-        status: statusFilter,
+      const response = await productService.getAll(branchId, activePage, pageSize, {
+        search: activeSearch.trim() || undefined,
+        categoryId: activeCategoryId,
+        subCategoryId: activeSubCategoryId,
+        brandId: activeBrandId,
+        status: activeStatus,
+        sortBy: 'id',
+        sortDirection: 'desc',
       });
       setProducts(Array.isArray(response.data.products) ? response.data.products : []);
       setTotalPages(Number(response.data.totalPages ?? 0));
@@ -147,7 +165,7 @@ const ProductPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [branchId, page, search, categoryFilter, subCategoryFilter, brandFilter, statusFilter, showNotification]);
+  }, [branchId, page, pageSize, search, categoryFilter, subCategoryFilter, brandFilter, statusFilter, showNotification]);
 
   useEffect(() => {
     void loadMasters();
@@ -222,7 +240,24 @@ const ProductPage: React.FC = () => {
 
       setIsFormOpen(false);
       setEditingProduct(null);
-      await loadProducts();
+      if (!editingProduct) {
+        setPage(1);
+        setSearch('');
+        setCategoryFilter(null);
+        setSubCategoryFilter(null);
+        setBrandFilter(null);
+        setStatusFilter(null);
+        await loadProducts({
+          page: 1,
+          search: '',
+          categoryId: null,
+          subCategoryId: null,
+          brandId: null,
+          status: null,
+        });
+      } else {
+        await loadProducts();
+      }
       showNotification('success', editingProduct ? 'Product updated successfully.' : 'Product created successfully.');
     } catch (error) {
       showNotification('error', getApiErrorMessage(error, 'Failed to save product.'));
@@ -311,6 +346,14 @@ const ProductPage: React.FC = () => {
                     <div className="flex gap-2">
                       <button onClick={() => void openDetail(product)} className="rounded border px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50">View</button>
                       <button onClick={() => void openEdit(product)} className="rounded border px-3 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50">Edit</button>
+                      {barcodeFeatureEnabled && (
+                        <Link
+                          to={`/barcodes?productId=${product.id}`}
+                          className="rounded border px-3 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-50"
+                        >
+                          Print
+                        </Link>
+                      )}
                     </div>
                   </td>
                 </tr>

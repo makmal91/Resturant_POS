@@ -1,0 +1,35 @@
+@import url('https://fonts.googleapis.com/css2?family=Libre+Barcode+39&display=swap');
+
+/* Thermal label preview grid on screen */
+.barcode-label-preview-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2mm;
+}
+
+/* Print optimization — use with .print-area wrapper */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+
+  .print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2mm;
+  }
+
+  .barcode-label {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+}

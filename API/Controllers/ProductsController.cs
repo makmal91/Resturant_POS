@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using POSSystem.API.Extensions;
 using POSSystem.Application.Auth.Interfaces;
+using POSSystem.Application.Barcode.Interfaces;
 using POSSystem.Application.Common.Constants;
 using POSSystem.Application.Product.DTOs;
 using POSSystem.Application.Product.Interfaces;
@@ -27,15 +28,18 @@ public class ProductsController : ControllerBase
     private readonly IProductService _productService;
     private readonly IUnitPricingService _unitPricingService;
     private readonly IFeaturePermissionService _featurePermission;
+    private readonly IBarcodePrintService _barcodePrintService;
 
     public ProductsController(
         IProductService productService,
         IUnitPricingService unitPricingService,
-        IFeaturePermissionService featurePermission)
+        IFeaturePermissionService featurePermission,
+        IBarcodePrintService barcodePrintService)
     {
         _productService = productService;
         _unitPricingService = unitPricingService;
         _featurePermission = featurePermission;
+        _barcodePrintService = barcodePrintService;
     }
 
     [HttpGet]
@@ -94,6 +98,22 @@ public class ProductsController : ControllerBase
         {
             return BadRequest(new { message = ex.Message });
         }
+    }
+
+    [HttpGet("{id:int}/details")]
+    public async Task<IActionResult> GetProductPrintDetails(int id, [FromQuery] int branchId, [FromQuery] int? businessId = null)
+    {
+        var resolvedBusinessId = this.ResolveBusinessId(businessId);
+        var resolvedBranchId = this.ResolveBranchId(branchId);
+
+        if (resolvedBranchId <= 0)
+            return BadRequest(new { message = "branchId is required." });
+
+        var details = await _barcodePrintService.GetProductPrintDetailsAsync(id, resolvedBusinessId, resolvedBranchId);
+        if (details == null)
+            return NotFound();
+
+        return Ok(details);
     }
 
     [HttpGet("{id:int}")]

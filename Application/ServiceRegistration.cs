@@ -22,6 +22,8 @@ using POSSystem.Application.Users.Interfaces;
 using POSSystem.Application.Users.Services;
 using POSSystem.Application.Auth.Interfaces;
 using POSSystem.Application.Auth.Services;
+using POSSystem.Application.Barcode.Interfaces;
+using POSSystem.Application.Barcode.Services;
 using POSSystem.Application.Navigation.Interfaces;
 using POSSystem.Application.Navigation.Services;
 using POSSystem.Application.Modules.Interfaces;
@@ -76,6 +78,7 @@ public static class ServiceRegistration
         // Register product management services
         services.AddScoped<IUnitPricingService, UnitPricingService>();
         services.AddScoped<IProductService, ProductService>();
+        services.AddScoped<IBarcodePrintService, BarcodePrintService>();
 
         // Register unit master services
         services.AddScoped<IUnitService, UnitService>();
