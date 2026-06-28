@@ -1,5 +1,6 @@
 using POSSystem.Application.Common.Constants;
 using POSSystem.Application.Common.DTOs;
+using POSSystem.Application.Common.Helpers;
 using POSSystem.Application.Common.Interfaces;
 using POSSystem.Application.Ledger.Interfaces;
 using POSSystem.Application.Payments.DTOs;
@@ -192,7 +193,7 @@ public class PurchaseService : IPurchaseService
 
         foreach (var item in activeItems)
         {
-            item.BaseQuantity = ConvertToBase(item.Quantity, item.ConversionFactor);
+            item.BaseQuantity = UnitConversionHelper.ToBaseQuantity(item.Quantity, item.ConversionFactor);
 
             await _stockLedgerRepository.AddAsync(CreatePurchaseStockLedgerEntry(
                 item, entity.WarehouseId, entity.Id, entity.InvoiceNo, entity.PurchaseDate,
@@ -249,8 +250,6 @@ public class PurchaseService : IPurchaseService
         }
     }
 
-    private static decimal ConvertToBase(decimal qty, decimal rate) => qty * rate;
-
     private async Task BuildItemsAsync(
         Domain.Purchase purchase, List<CreatePurchaseItemDto> dtoItems, int businessId, int branchId)
     {
@@ -268,13 +267,15 @@ public class PurchaseService : IPurchaseService
 
             var unit = product.Units.FirstOrDefault(u => u.Id == i.UnitId && !u.IsDeleted)
                 ?? throw new InvalidOperationException(
-                    $"Unit {i.UnitId} is not valid for product '{product.ProductName}'.");
+                    $"Unit {i.UnitId} is not valid for product '{product.ProductName}'. No conversion mapping exists.");
+
+            UnitConversionHelper.ValidateConversionFactor(unit.IsBaseUnit, unit.ConversionFactor, unit.UnitName);
 
             var (variant, variantId) = ResolveProductVariant(product, i.VariantId);
 
-            var conversionFactor = unit.ConversionFactor > 0 ? unit.ConversionFactor : 1m;
+            var conversionFactor = unit.ConversionFactor;
             var costPrice = ResolveUnitCostPrice(product, unit, variant);
-            var baseQty = ConvertToBase(i.Quantity, conversionFactor);
+            var baseQty = UnitConversionHelper.ToBaseQuantity(i.Quantity, conversionFactor);
             var totalCost = i.Quantity * costPrice;
             total += totalCost;
 
@@ -327,7 +328,7 @@ public class PurchaseService : IPurchaseService
 
         var baseCost = variant?.CostPriceOverride ?? product.CostPrice;
         var factor = unit.ConversionFactor > 0 ? unit.ConversionFactor : 1m;
-        return baseCost * factor;
+        return Math.Round(baseCost / factor, 2, MidpointRounding.AwayFromZero);
     }
 
     private static StockLedger CreatePurchaseStockLedgerEntry(

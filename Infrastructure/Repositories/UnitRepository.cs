@@ -46,8 +46,9 @@ public class UnitRepository : IUnitRepository
         var orderedQuery = (sortBy ?? "name").ToLowerInvariant() switch
         {
             "code" => descending ? query.OrderByDescending(u => u.Code) : query.OrderBy(u => u.Code),
-            "description" => descending ? query.OrderByDescending(u => u.Description) : query.OrderBy(u => u.Description),
-            "conversionfactor" => descending ? query.OrderByDescending(u => u.ConversionFactor) : query.OrderBy(u => u.ConversionFactor),
+            "defaultconversionfactor" or "conversionfactor" => descending
+                ? query.OrderByDescending(u => u.DefaultConversionFactor)
+                : query.OrderBy(u => u.DefaultConversionFactor),
             "status" or "isactive" => descending ? query.OrderByDescending(u => u.Status) : query.OrderBy(u => u.Status),
             "branchname" => descending
                 ? query.OrderByDescending(u => u.Branch!.Name).ThenByDescending(u => u.Name)
@@ -87,8 +88,7 @@ public class UnitRepository : IUnitRepository
             var term = search.Trim().ToLower();
             query = query.Where(u =>
                 u.Name.ToLower().Contains(term) ||
-                u.Code.ToLower().Contains(term) ||
-                u.Description.ToLower().Contains(term));
+                u.Code.ToLower().Contains(term));
         }
 
         return query;

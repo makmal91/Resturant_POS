@@ -1,4 +1,5 @@
 import apiClient from '../../services/api';
+import { toBaseQuantity } from '../product/unitPricing';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -7,8 +8,11 @@ export interface PosProductUnit {
   unitName: string;
   sellingPrice: number;
   wholesalePrice: number;
+  calculatedSellingPrice?: number;
+  calculatedWholesalePrice?: number;
   conversionFactor: number;
   isBaseUnit: boolean;
+  isPriceOverridden?: boolean;
 }
 
 export interface PosProductVariant {
@@ -30,6 +34,7 @@ export interface PosProductLookup {
   isDiscountAllowed: boolean;
   discountType: 'Percentage' | 'Fixed' | null;
   discountValue: number;
+  useAutoUnitPricing?: boolean;
   barcode: string;
   retailPrice: number;
   wholesalePrice: number;
@@ -248,6 +253,8 @@ export interface CartItem {
   taxPercent: number;
   lineTotal: number;
   itemNote: string | null;
+  isManualPriceOverride?: boolean;
+  calculatedUnitPrice?: number;
   availableUnits: PosProductUnit[];
   availableVariants: PosProductVariant[];
   stockBase: number;
@@ -277,7 +284,7 @@ export const getCartBaseQty = (
 ): number =>
   cart
     .filter((c) => c.productId === productId && (c.variantId ?? 0) === (variantId ?? 0))
-    .reduce((sum, c) => sum + c.quantity * c.conversionFactor, 0);
+    .reduce((sum, c) => sum + toBaseQuantity(c.quantity, c.conversionFactor), 0);
 
 export const checkStockForCartLine = (
   cart: CartItem[],
@@ -298,7 +305,7 @@ export const checkStockForCartLine = (
     ? cart.filter((c) => c.cartKey !== excludeCartKey)
     : cart;
   const alreadyInCart = getCartBaseQty(cartForProduct, productId, variantId);
-  const needed = alreadyInCart + additionalQty * conversionFactor;
+  const needed = alreadyInCart + toBaseQuantity(additionalQty, conversionFactor);
 
   if (needed <= stockBase) return null;
 
@@ -322,7 +329,7 @@ export const validateCartStock = (cart: CartItem[]): string | null => {
 
     const key = `${item.productId}:${item.variantId ?? 0}`;
     const label = item.variantName ? `${item.productName} (${item.variantName})` : item.productName;
-    const needed = item.quantity * item.conversionFactor;
+    const needed = toBaseQuantity(item.quantity, item.conversionFactor);
     const existing = grouped.get(key);
 
     if (existing) {
@@ -358,18 +365,46 @@ export const resolveSaleUnitPrice = (
   unit: PosProductUnit | undefined,
   variant: PosProductVariant | null | undefined,
   productRetail: number,
-  productWholesale: number
+  productWholesale: number,
+  manualOverride?: number,
 ): number => {
+  if (manualOverride != null && manualOverride >= 0) {
+    return manualOverride;
+  }
+
   if (pricingType === 'Wholesale') {
     return unit?.wholesalePrice ?? productWholesale;
   }
+
+  // sellingPrice from API is already the effective price (auto or product override)
   if (unit?.sellingPrice != null) {
     return unit.sellingPrice;
   }
+
   if (variant?.sellingPriceOverride != null && variant.sellingPriceOverride > 0) {
     return variant.sellingPriceOverride;
   }
+
   return productRetail + (variant?.additionalPrice ?? 0);
+};
+
+/** Picks unit: preferred → matched → base → first valid. Skips units with invalid factor. */
+export const resolveCartUnitId = (
+  units: PosProductUnit[],
+  preferredUnitId?: number | null,
+  matchedUnitId?: number | null,
+): number => {
+  const isValid = (id: number) => {
+    const u = units.find((x) => x.unitId === id);
+    return u != null && u.conversionFactor > 0;
+  };
+
+  if (preferredUnitId != null && isValid(preferredUnitId)) return preferredUnitId;
+  if (matchedUnitId != null && isValid(matchedUnitId)) return matchedUnitId;
+
+  const base = units.find((u) => u.isBaseUnit && u.conversionFactor > 0)
+    ?? units.find((u) => u.conversionFactor > 0);
+  return base?.unitId ?? units[0]?.unitId ?? 0;
 };
 
 export const applyUnitToCartItem = (
@@ -377,7 +412,8 @@ export const applyUnitToCartItem = (
   unitId: number,
   pricingType: 'Retail' | 'Wholesale'
 ): CartItem => {
-  const unit = item.availableUnits.find((u) => u.unitId === unitId);
+  const resolvedUnitId = resolveCartUnitId(item.availableUnits, unitId, item.unitId);
+  const unit = item.availableUnits.find((u) => u.unitId === resolvedUnitId);
   if (!unit) return item;
 
   const variant =
@@ -387,15 +423,26 @@ export const applyUnitToCartItem = (
   const baseUnit = item.availableUnits.find((u) => u.isBaseUnit) ?? item.availableUnits[0];
   const productRetail = baseUnit?.sellingPrice ?? item.unitPrice;
   const productWholesale = baseUnit?.wholesalePrice ?? item.unitPrice;
-  const unitPrice = resolveSaleUnitPrice(pricingType, unit, variant, productRetail, productWholesale);
+  const unitPrice = resolveSaleUnitPrice(
+    pricingType,
+    unit,
+    variant,
+    productRetail,
+    productWholesale,
+    undefined,
+  );
 
   const updated: CartItem = {
     ...item,
-    cartKey: cartKey(item.productId, item.variantId, unitId),
-    unitId,
+    cartKey: cartKey(item.productId, item.variantId, resolvedUnitId),
+    unitId: resolvedUnitId,
     unitName: unit.unitName,
-    conversionFactor: unit.conversionFactor,
+    conversionFactor: unit.conversionFactor > 0 ? unit.conversionFactor : 1,
     unitPrice,
+    calculatedUnitPrice: pricingType === 'Wholesale'
+      ? (unit.calculatedWholesalePrice ?? unit.wholesalePrice)
+      : (unit.calculatedSellingPrice ?? unit.sellingPrice),
+    isManualPriceOverride: false,
     lineTotal: 0,
   };
   updated.lineTotal = computeLineTotal(updated);
@@ -404,11 +451,21 @@ export const applyUnitToCartItem = (
 
 // ─── Helper: build CartItem from lookup ─────────────────────────────────────
 
-export const lookupToCartItem = (lookup: PosProductLookup, pricingType: 'Retail' | 'Wholesale'): CartItem => {
-  const unitId = lookup.matchedUnitId ?? lookup.availableUnits.find((u) => u.isBaseUnit)?.unitId ?? 0;
+export const lookupToCartItem = (
+  lookup: PosProductLookup,
+  pricingType: 'Retail' | 'Wholesale',
+  preferredUnitId?: number | null,
+): CartItem => {
+  const unitId = resolveCartUnitId(
+    lookup.availableUnits,
+    preferredUnitId,
+    lookup.matchedUnitId ?? lookup.availableUnits.find((u) => u.isBaseUnit)?.unitId,
+  );
   const unit = lookup.availableUnits.find((u) => u.unitId === unitId);
   const unitName = unit?.unitName ?? lookup.matchedUnitName ?? '';
-  const conversionFactor = unit?.conversionFactor ?? lookup.matchedUnitConversionFactor ?? 1;
+  const conversionFactor = unit?.conversionFactor && unit.conversionFactor > 0
+    ? unit.conversionFactor
+    : 1;
   const variant =
     lookup.matchedVariantId != null
       ? lookup.availableVariants.find((v) => v.variantId === lookup.matchedVariantId) ?? null
@@ -436,6 +493,10 @@ export const lookupToCartItem = (lookup: PosProductLookup, pricingType: 'Retail'
     conversionFactor,
     quantity: 1,
     unitPrice: basePrice,
+    calculatedUnitPrice: pricingType === 'Wholesale'
+      ? (unit?.calculatedWholesalePrice ?? unit?.wholesalePrice ?? basePrice)
+      : (unit?.calculatedSellingPrice ?? unit?.sellingPrice ?? basePrice),
+    isManualPriceOverride: false,
     discountPercent: lookup.isDiscountAllowed && lookup.discountType === 'Percentage' ? lookup.discountValue : 0,
     discountAmount: lookup.isDiscountAllowed && lookup.discountType === 'Fixed' ? lookup.discountValue : 0,
     taxPercent: 0,

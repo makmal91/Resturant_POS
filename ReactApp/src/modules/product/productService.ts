@@ -4,12 +4,16 @@ export type DiscountType = 'Percentage' | 'Fixed';
 
 export interface ProductUnitPayload {
   id?: number;
+  unitId?: number | null;
   unitName: string;
   conversionFactor: number;
   isBaseUnit: boolean;
   costPrice?: number | null;
   sellingPrice?: number | null;
   wholesalePrice?: number | null;
+  isPriceOverridden?: boolean;
+  calculatedSellingPrice?: number | null;
+  calculatedWholesalePrice?: number | null;
 }
 
 export interface ProductVariantPayload {
@@ -63,6 +67,7 @@ export interface ProductPayload {
   costPrice: number;
   sellingPrice: number;
   wholesalePrice: number;
+  useAutoUnitPricing?: boolean;
   isVariantEnabled: boolean;
   isDiscountAllowed: boolean;
   discountType?: DiscountType | null;
@@ -105,6 +110,7 @@ export interface ProductDetail extends ProductListItem {
   description: string;
   costPrice: number;
   wholesalePrice: number;
+  useAutoUnitPricing?: boolean;
   isVariantEnabled: boolean;
   isDiscountAllowed: boolean;
   discountType?: DiscountType | null;
@@ -130,22 +136,8 @@ export interface ProductListResponse {
   pageSize: number;
 }
 
-/** Derives per-unit prices from base prices and each unit's conversion factor. */
-export const recalculateUnitPrices = (
-  units: ProductUnitPayload[],
-  baseCostPrice: number,
-  baseSellingPrice: number,
-  baseWholesalePrice: number,
-): ProductUnitPayload[] =>
-  units.map((unit) => {
-    const factor = unit.conversionFactor > 0 ? unit.conversionFactor : 1;
-    return {
-      ...unit,
-      costPrice: baseCostPrice * factor,
-      sellingPrice: baseSellingPrice * factor,
-      wholesalePrice: baseWholesalePrice * factor,
-    };
-  });
+/** Derives per-unit prices from base prices (respects auto pricing toggle and overrides). */
+export { recalculateUnitPrices, calculateAutoUnitPrice, toBaseQuantity } from './unitPricing';
 
 const branchRequestConfig = (branchId: number) => ({
   headers: { 'X-Branch-Id': String(branchId) },
@@ -218,6 +210,27 @@ export const productService = {
       params: { branchId },
       ...branchRequestConfig(branchId),
     }),
+
+  getUnitPricing: (id: number, branchId: number) =>
+    apiClient.get(`/products/${id}/unit-pricing`, {
+      params: { branchId },
+      ...branchRequestConfig(branchId),
+    }),
+
+  calculateUnitPrice: (
+    id: number,
+    branchId: number,
+    body: { productUnitId: number; pricingType?: 'Retail' | 'Wholesale'; baseSellingPrice?: number },
+  ) =>
+    apiClient.post(`/products/${id}/calculate-unit-price`, { branchId, ...body }, branchRequestConfig(branchId)),
+
+  saveUnitPriceOverride: (
+    id: number,
+    unitId: number,
+    branchId: number,
+    body: { customSellingPrice: number; customWholesalePrice?: number; isOverride: boolean },
+  ) =>
+    apiClient.put(`/products/${id}/units/${unitId}/price-override`, { branchId, ...body }, branchRequestConfig(branchId)),
 };
 
 const normalizePayload = (data: ProductPayload, branchId: number) => ({
@@ -232,6 +245,7 @@ const normalizePayload = (data: ProductPayload, branchId: number) => ({
   costPrice: Number(data.costPrice ?? 0),
   sellingPrice: Number(data.sellingPrice ?? 0),
   wholesalePrice: Number(data.wholesalePrice ?? 0),
+  useAutoUnitPricing: data.useAutoUnitPricing !== false,
   isVariantEnabled: data.isVariantEnabled,
   isDiscountAllowed: data.isDiscountAllowed,
   discountType: data.isDiscountAllowed ? data.discountType : null,

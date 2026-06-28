@@ -5,8 +5,7 @@ import { PagedListParams } from '../shared/pagedList';
 const buildPayload = (data: ManagementFormValues) => ({
   name: data.name,
   code: data.code ?? '',
-  description: data.description,
-  conversionFactor: Number(data.conversionFactor ?? 1),
+  defaultConversionFactor: Number(data.defaultConversionFactor ?? data.conversionFactor ?? 1),
   status: Boolean(data.isActive ?? true),
   isActive: Boolean(data.isActive ?? true),
   branchId: Number(data.branchId ?? 0),

@@ -1,5 +1,6 @@
 using POSSystem.Application.Common.DTOs;
 using POSSystem.Application.Common.Constants;
+using POSSystem.Application.Common.Helpers;
 using POSSystem.Application.Common.Interfaces;
 using POSSystem.Application.Product.DTOs;
 using POSSystem.Application.Product.Interfaces;
@@ -19,6 +20,7 @@ public class ProductService : IProductService
     private readonly IWarehouseRepository _warehouseRepository;
     private readonly ILowStockAlertService _lowStockAlertService;
     private readonly IUnitRepository _unitRepository;
+    private readonly IUnitPricingService _unitPricingService;
 
     public ProductService(
         IProductRepository repository,
@@ -26,7 +28,8 @@ public class ProductService : IProductService
         IStockLedgerRepository stockLedgerRepository,
         IWarehouseRepository warehouseRepository,
         ILowStockAlertService lowStockAlertService,
-        IUnitRepository unitRepository)
+        IUnitRepository unitRepository,
+        IUnitPricingService unitPricingService)
     {
         _repository = repository;
         _codeGenerator = codeGenerator;
@@ -34,6 +37,7 @@ public class ProductService : IProductService
         _warehouseRepository = warehouseRepository;
         _lowStockAlertService = lowStockAlertService;
         _unitRepository = unitRepository;
+        _unitPricingService = unitPricingService;
     }
 
     public async Task<PagedResultDto<ProductListDto>> SearchProductsAsync(ProductSearchRequestDto request)
@@ -75,6 +79,7 @@ public class ProductService : IProductService
             CostPrice = Math.Max(0, dto.CostPrice),
             SellingPrice = Math.Max(0, dto.SellingPrice),
             WholesalePrice = Math.Max(0, dto.WholesalePrice),
+            UseAutoUnitPricing = dto.UseAutoUnitPricing,
             IsVariantEnabled = dto.IsVariantEnabled,
             IsDiscountAllowed = dto.IsDiscountAllowed,
             DiscountType = dto.IsDiscountAllowed ? dto.DiscountType : null,
@@ -95,6 +100,8 @@ public class ProductService : IProductService
             product.OpeningStock = ResolveVariantOpeningTotal(dto);
 
         await _repository.AddAsync(product);
+        await _repository.SaveChangesAsync();
+        SyncBaseUnitId(product);
         await _repository.SaveChangesAsync();
 
         await ApplyOpeningStockAsync(product, dto);
@@ -127,6 +134,7 @@ public class ProductService : IProductService
         product.CostPrice = Math.Max(0, dto.CostPrice);
         product.SellingPrice = Math.Max(0, dto.SellingPrice);
         product.WholesalePrice = Math.Max(0, dto.WholesalePrice);
+        product.UseAutoUnitPricing = dto.UseAutoUnitPricing;
         product.IsVariantEnabled = dto.IsVariantEnabled;
         product.IsDiscountAllowed = dto.IsDiscountAllowed;
         product.DiscountType = dto.IsDiscountAllowed ? dto.DiscountType : null;
@@ -138,6 +146,7 @@ public class ProductService : IProductService
         ReplaceVariants(product, dto.IsVariantEnabled ? dto.Variants : new List<ProductVariantWriteDto>(), dto.BusinessId, dto.BranchId);
         await ReplaceBarcodesAsync(product, dto.Barcodes, dto.BusinessId, dto.BranchId);
 
+        SyncBaseUnitId(product);
         await _repository.SaveChangesAsync();
         return await MapDetailDto(product);
     }
@@ -147,6 +156,7 @@ public class ProductService : IProductService
         var product = await GetProductOrThrowAsync(id, businessId, branchId);
         ValidateUnits(units);
         await ReplaceUnitsAsync(product, units, businessId, branchId);
+        SyncBaseUnitId(product);
         await _repository.SaveChangesAsync();
         return await MapDetailDto(product);
     }
@@ -308,6 +318,7 @@ public class ProductService : IProductService
 
         var stockChanges = new List<StockChangeItem>();
         var now = DateTime.UtcNow;
+        var baseUnit = product.Units.FirstOrDefault(u => u.IsBaseUnit && !u.IsDeleted);
 
         if (product.OpeningStockVariantWise)
         {
@@ -333,6 +344,8 @@ public class ProductService : IProductService
                     Type = StockLedgerType.Opening,
                     ReferenceId = product.Id,
                     QuantityInBaseUnit = line.Quantity,
+                    UnitId = baseUnit?.Id,
+                    UnitQuantity = line.Quantity,
                     UnitPrice = unitCost,
                     TotalAmount = line.Quantity * unitCost,
                     Date = now,
@@ -354,6 +367,8 @@ public class ProductService : IProductService
                 Type = StockLedgerType.Opening,
                 ReferenceId = product.Id,
                 QuantityInBaseUnit = dto.OpeningStock,
+                UnitId = baseUnit?.Id,
+                UnitQuantity = dto.OpeningStock,
                 UnitPrice = product.CostPrice,
                 TotalAmount = dto.OpeningStock * product.CostPrice,
                 Date = now,
@@ -413,8 +428,36 @@ public class ProductService : IProductService
         if (units.Any(u => string.IsNullOrWhiteSpace(u.UnitName)))
             throw new InvalidOperationException("UnitName is required for every unit.");
 
-        if (units.Any(u => u.ConversionFactor <= 0))
-            throw new InvalidOperationException("ConversionFactor must be greater than zero.");
+        foreach (var unit in units)
+        {
+            if (unit.IsBaseUnit)
+            {
+                UnitConversionHelper.ValidateConversionFactor(true, 1m, unit.UnitName.Trim());
+                continue;
+            }
+
+            if (unit.ConversionFactor <= 0)
+                throw new InvalidOperationException(
+                    $"ConversionFactor must be greater than zero for unit '{unit.UnitName.Trim()}'.");
+
+            UnitConversionHelper.ValidateConversionFactor(false, unit.ConversionFactor, unit.UnitName.Trim());
+        }
+
+        var duplicateNames = units
+            .Select(u => u.UnitName.Trim().ToUpperInvariant())
+            .GroupBy(n => n)
+            .Where(g => g.Count() > 1)
+            .Select(g => g.Key)
+            .ToList();
+
+        if (duplicateNames.Count > 0)
+            throw new InvalidOperationException("Duplicate units are not allowed on the same product.");
+    }
+
+    private static void SyncBaseUnitId(ProductEntity product)
+    {
+        var baseUnit = product.Units.FirstOrDefault(u => u.IsBaseUnit && !u.IsDeleted);
+        product.BaseUnitId = baseUnit?.Id > 0 ? baseUnit.Id : null;
     }
 
     private async Task ValidateBarcodesAsync(List<ProductBarcodeWriteDto> barcodes)
@@ -437,41 +480,71 @@ public class ProductService : IProductService
     private async Task ReplaceUnitsAsync(ProductEntity product, List<ProductUnitWriteDto> units, int businessId, int branchId)
     {
         var masterUnits = await _unitRepository.GetAllAsync(businessId, branchId, status: true);
-        var factorByName = masterUnits.ToDictionary(
+        var masterByName = masterUnits.ToDictionary(
             u => u.Name.Trim(),
-            u => u.ConversionFactor,
+            u => u,
             StringComparer.OrdinalIgnoreCase);
+        var masterById = masterUnits.ToDictionary(u => u.Id);
 
         product.Units.Clear();
         foreach (var unit in units)
         {
             var unitName = unit.UnitName.Trim();
-            if (!factorByName.TryGetValue(unitName, out var conversionFactor))
-                throw new InvalidOperationException($"Unit '{unitName}' was not found in unit master.");
+            if (string.IsNullOrWhiteSpace(unitName) && (!unit.UnitId.HasValue || unit.UnitId.Value <= 0))
+                throw new InvalidOperationException("UnitName or UnitId is required for every product unit.");
+
+            if (string.IsNullOrWhiteSpace(unitName) && unit.UnitId.HasValue && masterById.TryGetValue(unit.UnitId.Value, out var named))
+                unitName = named.Name.Trim();
+
+            var masterUnit = ResolveMasterUnit(unit, masterByName, masterById);
+
+            var conversionFactor = UnitConversionHelper.ResolveConversionFactor(
+                unit.IsBaseUnit,
+                unit.ConversionFactor,
+                masterUnit.DefaultConversionFactor,
+                masterUnit.Name.Trim());
+
+            UnitConversionHelper.ValidateConversionFactor(unit.IsBaseUnit, conversionFactor, masterUnit.Name.Trim());
 
             product.Units.Add(new ProductUnit
             {
                 BusinessId = businessId,
                 BranchId = branchId,
-                UnitName = unitName,
-                ConversionFactor = conversionFactor > 0 ? conversionFactor : 1m,
-                IsBaseUnit = unit.IsBaseUnit
+                UnitId = masterUnit.Id,
+                UnitName = masterUnit.Name.Trim(),
+                ConversionFactor = conversionFactor,
+                IsBaseUnit = unit.IsBaseUnit,
+                IsPriceOverridden = unit.IsBaseUnit ? false : unit.IsPriceOverridden,
+                CostPrice = unit.IsPriceOverridden ? unit.CostPrice : null,
+                SellingPrice = unit.IsPriceOverridden ? unit.SellingPrice : null,
+                WholesalePrice = unit.IsPriceOverridden ? unit.WholesalePrice : null
             });
         }
 
-        RecalculateUnitPrices(product);
+        _unitPricingService.RecalculateAutoPrices(product);
     }
 
-    private static void RecalculateUnitPrices(ProductEntity product)
+    private static MeasurementUnit ResolveMasterUnit(
+        ProductUnitWriteDto unit,
+        Dictionary<string, MeasurementUnit> masterByName,
+        Dictionary<int, MeasurementUnit> masterById)
     {
-        foreach (var unit in product.Units)
+        if (unit.UnitId.HasValue && unit.UnitId.Value > 0)
         {
-            var factor = unit.ConversionFactor > 0 ? unit.ConversionFactor : 1m;
-            unit.CostPrice = product.CostPrice * factor;
-            unit.SellingPrice = product.SellingPrice * factor;
-            unit.WholesalePrice = product.WholesalePrice * factor;
+            if (masterById.TryGetValue(unit.UnitId.Value, out var byId))
+                return byId;
+            throw new InvalidOperationException($"Unit id {unit.UnitId} was not found in unit master.");
         }
+
+        var unitName = unit.UnitName.Trim();
+        if (masterByName.TryGetValue(unitName, out var byName))
+            return byName;
+
+        throw new InvalidOperationException($"Unit '{unitName}' was not found in unit master.");
     }
+
+    private void RecalculateUnitPrices(ProductEntity product)
+        => _unitPricingService.RecalculateAutoPrices(product);
 
     private static void ReplaceVariants(ProductEntity product, List<ProductVariantWriteDto> variants, int businessId, int branchId)
     {
@@ -658,6 +731,7 @@ public class ProductService : IProductService
             CostPrice = product.CostPrice,
             SellingPrice = product.SellingPrice,
             WholesalePrice = product.WholesalePrice,
+            UseAutoUnitPricing = product.UseAutoUnitPricing,
             Status = product.Status,
             IsVariantEnabled = product.IsVariantEnabled,
             IsDiscountAllowed = product.IsDiscountAllowed,
@@ -670,6 +744,10 @@ public class ProductService : IProductService
             EnableLowStockAlert = product.EnableLowStockAlert,
             LowStockAlertLevel = product.LowStockAlertLevel,
             OpeningStock = product.OpeningStock,
+            BaseUnitId = product.BaseUnitId,
+            BaseUnitName = product.Units.FirstOrDefault(u => u.IsBaseUnit && !u.IsDeleted)?.UnitName
+                ?? product.BaseUnit?.UnitName
+                ?? string.Empty,
             HasOpeningStockApplied = hasOpening,
             OpeningStockVariantWise = product.OpeningStockVariantWise,
             OpeningStockByVariant = openingEntries.Select(e => new ProductOpeningStockDto
@@ -689,9 +767,15 @@ public class ProductService : IProductService
             .Select(u => new ProductUnitDto
             {
                 Id = u.Id,
+                UnitId = u.UnitId,
                 UnitName = u.UnitName,
                 ConversionFactor = u.ConversionFactor,
                 IsBaseUnit = u.IsBaseUnit,
+                IsPriceOverridden = u.IsPriceOverridden,
+                CalculatedSellingPrice = _unitPricingService.CalculateAutoPrice(
+                    product.SellingPrice, u.ConversionFactor, u.IsBaseUnit),
+                CalculatedWholesalePrice = _unitPricingService.CalculateAutoPrice(
+                    product.WholesalePrice, u.ConversionFactor, u.IsBaseUnit),
                 CostPrice = u.CostPrice,
                 SellingPrice = u.SellingPrice,
                 WholesalePrice = u.WholesalePrice

@@ -11,9 +11,23 @@ public class StockBalanceDto
     public string? VariantName { get; set; }
     public int WarehouseId { get; set; }
     public string WarehouseName { get; set; } = string.Empty;
+    /// <summary>Stock quantity in base unit only.</summary>
     public decimal Quantity { get; set; }
+    public string BaseUnitName { get; set; } = string.Empty;
+    public int? BaseUnitId { get; set; }
+    public List<StockUnitBreakdownDto> UnitBreakdown { get; set; } = new();
     public bool EnableLowStockAlert { get; set; }
     public decimal? LowStockAlertLevel { get; set; }
+}
+
+public class StockUnitBreakdownDto
+{
+    public int UnitId { get; set; }
+    public string UnitName { get; set; } = string.Empty;
+    public decimal Quantity { get; set; }
+    public decimal ConversionFactor { get; set; }
+    public bool IsBaseUnit { get; set; }
+    public bool IsRemainder { get; set; }
 }
 
 public class StockLedgerDto

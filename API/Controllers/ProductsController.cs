@@ -23,10 +23,12 @@ public class ProductsController : ControllerBase
     };
 
     private readonly IProductService _productService;
+    private readonly IUnitPricingService _unitPricingService;
 
-    public ProductsController(IProductService productService)
+    public ProductsController(IProductService productService, IUnitPricingService unitPricingService)
     {
         _productService = productService;
+        _unitPricingService = unitPricingService;
     }
 
     [HttpGet]
@@ -154,6 +156,73 @@ public class ProductsController : ControllerBase
         try
         {
             return Ok(await _productService.ReplaceUnitsAsync(id, dto.BusinessId, dto.BranchId, dto.Items));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpGet("{id:int}/unit-pricing")]
+    public async Task<IActionResult> GetUnitPricing(int id, [FromQuery] int branchId, [FromQuery] int? businessId = null)
+    {
+        var resolvedBusinessId = this.ResolveBusinessId(businessId);
+        var resolvedBranchId = this.ResolveBranchId(branchId);
+        if (resolvedBranchId <= 0)
+            return BadRequest(new { message = "branchId is required." });
+
+        var pricing = await _unitPricingService.GetProductUnitPricingAsync(id, resolvedBusinessId, resolvedBranchId);
+        return pricing == null ? NotFound() : Ok(pricing);
+    }
+
+    [HttpPost("{id:int}/calculate-unit-price")]
+    public async Task<IActionResult> CalculateUnitPrice(int id, [FromBody] CalculateUnitPriceRequestDto dto)
+    {
+        dto.BusinessId = this.ResolveBusinessId(dto.BusinessId > 0 ? dto.BusinessId : null);
+        dto.BranchId = this.ResolveBranchId(dto.BranchId > 0 ? dto.BranchId : null);
+        if (dto.BranchId <= 0)
+            return BadRequest(new { message = "BranchId is required." });
+
+        try
+        {
+            return Ok(await _unitPricingService.CalculateUnitPriceAsync(id, dto));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpPut("{id:int}/units/{unitId:int}/price-override")]
+    public async Task<IActionResult> SaveUnitPriceOverride(
+        int id, int unitId, [FromBody] SaveUnitPriceOverrideDto dto)
+    {
+        dto.BusinessId = this.ResolveBusinessId(dto.BusinessId > 0 ? dto.BusinessId : null);
+        dto.BranchId = this.ResolveBranchId(dto.BranchId > 0 ? dto.BranchId : null);
+        if (dto.BranchId <= 0)
+            return BadRequest(new { message = "BranchId is required." });
+
+        try
+        {
+            return Ok(await _unitPricingService.SaveUnitPriceOverrideAsync(id, unitId, dto));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpPut("{id:int}/base-price")]
+    public async Task<IActionResult> UpdateBasePrice(int id, [FromBody] UpdateBasePriceDto dto)
+    {
+        dto.BusinessId = this.ResolveBusinessId(dto.BusinessId > 0 ? dto.BusinessId : null);
+        dto.BranchId = this.ResolveBranchId(dto.BranchId > 0 ? dto.BranchId : null);
+        if (dto.BranchId <= 0)
+            return BadRequest(new { message = "BranchId is required." });
+
+        try
+        {
+            return Ok(await _unitPricingService.UpdateBasePriceAndRecalculateAsync(id, dto));
         }
         catch (InvalidOperationException ex)
         {

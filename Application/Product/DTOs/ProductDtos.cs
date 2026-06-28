@@ -45,6 +45,9 @@ public class ProductDetailDto : ProductListDto
     public string Description { get; set; } = string.Empty;
     public decimal CostPrice { get; set; }
     public decimal WholesalePrice { get; set; }
+    public bool UseAutoUnitPricing { get; set; } = true;
+    public int? BaseUnitId { get; set; }
+    public string BaseUnitName { get; set; } = string.Empty;
     public bool IsVariantEnabled { get; set; }
     public bool IsDiscountAllowed { get; set; }
     public ProductDiscountType? DiscountType { get; set; }
@@ -87,6 +90,7 @@ public class CreateProductDto
     public decimal CostPrice { get; set; }
     public decimal SellingPrice { get; set; }
     public decimal WholesalePrice { get; set; }
+    public bool UseAutoUnitPricing { get; set; } = true;
     public bool IsVariantEnabled { get; set; }
     public bool IsDiscountAllowed { get; set; }
     public ProductDiscountType? DiscountType { get; set; }
@@ -110,12 +114,16 @@ public class UpdateProductDto : CreateProductDto
 public class ProductUnitWriteDto
 {
     public int? Id { get; set; }
+    public int? UnitId { get; set; }
     public string UnitName { get; set; } = string.Empty;
     public decimal ConversionFactor { get; set; } = 1;
     public bool IsBaseUnit { get; set; }
     public decimal? CostPrice { get; set; }
     public decimal? SellingPrice { get; set; }
     public decimal? WholesalePrice { get; set; }
+    public bool IsPriceOverridden { get; set; }
+    public decimal? CalculatedSellingPrice { get; set; }
+    public decimal? CalculatedWholesalePrice { get; set; }
 }
 
 public class ProductUnitDto : ProductUnitWriteDto

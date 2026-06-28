@@ -1,5 +1,8 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
+using System.Data;
 using POSSystem.Application.Common.DTOs;
+using POSSystem.Application.Common.Helpers;
 using POSSystem.Application.Stock.DTOs;
 using POSSystem.Application.Stock.Interfaces;
 using POSSystem.Domain;
@@ -129,8 +132,25 @@ public class StockLedgerRepository : IStockLedgerRepository
         var products = await _context.Products
             .IgnoreQueryFilters()
             .Where(p => productIds.Contains(p.Id))
-            .Select(p => new { p.Id, p.ProductName, p.ProductCode, p.EnableLowStockAlert, p.LowStockAlertLevel })
+            .Select(p => new { p.Id, p.ProductName, p.ProductCode, p.EnableLowStockAlert, p.LowStockAlertLevel, p.BaseUnitId })
             .ToListAsync();
+
+        var productUnits = await _context.ProductUnits
+            .IgnoreQueryFilters()
+            .Where(u => productIds.Contains(u.ProductId) && !u.IsDeleted)
+            .Select(u => new
+            {
+                u.Id,
+                u.ProductId,
+                u.UnitName,
+                u.ConversionFactor,
+                u.IsBaseUnit
+            })
+            .ToListAsync();
+
+        var unitsByProduct = productUnits
+            .GroupBy(u => u.ProductId)
+            .ToDictionary(g => g.Key, g => g.ToList());
 
         var variantMap = new Dictionary<int, string>();
         if (variantIds.Count > 0)
@@ -158,12 +178,25 @@ public class StockLedgerRepository : IStockLedgerRepository
 
         var productMap = products.ToDictionary(
             p => p.Id,
-            p => (p.ProductName, p.ProductCode, p.EnableLowStockAlert, p.LowStockAlertLevel));
+            p => (p.ProductName, p.ProductCode, p.EnableLowStockAlert, p.LowStockAlertLevel, p.BaseUnitId));
 
         return balanceList.Select(b =>
         {
             var whId = warehouseId ?? b.WarehouseId;
             productMap.TryGetValue(b.ProductId, out var p);
+            unitsByProduct.TryGetValue(b.ProductId, out var units);
+
+            var baseUnit = units?.FirstOrDefault(u => u.IsBaseUnit) ?? units?.FirstOrDefault();
+            var breakdown = UnitConversionHelper.BreakDownStock(
+                b.Quantity,
+                (units ?? []).Select(u => new StockUnitDisplayInput
+                {
+                    UnitId = u.Id,
+                    UnitName = u.UnitName,
+                    ConversionFactor = u.ConversionFactor,
+                    IsBaseUnit = u.IsBaseUnit
+                }));
+
             return new StockBalanceDto
             {
                 ProductId             = b.ProductId,
@@ -174,6 +207,17 @@ public class StockLedgerRepository : IStockLedgerRepository
                 WarehouseId           = whId,
                 WarehouseName         = warehouseMap.TryGetValue(whId, out var w) ? w : string.Empty,
                 Quantity              = b.Quantity,
+                BaseUnitName          = baseUnit?.UnitName ?? string.Empty,
+                BaseUnitId            = p.BaseUnitId ?? baseUnit?.Id,
+                UnitBreakdown         = breakdown.Select(d => new StockUnitBreakdownDto
+                {
+                    UnitId = d.UnitId,
+                    UnitName = d.UnitName,
+                    Quantity = d.Quantity,
+                    ConversionFactor = d.ConversionFactor,
+                    IsBaseUnit = d.IsBaseUnit,
+                    IsRemainder = d.IsRemainder
+                }).ToList(),
                 EnableLowStockAlert   = p.EnableLowStockAlert,
                 LowStockAlertLevel    = p.LowStockAlertLevel,
             };
@@ -289,5 +333,24 @@ public class StockLedgerRepository : IStockLedgerRepository
         return rows.ToDictionary(
             p => p.Id,
             p => (p.AllowNegativeStock, p.EnableLowStockAlert, p.LowStockAlertLevel));
+    }
+
+    public async Task RunInSerializableTransactionAsync(Func<Task> action)
+    {
+        var strategy = _context.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+            try
+            {
+                await action();
+                await transaction.CommitAsync();
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        });
     }
 }

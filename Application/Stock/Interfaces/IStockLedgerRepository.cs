@@ -24,5 +24,6 @@ public interface IStockLedgerRepository
     Task<List<StockLedger>> GetOpeningEntriesAsync(int productId, int businessId, int branchId);
     Task<Dictionary<int, (bool AllowNegativeStock, bool EnableLowStockAlert, decimal? LowStockAlertLevel)>> GetProductStockSettingsAsync(
         int businessId, int branchId, IEnumerable<int> productIds);
+    Task RunInSerializableTransactionAsync(Func<Task> action);
     Task SaveChangesAsync();
 }

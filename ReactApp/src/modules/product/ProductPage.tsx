@@ -8,13 +8,13 @@ import ProductForm from './ProductForm';
 import { ProductDetail, ProductListItem, ProductPayload, productService } from './productService';
 
 const fallbackUnits = [
-  { id: 1, name: 'Piece', conversionFactor: 1 },
-  { id: 2, name: 'Box', conversionFactor: 1 },
-  { id: 3, name: 'Pack', conversionFactor: 1 },
-  { id: 4, name: 'Kg', conversionFactor: 1 },
-  { id: 5, name: 'Gram', conversionFactor: 0.001 },
-  { id: 6, name: 'Liter', conversionFactor: 1 },
-  { id: 7, name: 'Meter', conversionFactor: 1 },
+  { id: 1, name: 'Piece', defaultConversionFactor: 1 },
+  { id: 2, name: 'Box', defaultConversionFactor: 1 },
+  { id: 3, name: 'Pack', defaultConversionFactor: 1 },
+  { id: 4, name: 'Kg', defaultConversionFactor: 1 },
+  { id: 5, name: 'Gram', defaultConversionFactor: 1 },
+  { id: 6, name: 'Liter', defaultConversionFactor: 1 },
+  { id: 7, name: 'Meter', defaultConversionFactor: 1 },
 ];
 
 const ProductPage: React.FC = () => {
@@ -25,7 +25,7 @@ const ProductPage: React.FC = () => {
   const [categories, setCategories] = useState<Array<{ id: number; name: string }>>([]);
   const [subCategories, setSubCategories] = useState<Array<{ id: number; name: string; categoryId: number }>>([]);
   const [brands, setBrands] = useState<Array<{ id: number; name: string }>>([]);
-  const [units, setUnits] = useState<Array<{ id: number; name: string; conversionFactor?: number }>>(fallbackUnits);
+  const [units, setUnits] = useState<Array<{ id: number; name: string; defaultConversionFactor?: number }>>(fallbackUnits);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -92,9 +92,11 @@ const ProductPage: React.FC = () => {
         .map((item: any) => ({
           id: Number(item.id ?? item.Id ?? 0),
           name: String(item.name ?? item.Name ?? item.unitName ?? item.UnitName ?? ''),
-          conversionFactor: Number(item.conversionFactor ?? item.ConversionFactor ?? 1),
+          defaultConversionFactor: Number(
+            item.defaultConversionFactor ?? item.DefaultConversionFactor
+            ?? item.conversionFactor ?? item.ConversionFactor ?? 1),
         }))
-        .filter((item: { id: number; name: string; conversionFactor: number }) => item.id > 0 && item.name);
+        .filter((item: { id: number; name: string }) => item.id > 0 && item.name);
       setUnits(normalizedUnits.length > 0 ? normalizedUnits : fallbackUnits);
     } catch (error) {
       showNotification('error', getApiErrorMessage(error, 'Failed to load product master data.'));

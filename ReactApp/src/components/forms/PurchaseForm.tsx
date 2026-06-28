@@ -881,9 +881,12 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                   {/* Base Qty */}
                   <div className="px-1 text-right">
                     <span className="text-sm font-medium text-gray-600">
-                      {(row.quantity * row.conversionFactor) % 1 === 0
-                        ? (row.quantity * row.conversionFactor).toFixed(0)
-                        : (row.quantity * row.conversionFactor).toFixed(3)}
+                      {(() => {
+                        const baseQty = row.conversionFactor > 0
+                          ? row.quantity / row.conversionFactor
+                          : row.quantity;
+                        return baseQty % 1 === 0 ? baseQty.toFixed(0) : baseQty.toFixed(3);
+                      })()}
                     </span>
                   </div>
 

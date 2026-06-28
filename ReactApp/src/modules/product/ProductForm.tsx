@@ -19,7 +19,7 @@ import { warehouseService, type WarehouseItem } from '../warehouse/warehouseServ
 export interface ProductOption {
   id: number;
   name: string;
-  conversionFactor?: number;
+  defaultConversionFactor?: number;
 }
 
 interface ProductFormProps {
@@ -41,6 +41,7 @@ const emptyUnit = (): ProductUnitPayload => ({
   costPrice: null,
   sellingPrice: null,
   wholesalePrice: null,
+  isPriceOverridden: false,
 });
 
 const emptyVariant = (): ProductVariantPayload => ({
@@ -69,13 +70,20 @@ const syncUnitsWithMaster = (
   costPrice: number,
   sellingPrice: number,
   wholesalePrice: number,
+  useAutoUnitPricing = true,
 ): ProductUnitPayload[] => {
   const synced = units.map((unit) => {
+    if (unit.isBaseUnit) return { ...unit, conversionFactor: 1 };
     const master = options.find((option) => option.name === unit.unitName);
     if (!master) return unit;
-    return { ...unit, conversionFactor: master.conversionFactor ?? 1 };
+    return {
+      ...unit,
+      conversionFactor: unit.conversionFactor > 0
+        ? unit.conversionFactor
+        : (master.defaultConversionFactor ?? 1),
+    };
   });
-  return recalculateUnitPrices(synced, costPrice, sellingPrice, wholesalePrice);
+  return recalculateUnitPrices(synced, costPrice, sellingPrice, wholesalePrice, useAutoUnitPricing);
 };
 
 type ProductFormTab = 'basic' | 'pricing' | 'stock' | 'units' | 'variants' | 'barcodes';
@@ -124,6 +132,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
     costPrice: 0,
     sellingPrice: 0,
     wholesalePrice: 0,
+    useAutoUnitPricing: true,
     isVariantEnabled: false,
     isDiscountAllowed: false,
     discountType: 'Percentage',
@@ -168,6 +177,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
         costPrice: initialData.costPrice,
         sellingPrice: initialData.sellingPrice,
         wholesalePrice: initialData.wholesalePrice,
+        useAutoUnitPricing: initialData.useAutoUnitPricing !== false,
         isVariantEnabled: initialData.isVariantEnabled,
         isDiscountAllowed: initialData.isDiscountAllowed,
         discountType: initialData.discountType ?? 'Percentage',
@@ -180,8 +190,9 @@ const ProductForm: React.FC<ProductFormProps> = ({
               initialData.costPrice,
               initialData.sellingPrice,
               initialData.wholesalePrice,
+              initialData.useAutoUnitPricing !== false,
             )
-          : [{ ...emptyUnit(), unitName: defaultUnitName, isBaseUnit: true, conversionFactor: unitOptions.find((o) => o.name === defaultUnitName)?.conversionFactor ?? 1 }],
+          : [{ ...emptyUnit(), unitName: defaultUnitName, isBaseUnit: true, conversionFactor: 1 }],
         variants: initialData.variants ?? [],
         barcodes: initialData.barcodes ?? [],
         allowNegativeStock: initialData.allowNegativeStock ?? false,
@@ -210,6 +221,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
                 prev.costPrice,
                 prev.sellingPrice,
                 prev.wholesalePrice,
+                prev.useAutoUnitPricing !== false,
               )
             : syncUnitsWithMaster(
                 [{ ...emptyUnit(), unitName: defaultUnitName, isBaseUnit: true }],
@@ -217,6 +229,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
                 prev.costPrice,
                 prev.sellingPrice,
                 prev.wholesalePrice,
+                prev.useAutoUnitPricing !== false,
               ),
       }));
     }
@@ -236,6 +249,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
         prev.costPrice,
         prev.sellingPrice,
         prev.wholesalePrice,
+        prev.useAutoUnitPricing !== false,
       ),
     }));
   }, [unitOptions]);
@@ -520,21 +534,41 @@ const ProductForm: React.FC<ProductFormProps> = ({
     setFormData((prev) => {
       const units = prev.units.map((unit, unitIndex) => {
         if (unitIndex !== index) return unit;
-        return { ...unit, ...changes };
+        const updated = { ...unit, ...changes };
+        if (changes.isPriceOverridden === false) {
+          updated.isPriceOverridden = false;
+        }
+        return updated;
       });
       return {
         ...prev,
-        units: recalculateUnitPrices(units, prev.costPrice, prev.sellingPrice, prev.wholesalePrice),
+        units: recalculateUnitPrices(
+          units,
+          prev.costPrice,
+          prev.sellingPrice,
+          prev.wholesalePrice,
+          prev.useAutoUnitPricing !== false,
+        ),
       };
     });
   };
 
   const setBaseUnit = (index: number) => {
     setFormData((prev) => {
-      const units = prev.units.map((unit, unitIndex) => ({ ...unit, isBaseUnit: unitIndex === index }));
+      const units = prev.units.map((unit, unitIndex) => ({
+        ...unit,
+        isBaseUnit: unitIndex === index,
+        conversionFactor: unitIndex === index ? 1 : unit.conversionFactor,
+      }));
       return {
         ...prev,
-        units: recalculateUnitPrices(units, prev.costPrice, prev.sellingPrice, prev.wholesalePrice),
+        units: recalculateUnitPrices(
+          units,
+          prev.costPrice,
+          prev.sellingPrice,
+          prev.wholesalePrice,
+          prev.useAutoUnitPricing !== false,
+        ),
       };
     });
   };
@@ -544,7 +578,13 @@ const ProductForm: React.FC<ProductFormProps> = ({
       const next = { ...prev, ...changes };
       return {
         ...next,
-        units: recalculateUnitPrices(next.units, next.costPrice, next.sellingPrice, next.wholesalePrice),
+        units: recalculateUnitPrices(
+          next.units,
+          next.costPrice,
+          next.sellingPrice,
+          next.wholesalePrice,
+          next.useAutoUnitPricing !== false,
+        ),
       };
     });
   };
@@ -600,6 +640,12 @@ const ProductForm: React.FC<ProductFormProps> = ({
 
     if (unitOptions.length > 0 && formData.units.some((unit) => !unitOptions.some((option) => option.name === unit.unitName))) {
       showValidationError('Every unit must be selected from Unit Master.', 'units');
+      return;
+    }
+
+    const unitNames = formData.units.map((u) => u.unitName.trim().toLowerCase());
+    if (new Set(unitNames).size !== unitNames.length) {
+      showValidationError('Duplicate units are not allowed.', 'units');
       return;
     }
 
@@ -675,6 +721,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
           Number(formData.costPrice ?? 0),
           Number(formData.sellingPrice ?? 0),
           Number(formData.wholesalePrice ?? 0),
+          formData.useAutoUnitPricing !== false,
         ),
         variants: formData.isVariantEnabled
           ? formData.variants
@@ -835,7 +882,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
           <div>
             <h3 className="text-lg font-semibold text-gray-900">Pricing & Discount</h3>
             <p className="mt-1 text-sm text-gray-500">
-              Set base-unit prices. All unit prices are calculated automatically using each unit&apos;s conversion factor.
+              Set base-unit prices. Child unit prices = base price ÷ conversion factor (child units per base).
             </p>
           </div>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -846,6 +893,27 @@ const ProductForm: React.FC<ProductFormProps> = ({
               </div>
             ))}
           </div>
+          <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+            <input
+              type="checkbox"
+              checked={formData.useAutoUnitPricing !== false}
+              onChange={(event) => setFormData((prev) => ({
+                ...prev,
+                useAutoUnitPricing: event.target.checked,
+                units: recalculateUnitPrices(
+                  prev.units,
+                  prev.costPrice,
+                  prev.sellingPrice,
+                  prev.wholesalePrice,
+                  event.target.checked,
+                ),
+              }))}
+            />
+            Auto-calculate alternate unit prices from base price
+          </label>
+          <p className="text-xs text-gray-500">
+            When enabled, child unit price = base price ÷ factor (e.g. 1250 ÷ 50 = 25 per KG). Override per unit on the Units tab.
+          </p>
           <label className="flex items-center gap-2 text-sm text-gray-700">
             <input type="checkbox" checked={formData.isDiscountAllowed} onChange={(event) => setFormData((prev) => ({ ...prev, isDiscountAllowed: event.target.checked }))} />
             Discount allowed
@@ -867,71 +935,187 @@ const ProductForm: React.FC<ProductFormProps> = ({
           <div>
             <h3 className="text-lg font-semibold text-gray-900">Units</h3>
             <p className="mt-1 text-sm text-gray-500">
-              Select units from Unit Master. Conversion factor and prices are set automatically.
-              Exactly one unit must be marked as the base unit.
+              Factor = child units in 1 base unit (e.g. 20 Feet per Pipe). Child price = base price ÷ factor.
             </p>
           </div>
-        <DynamicSection title="Units" onAdd={() => setFormData((prev) => ({
-          ...prev,
-          units: recalculateUnitPrices(
-            [...prev.units, emptyUnit()],
-            prev.costPrice,
-            prev.sellingPrice,
-            prev.wholesalePrice,
-          ),
-        }))}>
-          <div className="hidden gap-3 px-3 text-xs font-semibold uppercase tracking-wide text-gray-500 md:grid md:grid-cols-8">
-            <span className="md:col-span-2">Unit</span>
-            <span>Factor</span>
-            <span>Cost</span>
-            <span>Selling</span>
-            <span>Wholesale</span>
-            <span>Base</span>
-            <span>Action</span>
-          </div>
-          {formData.units.map((unit, index) => (
-            <div key={index} className="grid grid-cols-1 gap-3 rounded-lg border border-gray-200 p-3 md:grid-cols-8">
-              <select
-                value={unit.unitName}
-                onChange={(event) => {
-                  const selectedUnit = unitOptions.find((option) => option.name === event.target.value);
-                  updateUnit(index, {
-                    unitName: event.target.value,
-                    conversionFactor: Number(selectedUnit?.conversionFactor ?? unit.conversionFactor ?? 1),
-                  });
-                }}
-                className="rounded border px-3 py-2 md:col-span-2"
-              >
-                <option value="">Select unit</option>
-                {unitOptions.map((option) => (
-                  <option key={option.id} value={option.name}>
-                    {option.name}
-                  </option>
-                ))}
-              </select>
-              <input
-                type="number"
-                readOnly
-                value={unit.conversionFactor}
-                className="rounded border bg-gray-50 px-3 py-2 text-gray-700"
-                title="From Unit Master"
-              />
-              <input type="number" step="0.01" readOnly value={unit.costPrice ?? 0} className="rounded border bg-gray-50 px-3 py-2 text-gray-700" title="Auto-calculated from base cost price" />
-              <input type="number" step="0.01" readOnly value={unit.sellingPrice ?? 0} className="rounded border bg-gray-50 px-3 py-2 text-gray-700" title="Auto-calculated from base selling price" />
-              <input type="number" step="0.01" readOnly value={unit.wholesalePrice ?? 0} className="rounded border bg-gray-50 px-3 py-2 text-gray-700" title="Auto-calculated from base wholesale price" />
-              <label className="flex items-center gap-2 text-sm"><input type="radio" checked={unit.isBaseUnit} onChange={() => setBaseUnit(index)} /> Base</label>
-              <button type="button" onClick={() => setFormData((prev) => ({
-                ...prev,
-                units: recalculateUnitPrices(
-                  prev.units.filter((_, i) => i !== index),
-                  prev.costPrice,
-                  prev.sellingPrice,
-                  prev.wholesalePrice,
-                ),
-              }))} className="rounded border px-3 py-2 text-sm text-red-600">Remove</button>
+          <DynamicSection
+            title="Product Units"
+            onAdd={() => setFormData((prev) => ({
+              ...prev,
+              units: recalculateUnitPrices(
+                [...prev.units, emptyUnit()],
+                prev.costPrice,
+                prev.sellingPrice,
+                prev.wholesalePrice,
+                prev.useAutoUnitPricing !== false,
+              ),
+            }))}
+          >
+            <div className="overflow-x-auto rounded-lg border border-gray-200">
+              <table className="min-w-[960px] w-full divide-y divide-gray-200 text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    {['Unit', 'Factor', 'Cost Price', 'Selling Price', 'Wholesale Price', 'Override', 'Base', ''].map((header) => (
+                      <th
+                        key={header || 'action'}
+                        className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap"
+                      >
+                        {header}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 bg-white">
+                  {formData.units.map((unit, index) => {
+                    const calcSelling = unit.calculatedSellingPrice ?? (unit.isBaseUnit
+                      ? formData.sellingPrice
+                      : Math.round((formData.sellingPrice / (unit.conversionFactor > 0 ? unit.conversionFactor : 1)) * 100) / 100);
+                    const showOverride = !unit.isBaseUnit && formData.useAutoUnitPricing !== false;
+                    const rowClass = unit.isBaseUnit ? 'bg-blue-50/60' : 'hover:bg-gray-50';
+
+                    return (
+                      <tr key={index} className={rowClass}>
+                        <td className="px-3 py-3 align-middle min-w-[140px]">
+                          <select
+                            value={unit.unitName}
+                            onChange={(event) => {
+                              const selectedUnit = unitOptions.find((option) => option.name === event.target.value);
+                              updateUnit(index, {
+                                unitName: event.target.value,
+                                unitId: selectedUnit?.id ?? null,
+                                conversionFactor: unit.isBaseUnit
+                                  ? 1
+                                  : Number(selectedUnit?.defaultConversionFactor ?? unit.conversionFactor ?? 1),
+                              });
+                            }}
+                            className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
+                          >
+                            <option value="">Select unit</option>
+                            {unitOptions.map((option) => (
+                              <option key={option.id} value={option.name}>{option.name}</option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="px-3 py-3 align-middle w-24">
+                          <input
+                            type="number"
+                            min={1}
+                            step="1"
+                            readOnly={unit.isBaseUnit}
+                            value={unit.isBaseUnit ? 1 : unit.conversionFactor}
+                            onChange={(event) => updateUnit(index, { conversionFactor: Number(event.target.value || 0) })}
+                            className={`w-full rounded-md border px-2 py-1.5 text-sm text-right tabular-nums ${unit.isBaseUnit ? 'border-gray-200 bg-gray-100 text-gray-600' : 'border-gray-300'}`}
+                            title={unit.isBaseUnit ? 'Base unit factor is always 1' : 'Child units per 1 base unit'}
+                          />
+                        </td>
+                        <td className="px-3 py-3 align-middle w-28">
+                          <input
+                            type="number"
+                            step="0.01"
+                            readOnly
+                            value={unit.costPrice ?? 0}
+                            className="w-full rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5 text-sm text-right tabular-nums text-gray-700"
+                            title="Auto: base cost ÷ factor"
+                          />
+                        </td>
+                        <td className="px-3 py-3 align-middle w-28">
+                          {showOverride && unit.isPriceOverridden ? (
+                            <input
+                              type="number"
+                              step="0.01"
+                              min={0}
+                              value={unit.sellingPrice ?? 0}
+                              onChange={(event) => updateUnit(index, {
+                                sellingPrice: Number(event.target.value || 0),
+                                isPriceOverridden: true,
+                              })}
+                              className="w-full rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5 text-sm text-right tabular-nums"
+                              title="Manual override"
+                            />
+                          ) : (
+                            <input
+                              type="number"
+                              step="0.01"
+                              readOnly
+                              value={unit.sellingPrice ?? 0}
+                              className="w-full rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5 text-sm text-right tabular-nums text-gray-700"
+                              title={showOverride ? `Auto: ${calcSelling}` : 'Base selling price'}
+                            />
+                          )}
+                          {showOverride && (
+                            <p className="mt-0.5 text-[10px] text-gray-400 text-right">
+                              {unit.isPriceOverridden ? 'Manual' : `Auto ${calcSelling}`}
+                            </p>
+                          )}
+                        </td>
+                        <td className="px-3 py-3 align-middle w-28">
+                          <input
+                            type="number"
+                            step="0.01"
+                            readOnly
+                            value={unit.wholesalePrice ?? 0}
+                            className="w-full rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5 text-sm text-right tabular-nums text-gray-700"
+                            title="Auto: base wholesale ÷ factor"
+                          />
+                        </td>
+                        <td className="px-3 py-3 align-middle text-center w-20">
+                          {showOverride ? (
+                            <label className="inline-flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={Boolean(unit.isPriceOverridden)}
+                                onChange={(event) => updateUnit(index, {
+                                  isPriceOverridden: event.target.checked,
+                                  sellingPrice: event.target.checked ? (unit.sellingPrice ?? calcSelling) : undefined,
+                                })}
+                                className="rounded border-gray-300"
+                              />
+                              <span>On</span>
+                            </label>
+                          ) : (
+                            <span className="text-xs text-gray-300">—</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-3 align-middle text-center w-20">
+                          {unit.isBaseUnit ? (
+                            <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700">
+                              Base
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setBaseUnit(index)}
+                              className="text-xs text-blue-600 hover:text-blue-800 hover:underline"
+                            >
+                              Set base
+                            </button>
+                          )}
+                        </td>
+                        <td className="px-3 py-3 align-middle text-right w-16">
+                          <button
+                            type="button"
+                            onClick={() => setFormData((prev) => ({
+                              ...prev,
+                              units: recalculateUnitPrices(
+                                prev.units.filter((_, i) => i !== index),
+                                prev.costPrice,
+                                prev.sellingPrice,
+                                prev.wholesalePrice,
+                                prev.useAutoUnitPricing !== false,
+                              ),
+                            }))}
+                            className="rounded-md border border-red-200 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
+                          >
+                            Remove
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-          ))}
-        </DynamicSection>
+          </DynamicSection>
         </section>
         )}
 

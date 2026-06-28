@@ -238,10 +238,28 @@ export interface ProductWiseSalesReportPagedResponse extends ReportPagedResponse
   summary: ProductWiseSalesReportSummary;
 }
 
+export interface StockUnitBreakdownItem {
+  unitId: number;
+  unitName: string;
+  quantity: number;
+  isBaseUnit: boolean;
+}
+
+export interface StockUnitBreakdownResponse {
+  productId: number;
+  productName: string;
+  closingBalance: number;
+  baseUnitName: string;
+  units: StockUnitBreakdownItem[];
+}
+
 export interface StockSummaryItem {
   productId: number;
   productName: string;
   closingBalance: number;
+  baseUnitName?: string;
+  baseUnitId?: number | null;
+  hasMultipleUnits?: boolean;
   enableLowStockAlert?: boolean;
   lowStockAlertLevel?: number | null;
 }
@@ -255,6 +273,29 @@ export interface StockSummaryResponse {
   fromDate: string;
   toDate: string;
   totalClosingBalance: number;
+}
+
+export interface StockByUnitPivotColumn {
+  key: string;
+  label: string;
+}
+
+export interface StockByUnitPivotRow {
+  productId: number;
+  productName: string;
+  baseStock?: number;
+  [unitKey: string]: string | number | null | undefined;
+}
+
+export interface StockByUnitPivotResponse {
+  columns: StockByUnitPivotColumn[];
+  rows: StockByUnitPivotRow[];
+  totalRecords: number;
+  totalPages: number;
+  currentPage: number;
+  pageSize: number;
+  fromDate: string;
+  toDate: string;
 }
 
 export interface ReportDateRange {
@@ -344,6 +385,36 @@ export const reportService = {
     } = {},
   ) =>
     apiClient.get<StockSummaryResponse>('/reports/stock-summary', {
+      params: { branchId, ...params },
+      ...bh(branchId),
+    }),
+
+  getStockUnitBreakdown: (
+    branchId: number,
+    productId: number,
+    params: { warehouseId?: number; toDate?: string } = {},
+  ) =>
+    apiClient.get<StockUnitBreakdownResponse>(`/reports/stock-summary/${productId}/unit-breakdown`, {
+      params: { branchId, ...params },
+      ...bh(branchId),
+    }),
+
+  getStockByUnitPivot: (
+    branchId: number,
+    params: ReportDateRange & {
+      warehouseId?: number;
+      productId?: number;
+      categoryId?: number;
+      subCategoryId?: number;
+      brandId?: number;
+      page?: number;
+      pageSize?: number;
+      search?: string;
+      sortBy?: string;
+      sortDirection?: 'asc' | 'desc';
+    } = {},
+  ) =>
+    apiClient.get<StockByUnitPivotResponse>('/reports/stock-by-unit-pivot', {
       params: { branchId, ...params },
       ...bh(branchId),
     }),

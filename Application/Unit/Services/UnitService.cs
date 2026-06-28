@@ -70,8 +70,7 @@ public class UnitService : IUnitService
             BranchId = dto.BranchId,
             Name = dto.Name.Trim(),
             Code = dto.Code?.Trim() ?? string.Empty,
-            Description = dto.Description?.Trim() ?? string.Empty,
-            ConversionFactor = dto.ConversionFactor,
+            DefaultConversionFactor = dto.DefaultConversionFactor > 0 ? dto.DefaultConversionFactor : 1m,
             Status = status
         };
 
@@ -93,8 +92,7 @@ public class UnitService : IUnitService
 
         unit.Name = dto.Name.Trim();
         unit.Code = dto.Code?.Trim() ?? string.Empty;
-        unit.Description = dto.Description?.Trim() ?? string.Empty;
-        unit.ConversionFactor = dto.ConversionFactor;
+        unit.DefaultConversionFactor = dto.DefaultConversionFactor > 0 ? dto.DefaultConversionFactor : 1m;
         unit.Status = dto.IsActive ?? dto.Status;
 
         await _repository.SaveChangesAsync();
@@ -118,8 +116,8 @@ public class UnitService : IUnitService
         if (dto.BranchId <= 0)
             throw new InvalidOperationException("BranchId is required.");
 
-        if (dto.ConversionFactor <= 0)
-            throw new InvalidOperationException("Conversion factor must be greater than zero.");
+        if (dto.DefaultConversionFactor <= 0)
+            throw new InvalidOperationException("Default conversion factor must be greater than zero.");
     }
 
     private static UnitDto MapDto(MeasurementUnitEntity unit)
@@ -129,8 +127,7 @@ public class UnitService : IUnitService
             Id = unit.Id,
             Name = unit.Name,
             Code = unit.Code,
-            Description = unit.Description,
-            ConversionFactor = unit.ConversionFactor,
+            DefaultConversionFactor = unit.DefaultConversionFactor,
             Status = unit.Status,
             BranchId = unit.BranchId,
             BranchName = unit.Branch?.Name ?? string.Empty

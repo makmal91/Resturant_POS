@@ -1,6 +1,7 @@
 using POSSystem.Application.CashFlow.Interfaces;
 using POSSystem.Application.Common.Constants;
 using POSSystem.Application.Common.DTOs;
+using POSSystem.Application.Common.Helpers;
 using POSSystem.Application.Common.Interfaces;
 using POSSystem.Application.Ledger.Interfaces;
 using POSSystem.Application.Payments.Interfaces;
@@ -23,6 +24,8 @@ public class SalesService : ISalesService
     private readonly IPartyLedgerService _partyLedgerService;
     private readonly IInvoicePaymentService _invoicePaymentService;
     private readonly ICodeGeneratorService _codeGenerator;
+    private readonly IStockValidationService _stockValidationService;
+    private readonly IUnitPricingService _unitPricingService;
 
     public SalesService(
         ISalesRepository salesRepository,
@@ -32,7 +35,9 @@ public class SalesService : ISalesService
         ICashFlowService cashFlowService,
         IPartyLedgerService partyLedgerService,
         IInvoicePaymentService invoicePaymentService,
-        ICodeGeneratorService codeGenerator)
+        ICodeGeneratorService codeGenerator,
+        IStockValidationService stockValidationService,
+        IUnitPricingService unitPricingService)
     {
         _salesRepository = salesRepository;
         _stockLedgerRepository = stockLedgerRepository;
@@ -42,6 +47,8 @@ public class SalesService : ISalesService
         _partyLedgerService = partyLedgerService;
         _invoicePaymentService = invoicePaymentService;
         _codeGenerator = codeGenerator;
+        _stockValidationService = stockValidationService;
+        _unitPricingService = unitPricingService;
     }
 
     public async Task<PosProductLookupDto?> GetProductByBarcodeAsync(
@@ -103,17 +110,11 @@ public class SalesService : ISalesService
                 IsDiscountAllowed = p.IsDiscountAllowed,
                 DiscountType   = p.DiscountType,
                 DiscountValue  = p.DiscountValue,
+                UseAutoUnitPricing = p.UseAutoUnitPricing,
                 Units = p.Units
                     .Where(u => !u.IsDeleted)
-                    .Select(u => new PosProductUnitDto
-                    {
-                        UnitId = u.Id,
-                        UnitName = u.UnitName,
-                        SellingPrice = u.SellingPrice ?? p.SellingPrice,
-                        WholesalePrice = u.WholesalePrice ?? p.WholesalePrice,
-                        ConversionFactor = u.ConversionFactor,
-                        IsBaseUnit = u.IsBaseUnit
-                    }).ToList()
+                    .Select(u => MapPosProductUnitDto(p, u))
+                    .ToList()
             };
 
             if (p.IsVariantEnabled)
@@ -213,22 +214,31 @@ public class SalesService : ISalesService
         ValidateCreditSale(dto.IsCreditSale, dto.CustomerId);
 
         var resolvedItems = await ResolveSaleItemsAsync(dto.Items, dto.PricingType, dto.BusinessId, dto.BranchId);
-        await ValidateStockAvailabilityFromResolvedAsync(dto.BusinessId, dto.BranchId, dto.WarehouseId, resolvedItems);
+        var stockRequirements = await BuildStockRequirementsAsync(dto.BusinessId, dto.BranchId, resolvedItems);
+        await _stockValidationService.ValidateAvailabilityAsync(
+            dto.BusinessId, dto.BranchId, dto.WarehouseId, stockRequirements);
 
         var invoiceNo = await GenerateInvoiceNoAsync(dto.BranchId);
         var invoice = BuildInvoice(invoiceNo, dto, resolvedItems);
         invoice.Status = SaleInvoiceStatus.Completed;
 
-        await _salesRepository.AddAsync(invoice);
-        await _salesRepository.SaveChangesAsync();
-
-        foreach (var item in invoice.Items.Where(i => !i.IsDeleted))
+        await _stockValidationService.ExecuteWithStockLockAsync(async () =>
         {
-            await _stockLedgerRepository.AddAsync(CreateSaleStockLedgerEntry(
-                item, invoice.WarehouseId, invoice.Id, invoice.InvoiceNo, invoice.SaleDate,
-                dto.BusinessId, dto.BranchId));
-        }
-        await _stockLedgerRepository.SaveChangesAsync();
+            await _stockValidationService.ValidateAvailabilityAsync(
+                dto.BusinessId, dto.BranchId, dto.WarehouseId, stockRequirements);
+
+            await _salesRepository.AddAsync(invoice);
+            await _salesRepository.SaveChangesAsync();
+
+            foreach (var item in invoice.Items.Where(i => !i.IsDeleted))
+            {
+                await _stockLedgerRepository.AddAsync(CreateSaleStockLedgerEntry(
+                    item, invoice.WarehouseId, invoice.Id, invoice.InvoiceNo, invoice.SaleDate,
+                    dto.BusinessId, dto.BranchId));
+            }
+
+            await _stockLedgerRepository.SaveChangesAsync();
+        });
 
         await _lowStockAlertService.EvaluateAfterStockChangeAsync(
             dto.BusinessId,
@@ -284,7 +294,9 @@ public class SalesService : ISalesService
         };
 
         var resolvedItems = await ResolveSaleItemsAsync(dto.Items, dto.PricingType, dto.BusinessId, dto.BranchId);
-        await ValidateStockAvailabilityFromResolvedAsync(dto.BusinessId, dto.BranchId, dto.WarehouseId, resolvedItems);
+        var stockRequirements = await BuildStockRequirementsAsync(dto.BusinessId, dto.BranchId, resolvedItems);
+        await _stockValidationService.ValidateAvailabilityAsync(
+            dto.BusinessId, dto.BranchId, dto.WarehouseId, stockRequirements);
 
         var invoice = BuildInvoice(invoiceNo, createDto, resolvedItems);
         invoice.Status = SaleInvoiceStatus.Held;
@@ -420,65 +432,42 @@ public class SalesService : ISalesService
     private async Task ValidateStockAvailabilityFromResolvedAsync(
         int businessId, int branchId, int warehouseId, List<ResolvedSaleLineItem> items)
     {
-        var productIds = items.Select(i => i.ProductId).Distinct().ToList();
-        var settings = await _productRepository.GetStockSettingsByIdsAsync(businessId, branchId, productIds);
+        var requirements = await BuildStockRequirementsAsync(businessId, branchId, items);
+        await _stockValidationService.ValidateAvailabilityAsync(businessId, branchId, warehouseId, requirements);
+    }
 
-        var requiredByKey = new Dictionary<string, decimal>();
+    private async Task<List<StockRequirement>> BuildStockRequirementsAsync(
+        int businessId, int branchId, List<ResolvedSaleLineItem> items)
+    {
+        var productCache = new Dictionary<int, ProductEntity>();
+        var requirements = new List<StockRequirement>();
+
         foreach (var item in items)
         {
-            if (settings.TryGetValue(item.ProductId, out var productSettings) && productSettings.AllowNegativeStock)
-                continue;
-
-            var key = $"{item.ProductId}:{item.VariantId ?? 0}";
-            requiredByKey[key] = requiredByKey.GetValueOrDefault(key) + item.BaseQuantity;
-        }
-
-        if (requiredByKey.Count == 0)
-            return;
-
-        var productCache = new Dictionary<int, ProductEntity>();
-        foreach (var productId in requiredByKey.Keys.Select(k => int.Parse(k.Split(':')[0])).Distinct())
-        {
-            var product = await _productRepository.GetByIdAsync(productId, businessId, branchId);
-            if (product != null)
-                productCache[productId] = product;
-        }
-
-        var insufficient = new List<string>();
-        foreach (var (key, requiredQty) in requiredByKey)
-        {
-            var parts = key.Split(':');
-            var productId = int.Parse(parts[0]);
-            var variantId = int.Parse(parts[1]);
-            int? variant = variantId == 0 ? null : variantId;
-
-            var available = await _stockLedgerRepository.GetCurrentStockAsync(
-                businessId, branchId, productId, variant, warehouseId);
-
-            if (requiredQty > available)
+            if (!productCache.TryGetValue(item.ProductId, out var product))
             {
-                productCache.TryGetValue(productId, out var product);
-                var productName = product?.ProductName ?? $"Product #{productId}";
-                var variantName = variant.HasValue
-                    ? product?.Variants.FirstOrDefault(v => v.Id == variant.Value && !v.IsDeleted)?.VariantName
-                    : null;
-                var baseUnitName = product?.Units.FirstOrDefault(u => u.IsBaseUnit && !u.IsDeleted)?.UnitName
-                    ?? product?.Units.FirstOrDefault(u => !u.IsDeleted)?.UnitName
-                    ?? "base unit";
-
-                var label = variantName != null ? $"{productName} ({variantName})" : productName;
-                insufficient.Add($"{label}: required {requiredQty:N2} {baseUnitName}, available {available:N2} {baseUnitName}");
+                product = await _productRepository.GetByIdAsync(item.ProductId, businessId, branchId)
+                    ?? throw new InvalidOperationException($"Product {item.ProductId} not found.");
+                productCache[item.ProductId] = product;
             }
+
+            var variantName = item.VariantId.HasValue
+                ? product.Variants.FirstOrDefault(v => v.Id == item.VariantId && !v.IsDeleted)?.VariantName
+                : null;
+            var baseUnitName = product.Units.FirstOrDefault(u => u.IsBaseUnit && !u.IsDeleted)?.UnitName ?? "base unit";
+
+            requirements.Add(new StockRequirement
+            {
+                ProductId = item.ProductId,
+                VariantId = item.VariantId,
+                BaseQuantity = item.BaseQuantity,
+                ProductName = product.ProductName,
+                VariantName = variantName,
+                BaseUnitName = baseUnitName
+            });
         }
 
-        if (insufficient.Count == 0)
-            return;
-
-        var message = insufficient.Count == 1
-            ? $"Insufficient stock — {insufficient[0]}."
-            : "Insufficient stock:\n" + string.Join("\n", insufficient.Select((line, i) => $"{i + 1}. {line}"));
-
-        throw new InvalidOperationException(message);
+        return requirements;
     }
 
     private async Task ValidateStockAvailabilityAsync(
@@ -487,8 +476,6 @@ public class SalesService : ISalesService
         var resolved = await ResolveSaleItemsAsync(items, pricingType, businessId, branchId);
         await ValidateStockAvailabilityFromResolvedAsync(businessId, branchId, warehouseId, resolved);
     }
-
-    private static decimal ConvertToBase(decimal qty, decimal rate) => qty * rate;
 
     private sealed record ResolvedSaleLineItem(
         int ProductId,
@@ -523,12 +510,14 @@ public class SalesService : ISalesService
 
             var unit = product.Units.FirstOrDefault(u => u.Id == i.UnitId && !u.IsDeleted)
                 ?? throw new InvalidOperationException(
-                    $"Unit {i.UnitId} is not valid for product '{product.ProductName}'.");
+                    $"Unit {i.UnitId} is not valid for product '{product.ProductName}'. No conversion mapping exists.");
+
+            UnitConversionHelper.ValidateConversionFactor(unit.IsBaseUnit, unit.ConversionFactor, unit.UnitName);
 
             var (variant, variantId) = ResolveProductVariant(product, i.VariantId);
 
-            var conversionFactor = unit.ConversionFactor > 0 ? unit.ConversionFactor : 1m;
-            var unitPrice = ResolveUnitSellingPrice(product, unit, variant, pricingType);
+            var conversionFactor = unit.ConversionFactor;
+            var unitPrice = _unitPricingService.GetEffectiveSellingPrice(product, unit, variant, pricingType);
 
             resolved.Add(new ResolvedSaleLineItem(
                 i.ProductId,
@@ -536,7 +525,7 @@ public class SalesService : ISalesService
                 unit.Id,
                 i.Quantity,
                 conversionFactor,
-                ConvertToBase(i.Quantity, conversionFactor),
+                UnitConversionHelper.ToBaseQuantity(i.Quantity, conversionFactor),
                 unitPrice,
                 i.DiscountPercent,
                 i.DiscountAmount,
@@ -571,21 +560,91 @@ public class SalesService : ISalesService
         return (fallback, fallback.Id);
     }
 
-    private static decimal ResolveUnitSellingPrice(
-        ProductEntity product, ProductUnit unit, ProductVariant? variant, PricingType pricingType)
+    private PosProductUnitDto MapPosProductUnitDto(ProductEntity product, ProductUnit unit)
     {
-        if (pricingType == PricingType.Wholesale)
+        var calcRetail = _unitPricingService.CalculateAutoPrice(
+            product.SellingPrice, unit.ConversionFactor, unit.IsBaseUnit);
+        var calcWholesale = _unitPricingService.CalculateAutoPrice(
+            product.WholesalePrice, unit.ConversionFactor, unit.IsBaseUnit);
+
+        return new PosProductUnitDto
         {
-            if (unit.WholesalePrice.HasValue) return unit.WholesalePrice.Value;
-            return product.WholesalePrice;
-        }
+            UnitId = unit.Id,
+            UnitName = unit.UnitName,
+            SellingPrice = _unitPricingService.GetEffectiveSellingPrice(product, unit, null, PricingType.Retail),
+            WholesalePrice = _unitPricingService.GetEffectiveWholesalePrice(product, unit),
+            CalculatedSellingPrice = calcRetail,
+            CalculatedWholesalePrice = calcWholesale,
+            ConversionFactor = unit.ConversionFactor,
+            IsBaseUnit = unit.IsBaseUnit,
+            IsPriceOverridden = unit.IsPriceOverridden
+        };
+    }
 
-        if (unit.SellingPrice.HasValue) return unit.SellingPrice.Value;
+    private PosProductLookupDto MapProductToLookup(
+        ProductEntity product, ProductBarcode? matchedBarcode, string barcodeValue, decimal stock)
+    {
+        var matchedVariant = matchedBarcode?.ProductVariantId.HasValue == true
+            ? product.Variants.FirstOrDefault(v => v.Id == matchedBarcode.ProductVariantId)
+            : null;
 
-        if (variant?.SellingPriceOverride.HasValue == true)
-            return variant.SellingPriceOverride.Value;
+        var matchedUnit = matchedBarcode?.ProductUnitId.HasValue == true
+            ? product.Units.FirstOrDefault(u => u.Id == matchedBarcode.ProductUnitId)
+            : product.Units.FirstOrDefault(u => u.IsBaseUnit);
 
-        return product.SellingPrice + (variant?.AdditionalPrice ?? 0);
+        var baseUnit = product.Units.FirstOrDefault(u => u.IsBaseUnit && !u.IsDeleted)
+            ?? product.Units.FirstOrDefault(u => !u.IsDeleted);
+
+        decimal retailPrice = matchedUnit != null
+            ? _unitPricingService.GetEffectiveSellingPrice(product, matchedUnit, matchedVariant, PricingType.Retail)
+            : matchedVariant?.SellingPriceOverride ?? product.SellingPrice;
+
+        decimal wholesalePrice = matchedUnit != null
+            ? _unitPricingService.GetEffectiveWholesalePrice(product, matchedUnit)
+            : product.WholesalePrice;
+
+        return new PosProductLookupDto
+        {
+            ProductId = product.Id,
+            ProductName = product.ProductName,
+            ProductCode = product.ProductCode,
+            SKU = product.SKU,
+            IsVariantEnabled = product.IsVariantEnabled,
+            IsDiscountAllowed = product.IsDiscountAllowed,
+            DiscountType = product.DiscountType,
+            DiscountValue = product.DiscountValue,
+            UseAutoUnitPricing = product.UseAutoUnitPricing,
+            Barcode = barcodeValue,
+            RetailPrice = retailPrice,
+            WholesalePrice = wholesalePrice,
+            MatchedUnitId = matchedUnit?.Id,
+            MatchedUnitName = matchedUnit?.UnitName ?? string.Empty,
+            MatchedUnitConversionFactor = matchedUnit?.ConversionFactor ?? 1,
+            MatchedVariantId = matchedVariant?.Id,
+            MatchedVariantName = matchedVariant?.VariantName,
+            MatchedVariantSize = matchedVariant?.Size,
+            MatchedVariantColor = matchedVariant?.Color,
+            MatchedVariantSellingPrice = matchedVariant?.SellingPriceOverride,
+            Stock = stock,
+            AllowNegativeStock = product.AllowNegativeStock,
+            BaseUnitName = baseUnit?.UnitName ?? string.Empty,
+            AvailableUnits = product.Units
+                .Where(u => !u.IsDeleted)
+                .Select(u => MapPosProductUnitDto(product, u))
+                .ToList(),
+            AvailableVariants = product.Variants
+                .Where(v => !v.IsDeleted && v.Status)
+                .Select(v => new PosProductVariantDto
+                {
+                    VariantId = v.Id,
+                    VariantName = v.VariantName,
+                    Size = v.Size,
+                    Color = v.Color,
+                    SKU = v.SKU,
+                    SellingPriceOverride = v.SellingPriceOverride ?? (product.SellingPrice + v.AdditionalPrice),
+                    AdditionalPrice = v.AdditionalPrice
+                }).ToList()
+        };
     }
 
     private static StockLedger CreateSaleStockLedgerEntry(
@@ -678,76 +737,6 @@ public class SalesService : ISalesService
     }
 
     // ─── Mapping ──────────────────────────────────────────────────────────────
-
-    private static PosProductLookupDto MapProductToLookup(
-        ProductEntity product, ProductBarcode? matchedBarcode, string barcodeValue, decimal stock)
-    {
-        var matchedVariant = matchedBarcode?.ProductVariantId.HasValue == true
-            ? product.Variants.FirstOrDefault(v => v.Id == matchedBarcode.ProductVariantId)
-            : null;
-
-        var matchedUnit = matchedBarcode?.ProductUnitId.HasValue == true
-            ? product.Units.FirstOrDefault(u => u.Id == matchedBarcode.ProductUnitId)
-            : product.Units.FirstOrDefault(u => u.IsBaseUnit);
-
-        var baseUnit = product.Units.FirstOrDefault(u => u.IsBaseUnit && !u.IsDeleted)
-            ?? product.Units.FirstOrDefault(u => !u.IsDeleted);
-
-        decimal retailPrice = matchedVariant?.SellingPriceOverride ?? product.SellingPrice;
-        if (matchedUnit?.SellingPrice.HasValue == true) retailPrice = matchedUnit.SellingPrice.Value;
-
-        decimal wholesalePrice = product.WholesalePrice;
-        if (matchedUnit?.WholesalePrice.HasValue == true) wholesalePrice = matchedUnit.WholesalePrice.Value;
-
-        return new PosProductLookupDto
-        {
-            ProductId = product.Id,
-            ProductName = product.ProductName,
-            ProductCode = product.ProductCode,
-            SKU = product.SKU,
-            IsVariantEnabled = product.IsVariantEnabled,
-            IsDiscountAllowed = product.IsDiscountAllowed,
-            DiscountType = product.DiscountType,
-            DiscountValue = product.DiscountValue,
-            Barcode = barcodeValue,
-            RetailPrice = retailPrice,
-            WholesalePrice = wholesalePrice,
-            MatchedUnitId = matchedUnit?.Id,
-            MatchedUnitName = matchedUnit?.UnitName ?? string.Empty,
-            MatchedUnitConversionFactor = matchedUnit?.ConversionFactor ?? 1,
-            MatchedVariantId = matchedVariant?.Id,
-            MatchedVariantName = matchedVariant?.VariantName,
-            MatchedVariantSize = matchedVariant?.Size,
-            MatchedVariantColor = matchedVariant?.Color,
-            MatchedVariantSellingPrice = matchedVariant?.SellingPriceOverride,
-            Stock = stock,
-            AllowNegativeStock = product.AllowNegativeStock,
-            BaseUnitName = baseUnit?.UnitName ?? string.Empty,
-            AvailableUnits = product.Units
-                .Where(u => !u.IsDeleted)
-                .Select(u => new PosProductUnitDto
-                {
-                    UnitId = u.Id,
-                    UnitName = u.UnitName,
-                    SellingPrice = u.SellingPrice ?? product.SellingPrice,
-                    WholesalePrice = u.WholesalePrice ?? product.WholesalePrice,
-                    ConversionFactor = u.ConversionFactor,
-                    IsBaseUnit = u.IsBaseUnit
-                }).ToList(),
-            AvailableVariants = product.Variants
-                .Where(v => !v.IsDeleted && v.Status)
-                .Select(v => new PosProductVariantDto
-                {
-                    VariantId = v.Id,
-                    VariantName = v.VariantName,
-                    Size = v.Size,
-                    Color = v.Color,
-                    SKU = v.SKU,
-                    SellingPriceOverride = v.SellingPriceOverride ?? (product.SellingPrice + v.AdditionalPrice),
-                    AdditionalPrice = v.AdditionalPrice
-                }).ToList()
-        };
-    }
 
     private async Task<SaleInvoiceDto> MapInvoiceDtoAsync(SaleInvoice inv)
     {

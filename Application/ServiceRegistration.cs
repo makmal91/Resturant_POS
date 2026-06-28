@@ -74,6 +74,7 @@ public static class ServiceRegistration
         services.AddScoped<IBrandService, BrandService>();
 
         // Register product management services
+        services.AddScoped<IUnitPricingService, UnitPricingService>();
         services.AddScoped<IProductService, ProductService>();
 
         // Register unit master services
@@ -100,6 +101,7 @@ public static class ServiceRegistration
         services.AddScoped<IPurchaseService, PurchaseService>();
         services.AddScoped<IStockService, StockService>();
         services.AddScoped<ILowStockAlertService, LowStockAlertService>();
+        services.AddScoped<IStockValidationService, StockValidationService>();
 
         // Register POS sales service
         services.AddScoped<ISalesService, SalesService>();

@@ -7,6 +7,7 @@ export interface ManagementEntity {
   isActive: boolean;
   code?: string;
   conversionFactor?: number;
+  defaultConversionFactor?: number;
   branchId?: number;
   categoryType?: 'Sale' | 'Inventory';
   menuCategoryId?: number;
@@ -28,6 +29,7 @@ export interface ManagementFormValues {
   isActive: boolean;
   code?: string;
   conversionFactor?: number;
+  defaultConversionFactor?: number;
   branchId?: number;
   categoryType?: 'Sale' | 'Inventory';
   menuCategoryId?: number;

@@ -149,6 +149,9 @@ public static class ProductManagementDatabaseInitializer
             SyncLegacyProductsSchemaSql(),
             SyncLegacyProductVariantsSchemaSql(),
             SyncLegacyProductUnitsSchemaSql(),
+            SyncLegacyProductsBaseUnitSchemaSql(),
+            SyncUnitPricingSchemaSql(),
+            BackfillMultiUnitDataSql(),
             SyncLegacyProductImagesSchemaSql(),
             SyncLegacyProductBarcodesSchemaSql(),
             """
@@ -344,6 +347,103 @@ public static class ProductManagementDatabaseInitializer
 
             IF COL_LENGTH(N'dbo.ProductUnits', N'ModifiedByName') IS NULL
                 ALTER TABLE [dbo].[ProductUnits] ADD [ModifiedByName] NVARCHAR(MAX) NULL;
+
+            IF COL_LENGTH(N'dbo.ProductUnits', N'UnitId') IS NULL
+                ALTER TABLE [dbo].[ProductUnits] ADD [UnitId] INT NULL;
+
+            IF NOT EXISTS (
+                SELECT 1 FROM sys.foreign_keys
+                WHERE name = N'FK_ProductUnits_Units_UnitId'
+                  AND parent_object_id = OBJECT_ID(N'dbo.ProductUnits')
+            )
+                ALTER TABLE [dbo].[ProductUnits]
+                    ADD CONSTRAINT [FK_ProductUnits_Units_UnitId]
+                    FOREIGN KEY ([UnitId]) REFERENCES [dbo].[Units]([Id]);
+        END
+        """;
+
+    private static string SyncLegacyProductsBaseUnitSchemaSql() => """
+        IF OBJECT_ID(N'[dbo].[Products]', N'U') IS NOT NULL
+        BEGIN
+            IF COL_LENGTH(N'dbo.Products', N'BaseUnitId') IS NULL
+                ALTER TABLE [dbo].[Products] ADD [BaseUnitId] INT NULL;
+
+            IF NOT EXISTS (
+                SELECT 1 FROM sys.foreign_keys
+                WHERE name = N'FK_Products_ProductUnits_BaseUnitId'
+                  AND parent_object_id = OBJECT_ID(N'dbo.Products')
+            )
+                ALTER TABLE [dbo].[Products]
+                    ADD CONSTRAINT [FK_Products_ProductUnits_BaseUnitId]
+                    FOREIGN KEY ([BaseUnitId]) REFERENCES [dbo].[ProductUnits]([Id]);
+
+            IF NOT EXISTS (
+                SELECT 1 FROM sys.indexes
+                WHERE name = N'idx_product_base_unit_id'
+                  AND object_id = OBJECT_ID(N'dbo.Products')
+            )
+                CREATE INDEX [idx_product_base_unit_id] ON [dbo].[Products]([BaseUnitId]);
+        END
+        """;
+
+    private static string SyncUnitPricingSchemaSql() => """
+        IF OBJECT_ID(N'[dbo].[Products]', N'U') IS NOT NULL
+        BEGIN
+            IF COL_LENGTH(N'dbo.Products', N'UseAutoUnitPricing') IS NULL
+                ALTER TABLE [dbo].[Products] ADD [UseAutoUnitPricing] BIT NOT NULL
+                    CONSTRAINT [DF_Products_UseAutoUnitPricing] DEFAULT 1;
+        END
+
+        IF OBJECT_ID(N'[dbo].[ProductUnits]', N'U') IS NOT NULL
+        BEGIN
+            IF COL_LENGTH(N'dbo.ProductUnits', N'IsPriceOverridden') IS NULL
+                ALTER TABLE [dbo].[ProductUnits] ADD [IsPriceOverridden] BIT NOT NULL
+                    CONSTRAINT [DF_ProductUnits_IsPriceOverridden] DEFAULT 0;
+
+            -- Legacy factors stored as reciprocals (e.g. 0.02 instead of 50) → child-per-base format
+            UPDATE [dbo].[ProductUnits]
+            SET [ConversionFactor] = ROUND(1.0 / [ConversionFactor], 4)
+            WHERE [IsBaseUnit] = 0 AND [IsDeleted] = 0
+              AND [ConversionFactor] > 0 AND [ConversionFactor] < 1;
+        END
+
+        IF OBJECT_ID(N'[dbo].[Units]', N'U') IS NOT NULL
+        BEGIN
+            UPDATE [dbo].[Units]
+            SET [DefaultConversionFactor] = ROUND(1.0 / [DefaultConversionFactor], 4)
+            WHERE [IsDeleted] = 0
+              AND [DefaultConversionFactor] > 0 AND [DefaultConversionFactor] < 1;
+        END
+        """;
+
+    private static string BackfillMultiUnitDataSql() => """
+        IF OBJECT_ID(N'[dbo].[ProductUnits]', N'U') IS NOT NULL
+        BEGIN
+            UPDATE pu
+            SET pu.[UnitId] = u.[Id]
+            FROM [dbo].[ProductUnits] pu
+            INNER JOIN [dbo].[Units] u
+                ON u.[BusinessId] = pu.[BusinessId]
+               AND u.[BranchId] = pu.[BranchId]
+               AND LTRIM(RTRIM(u.[Name])) = LTRIM(RTRIM(pu.[UnitName]))
+               AND u.[IsDeleted] = 0
+            WHERE pu.[UnitId] IS NULL AND pu.[IsDeleted] = 0;
+
+            UPDATE [dbo].[ProductUnits]
+            SET [ConversionFactor] = 1
+            WHERE [IsBaseUnit] = 1 AND [IsDeleted] = 0 AND [ConversionFactor] <> 1;
+        END
+
+        IF OBJECT_ID(N'[dbo].[Products]', N'U') IS NOT NULL
+        BEGIN
+            UPDATE p
+            SET p.[BaseUnitId] = bu.[Id]
+            FROM [dbo].[Products] p
+            INNER JOIN [dbo].[ProductUnits] bu
+                ON bu.[ProductId] = p.[Id]
+               AND bu.[IsBaseUnit] = 1
+               AND bu.[IsDeleted] = 0
+            WHERE p.[BaseUnitId] IS NULL AND p.[IsDeleted] = 0;
         END
         """;
 

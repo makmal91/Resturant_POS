@@ -18,6 +18,7 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
         builder.Property(p => p.CostPrice).HasPrecision(18, 2);
         builder.Property(p => p.SellingPrice).HasPrecision(18, 2);
         builder.Property(p => p.WholesalePrice).HasPrecision(18, 2);
+        builder.Property(p => p.UseAutoUnitPricing).HasDefaultValue(true);
         builder.Property(p => p.DiscountType).HasConversion<int?>();
         builder.Property(p => p.DiscountValue).HasPrecision(18, 2);
         builder.Property(p => p.AllowNegativeStock).HasDefaultValue(false);
@@ -25,6 +26,13 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
         builder.Property(p => p.LowStockAlertLevel).HasPrecision(18, 4);
         builder.Property(p => p.OpeningStock).HasPrecision(18, 4).HasDefaultValue(0m);
         builder.Property(p => p.OpeningStockVariantWise).HasDefaultValue(false);
+
+        builder.HasOne(p => p.BaseUnit)
+            .WithMany()
+            .HasForeignKey(p => p.BaseUnitId)
+            .OnDelete(DeleteBehavior.NoAction);
+
+        builder.HasIndex(p => p.BaseUnitId).HasDatabaseName("idx_product_base_unit_id");
 
         builder.HasIndex(p => new { p.BusinessId, p.BranchId, p.ProductCode })
             .IsUnique()
@@ -83,7 +91,14 @@ public class ProductUnitConfiguration : IEntityTypeConfiguration<ProductUnit>
         builder.Property(u => u.CostPrice).HasPrecision(18, 2);
         builder.Property(u => u.SellingPrice).HasPrecision(18, 2);
         builder.Property(u => u.WholesalePrice).HasPrecision(18, 2);
+        builder.Property(u => u.IsPriceOverridden).HasDefaultValue(false);
         builder.HasIndex(u => new { u.ProductId, u.UnitName }).HasDatabaseName("idx_productunit_product_name");
+        builder.HasIndex(u => u.UnitId).HasDatabaseName("idx_productunit_unit_id");
+
+        builder.HasOne(u => u.Unit)
+            .WithMany()
+            .HasForeignKey(u => u.UnitId)
+            .OnDelete(DeleteBehavior.NoAction);
     }
 }
 

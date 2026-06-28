@@ -15,6 +15,7 @@ public class PosProductLookupDto
     public bool IsDiscountAllowed { get; set; }
     public ProductDiscountType? DiscountType { get; set; }
     public decimal DiscountValue { get; set; }
+    public bool UseAutoUnitPricing { get; set; } = true;
     public string Barcode { get; set; } = string.Empty;
     public decimal RetailPrice { get; set; }
     public decimal WholesalePrice { get; set; }
@@ -39,8 +40,11 @@ public class PosProductUnitDto
     public string UnitName { get; set; } = string.Empty;
     public decimal SellingPrice { get; set; }
     public decimal WholesalePrice { get; set; }
+    public decimal CalculatedSellingPrice { get; set; }
+    public decimal CalculatedWholesalePrice { get; set; }
     public decimal ConversionFactor { get; set; }
     public bool IsBaseUnit { get; set; }
+    public bool IsPriceOverridden { get; set; }
 }
 
 public class PosProductVariantDto
@@ -81,6 +85,7 @@ public class PosSearchGroupDto
     public bool IsDiscountAllowed { get; set; }
     public ProductDiscountType? DiscountType { get; set; }
     public decimal DiscountValue { get; set; }
+    public bool UseAutoUnitPricing { get; set; } = true;
     public List<PosProductUnitDto> Units { get; set; } = new();
     public List<PosSearchVariantRowDto> Variants { get; set; } = new();
 }

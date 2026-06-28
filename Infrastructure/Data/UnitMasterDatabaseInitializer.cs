@@ -17,8 +17,7 @@ public static class UnitMasterDatabaseInitializer
                     [Id] INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
                     [Name] NVARCHAR(100) NOT NULL,
                     [Code] NVARCHAR(20) NOT NULL CONSTRAINT [DF_Units_Code] DEFAULT N'',
-                    [Description] NVARCHAR(500) NOT NULL CONSTRAINT [DF_Units_Description] DEFAULT N'',
-                    [ConversionFactor] DECIMAL(18,4) NOT NULL CONSTRAINT [DF_Units_ConversionFactor] DEFAULT 1,
+                    [DefaultConversionFactor] DECIMAL(18,4) NOT NULL CONSTRAINT [DF_Units_DefaultConversionFactor] DEFAULT 1,
                     [Status] BIT NOT NULL CONSTRAINT [DF_Units_Status] DEFAULT 1,
                     [BusinessId] INT NOT NULL CONSTRAINT [DF_Units_BusinessId] DEFAULT 1,
                     [CreatedDate] DATETIME2 NOT NULL CONSTRAINT [DF_Units_CreatedDate] DEFAULT GETUTCDATE(),
@@ -38,8 +37,7 @@ public static class UnitMasterDatabaseInitializer
                     [Id] INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
                     [Name] NVARCHAR(100) NOT NULL,
                     [Code] NVARCHAR(20) NOT NULL CONSTRAINT [DF_Units_Code] DEFAULT N'',
-                    [Description] NVARCHAR(500) NOT NULL CONSTRAINT [DF_Units_Description] DEFAULT N'',
-                    [ConversionFactor] DECIMAL(18,4) NOT NULL CONSTRAINT [DF_Units_ConversionFactor] DEFAULT 1,
+                    [DefaultConversionFactor] DECIMAL(18,4) NOT NULL CONSTRAINT [DF_Units_DefaultConversionFactor] DEFAULT 1,
                     [Status] BIT NOT NULL CONSTRAINT [DF_Units_Status] DEFAULT 1,
                     [BusinessId] INT NOT NULL CONSTRAINT [DF_Units_BusinessId] DEFAULT 1,
                     [CreatedDate] DATETIME2 NOT NULL CONSTRAINT [DF_Units_CreatedDate] DEFAULT GETUTCDATE(),
@@ -66,22 +64,30 @@ public static class UnitMasterDatabaseInitializer
             """,
             """
             IF OBJECT_ID(N'[dbo].[Units]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'dbo.Units', N'Code') IS NULL
-                ALTER TABLE [Units] ADD [Code] NVARCHAR(20) NOT NULL CONSTRAINT [DF_Units_Code] DEFAULT N'';
-            IF COL_LENGTH('Units', 'Description') IS NULL
-                ALTER TABLE [Units] ADD [Description] NVARCHAR(500) NOT NULL CONSTRAINT [DF_Units_Description] DEFAULT N'';
-            IF COL_LENGTH('Units', 'ConversionFactor') IS NULL
-                ALTER TABLE [Units] ADD [ConversionFactor] DECIMAL(18,4) NOT NULL CONSTRAINT [DF_Units_ConversionFactor] DEFAULT 1;
-            IF COL_LENGTH('Units', 'Status') IS NULL
-                ALTER TABLE [Units] ADD [Status] BIT NOT NULL CONSTRAINT [DF_Units_Status] DEFAULT 1;
-            IF COL_LENGTH('Units', 'BusinessId') IS NULL
-                ALTER TABLE [Units] ADD [BusinessId] INT NOT NULL CONSTRAINT [DF_Units_BusinessId] DEFAULT 1;
-            IF COL_LENGTH('Units', 'BranchId') IS NULL
-                ALTER TABLE [Units] ADD [BranchId] INT NOT NULL CONSTRAINT [DF_Units_BranchId] DEFAULT 1;
-            IF COL_LENGTH('Units', 'CreatedDate') IS NULL
-                ALTER TABLE [Units] ADD [CreatedDate] DATETIME2 NOT NULL CONSTRAINT [DF_Units_CreatedDate] DEFAULT GETUTCDATE();
-            IF COL_LENGTH('Units', 'IsDeleted') IS NULL
-                ALTER TABLE [Units] ADD [IsDeleted] BIT NOT NULL CONSTRAINT [DF_Units_IsDeleted] DEFAULT 0;
+            BEGIN
+               IF COL_LENGTH(N'dbo.Units', N'Code') IS NULL
+                    ALTER TABLE [Units] ADD [Code] NVARCHAR(20) NOT NULL CONSTRAINT [DF_Units_Code] DEFAULT N'';
+               IF COL_LENGTH('Units', 'Status') IS NULL
+                    ALTER TABLE [Units] ADD [Status] BIT NOT NULL CONSTRAINT [DF_Units_Status] DEFAULT 1;
+               IF COL_LENGTH('Units', 'BusinessId') IS NULL
+                    ALTER TABLE [Units] ADD [BusinessId] INT NOT NULL CONSTRAINT [DF_Units_BusinessId] DEFAULT 1;
+               IF COL_LENGTH('Units', 'BranchId') IS NULL
+                    ALTER TABLE [Units] ADD [BranchId] INT NOT NULL CONSTRAINT [DF_Units_BranchId] DEFAULT 1;
+               IF COL_LENGTH('Units', 'CreatedDate') IS NULL
+                    ALTER TABLE [Units] ADD [CreatedDate] DATETIME2 NOT NULL CONSTRAINT [DF_Units_CreatedDate] DEFAULT GETUTCDATE();
+               IF COL_LENGTH('Units', 'IsDeleted') IS NULL
+                    ALTER TABLE [Units] ADD [IsDeleted] BIT NOT NULL CONSTRAINT [DF_Units_IsDeleted] DEFAULT 0;
+
+               -- Migrate legacy ConversionFactor → DefaultConversionFactor
+               IF COL_LENGTH(N'dbo.Units', N'DefaultConversionFactor') IS NULL
+               BEGIN
+                    IF COL_LENGTH(N'dbo.Units', N'ConversionFactor') IS NOT NULL
+                        EXEC sp_rename N'dbo.Units.ConversionFactor', N'DefaultConversionFactor', N'COLUMN';
+                    ELSE
+                        ALTER TABLE [dbo].[Units] ADD [DefaultConversionFactor] DECIMAL(18,4) NOT NULL
+                            CONSTRAINT [DF_Units_DefaultConversionFactor] DEFAULT 1;
+               END
+            END
             """,
             """
             IF OBJECT_ID(N'[dbo].[Units]', N'U') IS NOT NULL
@@ -134,13 +140,13 @@ public static class UnitMasterDatabaseInitializer
 
             var units = new[]
             {
-                ("Piece", "PCS", "Single item", 1m),
-                ("Box", "BOX", "Box/package", 1m),
-                ("Pack", "PACK", "Pack/bundle", 1m),
-                ("Kg", "KG", "Kilogram", 1m),
-                ("Gram", "G", "Gram", 0.001m),
-                ("Liter", "LTR", "Liter", 1m),
-                ("Meter", "M", "Meter", 1m)
+                ("Piece", "PCS", 1m),
+                ("Box", "BOX", 1m),
+                ("Pack", "PACK", 1m),
+                ("Kg", "KG", 1m),
+                ("Gram", "G", 1m),
+                ("Liter", "LTR", 1m),
+                ("Meter", "M", 1m)
             };
 
             foreach (var unit in units)
@@ -155,8 +161,8 @@ public static class UnitMasterDatabaseInitializer
                               AND [Name] = {unit.Item1}
                               AND [IsDeleted] = 0)
                         BEGIN
-                            INSERT INTO [Units] ([Name], [Code], [Description], [ConversionFactor], [Status], [BusinessId], [BranchId], [CreatedDate], [IsDeleted])
-                            VALUES ({unit.Item1}, {unit.Item2}, {unit.Item3}, {unit.Item4}, 1, {branch.BusinessId}, {branch.Id}, GETUTCDATE(), 0);
+                            INSERT INTO [Units] ([Name], [Code], [DefaultConversionFactor], [Status], [BusinessId], [BranchId], [CreatedDate], [IsDeleted])
+                            VALUES ({unit.Item1}, {unit.Item2}, {unit.Item3}, 1, {branch.BusinessId}, {branch.Id}, GETUTCDATE(), 0);
                         END
                         """);
                 }

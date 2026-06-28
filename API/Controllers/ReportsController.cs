@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using POSSystem.API.Authorization;
 using POSSystem.API.Extensions;
 using POSSystem.Application.Common.Constants;
+using POSSystem.Application.Common.Helpers;
 using POSSystem.Application.Reports.Interfaces;
 using POSSystem.Application.Reports.DTOs;
 using POSSystem.Domain;
@@ -335,21 +336,35 @@ public class ReportsController : ControllerBase
         var productRows = productIds.Count > 0
             ? await _db.Products.AsNoTracking()
                 .Where(p => productIds.Contains(p.Id))
-                .Select(p => new { p.Id, p.ProductName, p.EnableLowStockAlert, p.LowStockAlertLevel })
+                .Select(p => new { p.Id, p.ProductName, p.EnableLowStockAlert, p.LowStockAlertLevel, p.BaseUnitId })
                 .ToListAsync()
             : [];
+
+        var productUnits = productIds.Count > 0
+            ? await _db.ProductUnits.AsNoTracking()
+                .Where(u => productIds.Contains(u.ProductId) && !u.IsDeleted)
+                .Select(u => new { u.Id, u.ProductId, u.UnitName, u.ConversionFactor, u.IsBaseUnit })
+                .ToListAsync()
+            : [];
+
+        var unitsByProduct = productUnits.GroupBy(u => u.ProductId).ToDictionary(g => g.Key, g => g.ToList());
 
         var productMap = productRows.ToDictionary(p => p.Id);
 
         var items = balances.Select(b =>
         {
             productMap.TryGetValue(b.ProductId, out var product);
+            unitsByProduct.TryGetValue(b.ProductId, out var units);
+            var baseUnit = units?.FirstOrDefault(u => u.IsBaseUnit) ?? units?.FirstOrDefault();
 
             return new
             {
                 productId            = b.ProductId,
                 productName          = product?.ProductName ?? "Unknown",
                 closingBalance       = b.ClosingBalance,
+                baseUnitName         = baseUnit?.UnitName ?? string.Empty,
+                baseUnitId           = product?.BaseUnitId ?? baseUnit?.Id,
+                hasMultipleUnits     = (units?.Count ?? 0) > 1,
                 enableLowStockAlert  = product?.EnableLowStockAlert ?? false,
                 lowStockAlertLevel   = product?.LowStockAlertLevel,
             };
@@ -392,6 +407,280 @@ public class ReportsController : ControllerBase
             toDate       = to.AddDays(-1),
             totalClosingBalance = items.Sum(i => i.closingBalance),
         });
+    }
+
+    /// <summary>On-demand unit-wise stock for one product (base stock × conversion factor per unit).</summary>
+    [HttpGet("stock-summary/{productId:int}/unit-breakdown")]
+    [RequirePermission(PermissionModules.StockReports, PermissionActions.View)]
+    public async Task<IActionResult> GetStockUnitBreakdown(
+        int productId,
+        [FromQuery] int? branchId,
+        [FromQuery] int? businessId,
+        [FromQuery] int? warehouseId,
+        [FromQuery] DateTime? toDate)
+    {
+        var biz = this.ResolveBusinessId(businessId);
+        var branch = this.ResolveBranchId(branchId);
+        var to = (toDate ?? DateTime.UtcNow).Date.AddDays(1);
+
+        var ledgerQuery = _db.StockLedgerEntries
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(e => e.BusinessId == biz && e.ProductId == productId && !e.IsDeleted && e.Date < to);
+
+        if (branch > 0)
+            ledgerQuery = ledgerQuery.Where(e => e.BranchId == branch);
+
+        if (warehouseId.HasValue && warehouseId.Value > 0)
+            ledgerQuery = ledgerQuery.Where(e => e.WarehouseId == warehouseId.Value);
+
+        var closingBalance = await ledgerQuery.SumAsync(e => (decimal?)e.QuantityInBaseUnit) ?? 0m;
+
+        var product = await _db.Products.AsNoTracking()
+            .Where(p => p.Id == productId)
+            .Select(p => new { p.ProductName, p.BaseUnitId })
+            .FirstOrDefaultAsync();
+
+        if (product == null)
+            return NotFound(new { message = "Product not found." });
+
+        var units = await _db.ProductUnits.AsNoTracking()
+            .Where(u => u.ProductId == productId && !u.IsDeleted)
+            .Select(u => new { u.Id, u.UnitName, u.ConversionFactor, u.IsBaseUnit })
+            .ToListAsync();
+
+        var baseUnit = units.FirstOrDefault(u => u.IsBaseUnit) ?? units.FirstOrDefault();
+        var unitInputs = units.Select(u => new StockUnitDisplayInput
+        {
+            UnitId = u.Id,
+            UnitName = u.UnitName,
+            ConversionFactor = u.ConversionFactor,
+            IsBaseUnit = u.IsBaseUnit
+        });
+
+        var converted = UnitConversionHelper.ConvertStockToAllUnits(closingBalance, unitInputs);
+
+        return Ok(new
+        {
+            productId,
+            productName = product.ProductName,
+            closingBalance,
+            baseUnitName = baseUnit?.UnitName ?? string.Empty,
+            units = converted.Select(u => new
+            {
+                unitId = u.UnitId,
+                unitName = u.UnitName,
+                quantity = u.Quantity,
+                isBaseUnit = u.IsBaseUnit,
+            }),
+        });
+    }
+
+    /// <summary>
+    /// Pivot-style stock report: one row per product, dynamic columns per unit (baseStock × factor).
+    /// </summary>
+    [HttpGet("stock-by-unit-pivot")]
+    [RequirePermission(PermissionModules.StockReports, PermissionActions.View)]
+    public async Task<IActionResult> GetStockByUnitPivot(
+        [FromQuery] int? branchId,
+        [FromQuery] int? businessId,
+        [FromQuery] int? warehouseId,
+        [FromQuery] int? productId,
+        [FromQuery] int? categoryId,
+        [FromQuery] int? subCategoryId,
+        [FromQuery] int? brandId,
+        [FromQuery] DateTime? fromDate,
+        [FromQuery] DateTime? toDate,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        [FromQuery] string? search = null,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null)
+    {
+        var biz    = this.ResolveBusinessId(businessId);
+        var branch = this.ResolveBranchId(branchId);
+
+        var from = (fromDate ?? DateTime.UtcNow.Date.AddDays(-30)).Date;
+        var to   = (toDate   ?? DateTime.UtcNow).Date.AddDays(1);
+
+        var productQuery = _db.Products
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(p => p.BusinessId == biz && !p.IsDeleted && p.Status);
+
+        if (branch > 0)
+            productQuery = productQuery.Where(p => p.BranchId == branch);
+
+        if (productId.HasValue && productId.Value > 0)
+            productQuery = productQuery.Where(p => p.Id == productId.Value);
+
+        if (categoryId.HasValue && categoryId.Value > 0)
+            productQuery = productQuery.Where(p => p.CategoryId == categoryId.Value);
+
+        if (subCategoryId.HasValue && subCategoryId.Value > 0)
+            productQuery = productQuery.Where(p => p.SubCategoryId == subCategoryId.Value);
+
+        if (brandId.HasValue && brandId.Value > 0)
+            productQuery = productQuery.Where(p => p.BrandId == brandId.Value);
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim();
+            productQuery = productQuery.Where(p => p.ProductName.Contains(term));
+        }
+
+        var filteredProducts = await productQuery
+            .OrderBy(p => p.ProductName)
+            .Select(p => new { p.Id, p.ProductName })
+            .ToListAsync();
+
+        if (filteredProducts.Count == 0)
+        {
+            return Ok(new
+            {
+                columns = new[] { new { key = "productName", label = "Product Name" } },
+                rows = Array.Empty<object>(),
+                totalRecords = 0,
+                totalPages = 0,
+                currentPage = Math.Max(1, page),
+                pageSize = Math.Clamp(pageSize, 1, 100),
+                fromDate = from,
+                toDate = to.AddDays(-1),
+            });
+        }
+
+        var filteredProductIds = filteredProducts.Select(p => p.Id).ToList();
+
+        var ledgerQuery = _db.StockLedgerEntries
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(e => e.BusinessId == biz
+                && !e.IsDeleted
+                && filteredProductIds.Contains(e.ProductId)
+                && e.Date < to);
+
+        if (branch > 0)
+            ledgerQuery = ledgerQuery.Where(e => e.BranchId == branch);
+
+        if (warehouseId.HasValue && warehouseId.Value > 0)
+            ledgerQuery = ledgerQuery.Where(e => e.WarehouseId == warehouseId.Value);
+
+        var ledgerRows = await ledgerQuery
+            .Select(e => new { e.ProductId, e.QuantityInBaseUnit })
+            .ToListAsync();
+
+        var balanceByProduct = ledgerRows
+            .GroupBy(e => e.ProductId)
+            .ToDictionary(g => g.Key, g => g.Sum(e => e.QuantityInBaseUnit));
+
+        var productUnits = await _db.ProductUnits
+            .AsNoTracking()
+            .Where(u => filteredProductIds.Contains(u.ProductId) && !u.IsDeleted)
+            .Select(u => new { u.ProductId, u.UnitName, u.ConversionFactor, u.IsBaseUnit })
+            .ToListAsync();
+
+        var unitsByProduct = productUnits
+            .GroupBy(u => u.ProductId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var unitColumns = productUnits
+            .Select(u => u.UnitName)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var unitKeyByName = unitColumns.ToDictionary(
+            n => n,
+            n => $"unit_{SanitizeColumnKey(n)}",
+            StringComparer.OrdinalIgnoreCase);
+
+        var columns = new List<object>
+        {
+            new { key = "productName", label = "Product Name" },
+        };
+        columns.AddRange(unitColumns.Select(n => new
+        {
+            key = unitKeyByName[n],
+            label = n,
+        }));
+
+        var rows = filteredProducts.Select(p =>
+        {
+            unitsByProduct.TryGetValue(p.Id, out var units);
+            var baseStock = balanceByProduct.GetValueOrDefault(p.Id, 0m);
+
+            var unitLookup = (units ?? [])
+                .GroupBy(u => u.UnitName, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+            var row = new Dictionary<string, object?>
+            {
+                ["productId"]   = p.Id,
+                ["productName"] = p.ProductName,
+                ["baseStock"]   = baseStock,
+            };
+
+            foreach (var unitName in unitColumns)
+            {
+                var colKey = unitKeyByName[unitName];
+                if (unitLookup.TryGetValue(unitName, out var unit))
+                {
+                    var factor = unit.IsBaseUnit ? 1m : unit.ConversionFactor;
+                    row[colKey] = factor > 0 ? baseStock * factor : (decimal?)null;
+                }
+                else
+                {
+                    row[colKey] = null;
+                }
+            }
+
+            return row;
+        }).ToList();
+
+        var descending = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase);
+        rows = (sortBy ?? "productName").ToLowerInvariant() switch
+        {
+            "productid" or "id" => descending
+                ? rows.OrderByDescending(r => (int)r["productId"]!).ToList()
+                : rows.OrderBy(r => (int)r["productId"]!).ToList(),
+            "basestock" or "closingbalance" or "balance" => descending
+                ? rows.OrderByDescending(r => (decimal)r["baseStock"]!).ToList()
+                : rows.OrderBy(r => (decimal)r["baseStock"]!).ToList(),
+            _ when sortBy != null && unitKeyByName.Values.Contains(sortBy) => descending
+                ? rows.OrderByDescending(r => r[sortBy] as decimal? ?? decimal.MinValue).ToList()
+                : rows.OrderBy(r => r[sortBy] as decimal? ?? decimal.MinValue).ToList(),
+            _ => descending
+                ? rows.OrderByDescending(r => (string)r["productName"]!).ToList()
+                : rows.OrderBy(r => (string)r["productName"]!).ToList(),
+        };
+
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+
+        var totalRecords = rows.Count;
+        var paged = rows.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+
+        return Ok(new
+        {
+            columns,
+            rows = paged,
+            totalRecords,
+            totalPages = (int)Math.Ceiling(totalRecords / (double)Math.Max(pageSize, 1)),
+            currentPage = page,
+            pageSize,
+            fromDate = from,
+            toDate = to.AddDays(-1),
+        });
+    }
+
+    private static string SanitizeColumnKey(string unitName)
+    {
+        var chars = unitName
+            .Trim()
+            .Select(c => char.IsLetterOrDigit(c) ? c : '_')
+            .ToArray();
+        var key = new string(chars).Trim('_');
+        return string.IsNullOrEmpty(key) ? "unit" : key;
     }
 
     // ─── Legacy endpoints (Orders / InventoryItems) ────────────────────────────

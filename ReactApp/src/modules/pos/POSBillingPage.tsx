@@ -26,6 +26,7 @@ import {
   checkStockForCartLine,
   validateCartStock,
 } from './posService';
+import { UnitSelector, lastUnitStorageKey } from './UnitSelector';
 import { ReceiptPrintModal } from '../../components/receipt';
 import { getApiErrorMessage } from '../../services/api';
 import { useBusinessCurrency } from '../../hooks/useBusinessCurrency';
@@ -292,6 +293,7 @@ const POSBillingPage: React.FC = () => {
 
   const barcodeRef = useRef<HTMLInputElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const lastUnitByProductRef = useRef<Map<string, number>>(new Map());
 
   const debouncedSearch = useDebounce(searchQuery, 250);
   const debouncedCustomer = useDebounce(customerQuery, 300);
@@ -380,7 +382,10 @@ const POSBillingPage: React.FC = () => {
 
   // ── Cart helpers ──
   const addToCart = useCallback((lookup: PosProductLookup): { success: boolean; error?: string } => {
-    const item = lookupToCartItem(lookup, pricingType);
+    const storageKey = lastUnitStorageKey(lookup.productId, lookup.matchedVariantId ?? null);
+    const preferredUnitId = lastUnitByProductRef.current.get(storageKey);
+    const item = lookupToCartItem(lookup, pricingType, preferredUnitId);
+    lastUnitByProductRef.current.set(storageKey, item.unitId);
     const idx = cart.findIndex((c) => c.cartKey === item.cartKey);
 
     if (idx >= 0) {
@@ -432,7 +437,11 @@ const POSBillingPage: React.FC = () => {
 
   const updateItemUnit = useCallback((key: string, unitId: number) => {
     setCart((prev) =>
-      prev.map((c) => (c.cartKey === key ? applyUnitToCartItem(c, unitId, pricingType) : c))
+      prev.map((c) => {
+        if (c.cartKey !== key) return c;
+        lastUnitByProductRef.current.set(lastUnitStorageKey(c.productId, c.variantId), unitId);
+        return applyUnitToCartItem(c, unitId, pricingType);
+      }),
     );
   }, [pricingType]);
 
@@ -452,7 +461,8 @@ const POSBillingPage: React.FC = () => {
           unit,
           variant,
           baseUnit?.sellingPrice ?? c.unitPrice,
-          baseUnit?.wholesalePrice ?? c.unitPrice
+          baseUnit?.wholesalePrice ?? c.unitPrice,
+          c.isManualPriceOverride ? c.unitPrice : undefined,
         );
         const updated = { ...c, unitPrice, lineTotal: computeLineTotal({ ...c, unitPrice }) };
         return updated;
@@ -469,6 +479,18 @@ const POSBillingPage: React.FC = () => {
 
   const updateItemDiscount = (key: string, percent: number) => {
     setCart((prev) => prev.map((c) => c.cartKey === key ? { ...c, discountPercent: percent, discountAmount: 0, lineTotal: computeLineTotal({ ...c, discountPercent: percent, discountAmount: 0 }) } : c));
+  };
+
+  const updateItemPrice = (key: string, price: number) => {
+    if (price < 0) return;
+    setCart((prev) =>
+      prev.map((c) => {
+        if (c.cartKey !== key) return c;
+        const updated = { ...c, unitPrice: price, isManualPriceOverride: true, lineTotal: 0 };
+        updated.lineTotal = computeLineTotal(updated);
+        return updated;
+      }),
+    );
   };
 
   const removeFromCart = (key: string) => setCart((prev) => prev.filter((c) => c.cartKey !== key));
@@ -710,12 +732,11 @@ const POSBillingPage: React.FC = () => {
                   <tr className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
                     <th className="text-left px-4 py-2.5 w-8">#</th>
                     <th className="text-left px-4 py-2.5">Product</th>
-                    <th className="text-left px-4 py-2.5 w-20">Unit</th>
-                    <th className="text-center px-4 py-2.5 w-32">Qty</th>
-                    <th className="text-right px-4 py-2.5 w-24">Price</th>
-                    <th className="text-right px-4 py-2.5 w-24">Disc %</th>
-                    <th className="text-right px-4 py-2.5 w-28">Total</th>
-                    <th className="w-10 px-2"></th>
+                    <th className="text-center px-4 py-2.5 w-36">Qty</th>
+                    <th className="text-right px-4 py-2.5 w-28">Price</th>
+                    <th className="text-right px-4 py-2.5 w-20">Disc</th>
+                    <th className="text-right px-4 py-2.5 w-24">Total</th>
+                    <th className="w-10" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -727,6 +748,7 @@ const POSBillingPage: React.FC = () => {
                       onUpdateQty={updateQuantity}
                       onUpdateUnit={updateItemUnit}
                       onUpdateDiscount={updateItemDiscount}
+                      onUpdatePrice={updateItemPrice}
                       onRemove={removeFromCart}
                     />
                   ))}
@@ -858,6 +880,36 @@ const POSBillingPage: React.FC = () => {
                           )}
                         </div>
                       </div>
+                      {!group.isVariantEnabled && group.units.length > 1 && (
+                        <div
+                          className="flex flex-wrap gap-1 px-3 pb-2 -mt-1"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {group.units.map((u) => (
+                            <button
+                              key={u.unitId}
+                              type="button"
+                              onClick={() => {
+                                const lookup = groupRowToLookup(group, null, pricingType);
+                                tryAddFromSearch(
+                                  {
+                                    ...lookup,
+                                    matchedUnitId: u.unitId,
+                                    matchedUnitName: u.unitName,
+                                    matchedUnitConversionFactor: u.conversionFactor,
+                                    retailPrice: u.sellingPrice,
+                                    wholesalePrice: u.wholesalePrice,
+                                  },
+                                  closeSearch,
+                                );
+                              }}
+                              className="px-2 py-0.5 rounded-md text-[11px] font-semibold border border-gray-200 bg-white text-gray-600 hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 transition"
+                            >
+                              {u.unitName}
+                            </button>
+                          ))}
+                        </div>
+                      )}
 
                       {/* Variant rows — shown when expanded */}
                       {group.isVariantEnabled && isExpanded && (
@@ -1155,10 +1207,11 @@ interface CartRowProps {
   onUpdateQty: (key: string, qty: number) => void;
   onUpdateUnit: (key: string, unitId: number) => void;
   onUpdateDiscount: (key: string, percent: number) => void;
+  onUpdatePrice: (key: string, price: number) => void;
   onRemove: (key: string) => void;
 }
 
-const CartRow: React.FC<CartRowProps> = React.memo(({ item, idx, onUpdateQty, onUpdateUnit, onUpdateDiscount, onRemove }) => {
+const CartRow: React.FC<CartRowProps> = React.memo(({ item, idx, onUpdateQty, onUpdateUnit, onUpdateDiscount, onUpdatePrice, onRemove }) => {
   const { fmt } = useBusinessCurrency();
   const [editingQty, setEditingQty] = useState(false);
   const [editingDisc, setEditingDisc] = useState(false);
@@ -1189,91 +1242,117 @@ const CartRow: React.FC<CartRowProps> = React.memo(({ item, idx, onUpdateQty, on
   };
 
   const variantLabel = item.variantName ?? [item.variantSize, item.variantColor].filter(Boolean).join(' / ');
+  const showSingleUnit = item.availableUnits.length <= 1;
 
   return (
-    <tr className="hover:bg-blue-50/40 transition group">
-      <td className="px-4 py-2.5 text-gray-400 text-xs">{idx + 1}</td>
-      <td className="px-4 py-2.5">
+    <tr className="hover:bg-blue-50/40 transition group align-top">
+      <td className="px-4 py-3 text-gray-400 text-xs">{idx + 1}</td>
+      <td className="px-4 py-3 min-w-[180px]">
         <p className="font-semibold text-gray-800 text-sm leading-tight">{item.productName}</p>
         {variantLabel && <p className="text-xs text-purple-600 mt-0.5">{variantLabel}</p>}
-        {item.productCode && <p className="text-xs text-gray-400">{item.productCode}</p>}
-      </td>
-      <td className="px-4 py-2.5">
-        {item.availableUnits.length > 1 ? (
-          <select
-            value={item.unitId}
-            onChange={(e) => onUpdateUnit(item.cartKey, Number(e.target.value))}
-            className="w-full rounded-md border border-gray-200 bg-white px-1.5 py-1 text-xs text-gray-700 focus:border-blue-400 focus:outline-none"
-          >
-            {item.availableUnits.map((u) => (
-              <option key={u.unitId} value={u.unitId}>
-                {u.unitName}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <span className="text-gray-500 text-xs">{item.unitName}</span>
+        {showSingleUnit && item.unitName && (
+          <p className="text-xs text-gray-500 mt-0.5">{item.unitName}</p>
         )}
-        {item.conversionFactor !== 1 && (
-          <p className="text-[10px] text-gray-400 mt-0.5">×{item.conversionFactor} base</p>
-        )}
+        <UnitSelector
+          units={item.availableUnits}
+          selectedUnitId={item.unitId}
+          onSelect={(unitId) => onUpdateUnit(item.cartKey, unitId)}
+        />
       </td>
 
-      {/* Quantity */}
-      <td className="px-4 py-2.5">
+      <td className="px-4 py-3">
         <div className="flex items-center justify-center gap-1">
-          <button onClick={() => onUpdateQty(item.cartKey, item.quantity - 1)}
-            className="w-6 h-6 flex items-center justify-center bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-md text-sm font-bold transition">
+          <button
+            type="button"
+            onClick={() => onUpdateQty(item.cartKey, item.quantity - 1)}
+            className="w-7 h-7 flex items-center justify-center bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-md text-sm font-bold transition"
+          >
             −
           </button>
           {editingQty ? (
-            <input ref={qtyRef} type="number" value={qtyInput}
+            <input
+              ref={qtyRef}
+              type="number"
+              value={qtyInput}
               onChange={(e) => setQtyInput(e.target.value)}
               onBlur={commitQty}
-              onKeyDown={(e) => { if (e.key === 'Enter') commitQty(); if (e.key === 'Escape') setEditingQty(false); }}
-              className="w-14 text-center border-2 border-blue-400 rounded-lg text-sm py-0.5 text-gray-800 focus:outline-none bg-white"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commitQty();
+                if (e.key === 'Escape') setEditingQty(false);
+              }}
+              className="w-14 text-center border-2 border-blue-400 rounded-lg text-sm py-0.5 text-gray-800 focus:outline-none bg-white tabular-nums"
             />
           ) : (
-            <span onClick={handleQtyClick}
-              className="w-10 text-center font-bold text-gray-700 text-sm cursor-pointer hover:bg-gray-100 rounded py-0.5 tabular-nums">
+            <span
+              onClick={handleQtyClick}
+              className="min-w-[2.5rem] text-center font-bold text-gray-700 text-sm cursor-pointer hover:bg-gray-100 rounded py-0.5 tabular-nums"
+            >
               {item.quantity}
             </span>
           )}
-          <button onClick={() => onUpdateQty(item.cartKey, item.quantity + 1)}
-            className="w-6 h-6 flex items-center justify-center bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-md text-sm font-bold transition">
+          <button
+            type="button"
+            onClick={() => onUpdateQty(item.cartKey, item.quantity + 1)}
+            className="w-7 h-7 flex items-center justify-center bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-md text-sm font-bold transition"
+          >
             +
           </button>
         </div>
       </td>
 
-      {/* Price */}
-      <td className="px-4 py-2.5 text-right text-gray-700 text-sm tabular-nums">{fmt(item.unitPrice)}</td>
+      <td className="px-4 py-3 text-right">
+        <input
+          type="number"
+          min={0}
+          step="0.01"
+          value={item.unitPrice}
+          onChange={(e) => {
+            const v = parseFloat(e.target.value);
+            if (!isNaN(v) && v >= 0) onUpdatePrice(item.cartKey, v);
+          }}
+          className={`w-full max-w-[6.5rem] ml-auto text-right rounded-md border px-2 py-1.5 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-400 ${
+            item.isManualPriceOverride
+              ? 'border-amber-300 bg-amber-50 text-gray-900'
+              : 'border-gray-200 bg-white text-gray-800'
+          }`}
+          title="Selling price (editable)"
+        />
+      </td>
 
-      {/* Discount */}
-      <td className="px-4 py-2.5 text-right">
+      <td className="px-4 py-3 text-right">
         {editingDisc ? (
-          <input type="number" value={discInput}
+          <input
+            type="number"
+            value={discInput}
             onChange={(e) => setDiscInput(e.target.value)}
             onBlur={commitDisc}
-            onKeyDown={(e) => { if (e.key === 'Enter') commitDisc(); if (e.key === 'Escape') setEditingDisc(false); }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commitDisc();
+              if (e.key === 'Escape') setEditingDisc(false);
+            }}
             autoFocus
-            className="w-16 text-right border-2 border-orange-400 rounded-lg text-sm py-0.5 px-1 text-gray-800 focus:outline-none bg-white"
+            className="w-14 text-right border-2 border-orange-400 rounded-lg text-sm py-0.5 px-1 text-gray-800 focus:outline-none bg-white ml-auto block"
           />
         ) : (
-          <span onClick={() => { setEditingDisc(true); setDiscInput(String(item.discountPercent)); }}
-            className={`cursor-pointer text-sm px-1.5 py-0.5 rounded hover:bg-gray-100 tabular-nums ${item.discountPercent > 0 ? 'text-orange-600 font-semibold' : 'text-gray-300 hover:text-gray-500'}`}>
+          <span
+            onClick={() => { setEditingDisc(true); setDiscInput(String(item.discountPercent)); }}
+            className={`cursor-pointer text-sm px-1.5 py-0.5 rounded hover:bg-gray-100 tabular-nums inline-block ${
+              item.discountPercent > 0 ? 'text-orange-600 font-semibold' : 'text-gray-300 hover:text-gray-500'
+            }`}
+          >
             {item.discountPercent > 0 ? `${item.discountPercent}%` : '—'}
           </span>
         )}
       </td>
 
-      {/* Line total */}
-      <td className="px-4 py-2.5 text-right font-bold text-gray-800 text-sm tabular-nums">{fmt(item.lineTotal)}</td>
+      <td className="px-4 py-3 text-right font-bold text-gray-800 text-sm tabular-nums">{fmt(item.lineTotal)}</td>
 
-      {/* Remove */}
-      <td className="px-2 py-2.5 text-right">
-        <button onClick={() => onRemove(item.cartKey)}
-          className="opacity-0 group-hover:opacity-100 w-7 h-7 flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition text-base">
+      <td className="px-2 py-3 text-right">
+        <button
+          type="button"
+          onClick={() => onRemove(item.cartKey)}
+          className="opacity-0 group-hover:opacity-100 w-7 h-7 flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition text-base"
+        >
           ×
         </button>
       </td>

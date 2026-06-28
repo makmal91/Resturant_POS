@@ -46,6 +46,7 @@ import PurchaseReportPage from './modules/reports/PurchaseReportPage';
 import SalesReportPage from './modules/reports/SalesReportPage';
 import ProductWiseSalesReportPage from './modules/reports/ProductWiseSalesReportPage';
 import StockReportPage from './modules/reports/StockReportPage';
+import StockByUnitPivotReportPage from './modules/reports/StockByUnitPivotReportPage';
 import SupplierPayableReportPage from './modules/reports/SupplierPayableReportPage';
 import SettingsPage from './modules/settings/SettingsPage';
 import CodeSequencePage from './modules/settings/CodeSequencePage';
@@ -84,6 +85,7 @@ export const routeRegistry: RouteDefinition[] = [
   { path: '/reports/supplier-payable', label: 'Supplier Payable', component: SupplierPayableReportPage, module: 'Supplier Payable Report' },
   { path: '/reports/profit-loss', label: 'Profit & Loss', component: ProfitLossReportPage, module: 'Profit & Loss Report' },
   { path: '/reports/stock', label: 'Stock Report', component: StockReportPage, module: 'Stock Reports' },
+  { path: '/reports/stock-by-unit', label: 'Stock By Unit Report', component: StockByUnitPivotReportPage, module: 'Stock Reports' },
   { path: '/reports/receivable-aging', label: 'Receivable Aging', component: ReceivableAgingReportPage, module: 'Customer Receivable Aging' },
   { path: '/reports/payable-aging', label: 'Payable Aging', component: PayableAgingReportPage, module: 'Supplier Payable Aging' },
   { path: '/sales-invoices', label: 'Invoice History', component: SaleInvoicesPage, module: 'Sales' },

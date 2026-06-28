@@ -50,7 +50,12 @@ const normalizeEntity = (rawItem: unknown): ManagementEntity => {
     name: String(record.name ?? record.Name ?? record.title ?? record.Title ?? ''),
     code: String(record.code ?? record.Code ?? ''),
     description: String(record.description ?? record.Description ?? record.details ?? record.Details ?? ''),
-    conversionFactor: Number(record.conversionFactor ?? record.ConversionFactor ?? 1),
+    conversionFactor: Number(
+      record.defaultConversionFactor ?? record.DefaultConversionFactor
+      ?? record.conversionFactor ?? record.ConversionFactor ?? 1),
+    defaultConversionFactor: Number(
+      record.defaultConversionFactor ?? record.DefaultConversionFactor
+      ?? record.conversionFactor ?? record.ConversionFactor ?? 1),
     isActive:
       typeof record.isActive === 'boolean'
         ? record.isActive
@@ -157,7 +162,8 @@ const ManagementPage: React.FC<ManagementPageProps> = ({
       description: selectedEntity?.description ?? defaultManagementFormValues.description,
       isActive: selectedEntity?.isActive ?? defaultManagementFormValues.isActive,
       code: selectedEntity?.code,
-      conversionFactor: selectedEntity?.conversionFactor,
+      conversionFactor: selectedEntity?.defaultConversionFactor ?? selectedEntity?.conversionFactor,
+      defaultConversionFactor: selectedEntity?.defaultConversionFactor ?? selectedEntity?.conversionFactor,
       branchId: selectedEntity?.branchId,
       categoryType: selectedEntity?.categoryType,
       menuCategoryId: selectedEntity?.menuCategoryId,
@@ -323,23 +329,28 @@ const ManagementPage: React.FC<ManagementPageProps> = ({
       ? [
           {
             key: 'code' as keyof ManagementEntity,
-            header: 'Code',
+            header: 'Short Code',
             render: (value: unknown) => String(value ?? '-'),
             sortable: true,
           },
           {
-            key: 'conversionFactor' as keyof ManagementEntity,
-            header: 'Conversion',
-            render: (value: unknown) => Number(value ?? 1).toString(),
+            key: 'defaultConversionFactor' as keyof ManagementEntity,
+            header: 'Default Factor',
+            render: (_value: unknown, row: ManagementEntity) =>
+              Number(row.defaultConversionFactor ?? row.conversionFactor ?? 1).toString(),
             sortable: true,
           },
         ]
       : []),
-    {
-      key: 'description',
-      header: 'Description',
-      render: (value: unknown) => String(value ?? '-'),
-    },
+    ...(entityLabel !== 'Unit'
+      ? [
+          {
+            key: 'description' as keyof ManagementEntity,
+            header: 'Description',
+            render: (value: unknown) => String(value ?? '-'),
+          },
+        ]
+      : []),
     {
       key: 'isActive',
       header: 'Status',

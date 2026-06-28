@@ -1,13 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { FormButton, FormInput, FormSelect, FormTextarea } from '../../components/forms/index';
+import { FormButton, FormInput, FormSelect } from '../../components/forms/index';
 import { EntityFormProps } from '../shared/ManagementPage';
 import { defaultManagementFormValues, ManagementFormValues } from '../shared/types';
 
 const buildFormData = (source: ManagementFormValues): ManagementFormValues => ({
   name: String(source.name ?? ''),
   code: String(source.code ?? ''),
-  description: String(source.description ?? ''),
-  conversionFactor: Number(source.conversionFactor ?? 1),
+  defaultConversionFactor: Number(source.defaultConversionFactor ?? source.conversionFactor ?? 1),
   isActive: Boolean(source.isActive ?? true),
   branchId: Number(source.branchId ?? 0),
 });
@@ -31,7 +30,10 @@ const UnitForm: React.FC<EntityFormProps> = (props) => {
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: name === 'conversionFactor' ? Number(value || 1) : value }));
+    setFormData((prev) => ({
+      ...prev,
+      [name]: name === 'defaultConversionFactor' ? Number(value || 1) : value,
+    }));
     setErrors((prev) => ({ ...prev, [name]: '' }));
   };
 
@@ -47,8 +49,8 @@ const UnitForm: React.FC<EntityFormProps> = (props) => {
       next.name = 'Unit name is required.';
     }
 
-    if (Number(formData.conversionFactor ?? 0) <= 0) {
-      next.conversionFactor = 'Conversion factor must be greater than zero.';
+    if (Number(formData.defaultConversionFactor ?? 0) <= 0) {
+      next.defaultConversionFactor = 'Default conversion factor must be greater than zero.';
     }
 
     setErrors(next);
@@ -63,8 +65,7 @@ const UnitForm: React.FC<EntityFormProps> = (props) => {
       ...formData,
       name: String(formData.name ?? '').trim(),
       code: String(formData.code ?? '').trim(),
-      description: String(formData.description ?? '').trim(),
-      conversionFactor: Number(formData.conversionFactor ?? 1),
+      defaultConversionFactor: Number(formData.defaultConversionFactor ?? 1),
       isActive: Boolean(formData.isActive ?? true),
     });
   };
@@ -73,32 +74,24 @@ const UnitForm: React.FC<EntityFormProps> = (props) => {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="flex w-full max-w-2xl flex-col rounded-xl bg-white shadow-xl" style={{ maxHeight: '90vh' }}>
 
-        {/* Header */}
         <div className="shrink-0 border-b border-gray-200 px-6 py-4">
           <h3 className="text-lg font-semibold text-gray-900">
             {isEditMode ? 'Edit Unit' : 'Add Unit'}
           </h3>
           <p className="mt-1 text-sm text-gray-500">
-            Define the unit name, short code, and default conversion factor.
+            Default factor = child units in 1 base unit (e.g. Feet on Pipe product = 20). Used when adding units to products.
           </p>
         </div>
 
-        {/* Scrollable body */}
         <form id="unit-form" onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
           <div className="flex-1 overflow-y-auto px-6 py-5">
-
-            {/* Basic Details */}
-            <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-gray-400">
-              Basic Details
-            </p>
-
             <div className="grid grid-cols-1 gap-x-6 md:grid-cols-2">
               <FormInput
                 label="Unit Name"
                 name="name"
                 value={String(formData.name ?? '')}
                 onChange={handleChange}
-                placeholder="e.g. Piece, Box, Kilogram"
+                placeholder="e.g. Piece, Box, Feet"
                 required
                 error={errors.name}
               />
@@ -108,22 +101,20 @@ const UnitForm: React.FC<EntityFormProps> = (props) => {
                 name="code"
                 value={String(formData.code ?? '')}
                 onChange={handleChange}
-                placeholder="e.g. PCS, BOX, KG"
+                placeholder="e.g. PCS, BOX, FT"
               />
-            </div>
 
-            <div className="grid grid-cols-1 gap-x-6 md:grid-cols-2">
               <FormInput
                 label="Default Conversion Factor"
-                name="conversionFactor"
+                name="defaultConversionFactor"
                 type="number"
-                value={Number(formData.conversionFactor ?? 1)}
+                value={Number(formData.defaultConversionFactor ?? 1)}
                 onChange={handleChange}
                 placeholder="1"
                 required
                 min={0.0001}
                 step="0.0001"
-                error={errors.conversionFactor}
+                error={errors.defaultConversionFactor}
               />
 
               <FormSelect
@@ -142,48 +133,15 @@ const UnitForm: React.FC<EntityFormProps> = (props) => {
               />
             </div>
 
-            <p className="mt-1 mb-6 text-xs text-gray-500">
-              Conversion factor relative to base unit. Example: 1 Box = 12 Pieces → set 12 on Box,
-              or 1 Gram = 0.001 Kg → set 0.001 on Gram.
+            <p className="mt-3 text-xs text-gray-500">
+              Example: base unit Pipe, child Feet — set 20 (20 feet per 1 pipe). Product child price = base price ÷ 20.
             </p>
-
-            {/* Additional Info */}
-            <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-gray-400">
-              Additional Info
-            </p>
-
-            <FormTextarea
-              label="Description"
-              name="description"
-              value={String(formData.description ?? '')}
-              onChange={handleChange}
-              placeholder="Describe how and where this unit is used"
-              rows={3}
-            />
           </div>
 
-          {/* Footer */}
           <div className="shrink-0 border-t border-gray-200 bg-white px-6 py-4 flex justify-end gap-3">
-            <FormButton
-              type="button"
-              label="Cancel"
-              variant="secondary"
-              onClick={onCancel}
-              disabled={isSubmitting}
-            />
-            <FormButton
-              type="button"
-              label="Reset"
-              variant="secondary"
-              onClick={handleReset}
-              disabled={isSubmitting}
-            />
-            <FormButton
-              type="submit"
-              label={isEditMode ? 'Update Unit' : 'Create Unit'}
-              variant="primary"
-              loading={isSubmitting}
-            />
+            <FormButton type="button" label="Cancel" variant="secondary" onClick={onCancel} disabled={isSubmitting} />
+            <FormButton type="button" label="Reset" variant="secondary" onClick={handleReset} disabled={isSubmitting} />
+            <FormButton type="submit" label={isEditMode ? 'Update Unit' : 'Create Unit'} variant="primary" loading={isSubmitting} />
           </div>
         </form>
       </div>

@@ -21,6 +21,8 @@ public class Product : BaseEntity
     public decimal CostPrice { get; set; }
     public decimal SellingPrice { get; set; }
     public decimal WholesalePrice { get; set; }
+    /// <summary>When true, alternate unit prices are auto-calculated from base price × conversion factor.</summary>
+    public bool UseAutoUnitPricing { get; set; } = true;
     public bool IsVariantEnabled { get; set; }
     public bool IsDiscountAllowed { get; set; }
     public ProductDiscountType? DiscountType { get; set; }
@@ -30,8 +32,11 @@ public class Product : BaseEntity
     public decimal? LowStockAlertLevel { get; set; }
     public decimal OpeningStock { get; set; }
     public bool OpeningStockVariantWise { get; set; }
+    /// <summary>FK to the product's base <see cref="ProductUnit"/> row. Stock is always stored in this unit.</summary>
+    public int? BaseUnitId { get; set; }
 
     public virtual MenuCategory Category { get; set; } = null!;
+    public virtual ProductUnit? BaseUnit { get; set; }
     public virtual SubCategory? SubCategory { get; set; }
     public virtual Brand? Brand { get; set; }
     public virtual Branch Branch { get; set; } = null!;
@@ -44,14 +49,20 @@ public class Product : BaseEntity
 public class ProductUnit : BaseEntity
 {
     public int ProductId { get; set; }
+    /// <summary>Optional FK to branch Unit Master (<see cref="MeasurementUnit"/>).</summary>
+    public int? UnitId { get; set; }
     public string UnitName { get; set; } = string.Empty;
+    /// <summary>Number of base units contained in 1 of this unit. Base unit must be 1.</summary>
     public decimal ConversionFactor { get; set; } = 1;
     public bool IsBaseUnit { get; set; }
     public decimal? CostPrice { get; set; }
     public decimal? SellingPrice { get; set; }
     public decimal? WholesalePrice { get; set; }
+    /// <summary>When true, stored prices are manual overrides; auto calculation is skipped.</summary>
+    public bool IsPriceOverridden { get; set; }
 
     public virtual Product Product { get; set; } = null!;
+    public virtual MeasurementUnit? Unit { get; set; }
 }
 
 public class ProductVariant : BaseEntity

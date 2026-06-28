@@ -219,6 +219,7 @@ public static class PermissionModuleSeeder
         new("Supplier Payable", PermissionModules.SupplierPayableReport, "Reports", 5, "/reports/supplier-payable", "SP"),
         new("Profit & Loss", PermissionModules.ProfitLossReport, "Reports", 6, "/reports/profit-loss", "PL"),
         new("Stock Report", PermissionModules.StockReports, "Reports", 7, "/reports/stock", "StR"),
+        new("Stock By Unit Report", PermissionModules.StockReports, "Reports", 10, "/reports/stock-by-unit", "SBU"),
         new("Receivable Aging", PermissionModules.CustomerReceivableAgingReport, "Reports", 8, "/reports/receivable-aging", "RA"),
         new("Payable Aging", PermissionModules.SupplierPayableAgingReport, "Reports", 9, "/reports/payable-aging", "PA"),
 

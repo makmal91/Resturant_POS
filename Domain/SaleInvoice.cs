@@ -62,7 +62,7 @@ public class SaleInvoiceItem : BaseEntity
     public int UnitId { get; set; }
     public decimal Quantity { get; set; }
     public decimal ConversionFactor { get; set; } = 1;  // unit conversion factor at time of sale
-    public decimal BaseQuantity { get; set; }            // Quantity * ConversionFactor → base-unit qty for stock ledger
+    public decimal BaseQuantity { get; set; }            // Quantity ÷ ConversionFactor → base-unit qty for stock ledger
     public decimal UnitPrice { get; set; }
     public decimal DiscountPercent { get; set; }
     public decimal DiscountAmount { get; set; }

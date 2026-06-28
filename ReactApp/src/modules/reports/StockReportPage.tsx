@@ -17,6 +17,7 @@ import { stockExportColumns } from './reportExportColumns';
 import { fmtQty, monthStart, todayStr } from './reportFormatters';
 import { reportService, type StockSummaryItem } from './reportService';
 import { useReportExport } from './useReportExport';
+import StockUnitBreakdownModal from './StockUnitBreakdownModal';
 
 const StockReportPage: React.FC = () => {
   const { selectedBranchId } = useBranchWriteAccess();
@@ -36,6 +37,7 @@ const StockReportPage: React.FC = () => {
   const [totalRecords, setTotalRecords] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [totalClosingBalance, setTotalClosingBalance] = useState(0);
+  const [detailRow, setDetailRow] = useState<StockSummaryItem | null>(null);
 
   useEffect(() => {
     if (branchId <= 0) {
@@ -110,12 +112,17 @@ const StockReportPage: React.FC = () => {
     { key: 'productName', header: 'Product', sortable: true },
     {
       key: 'closingBalance',
-      header: 'Closing Balance',
+      header: 'Closing Balance (Base)',
       sortable: true,
       render: (v, row) => {
         const q = Number(v ?? row.closingBalance ?? 0);
         const status = getStockStatus(q, row);
-        return <span className={`font-semibold tabular-nums ${stockStatusQtyColor(status)}`}>{fmtQty(q)}</span>;
+        const unit = row.baseUnitName ? ` ${row.baseUnitName}` : '';
+        return (
+          <span className={`font-semibold tabular-nums ${stockStatusQtyColor(status)}`}>
+            {fmtQty(q)}{unit}
+          </span>
+        );
       },
     },
     {
@@ -126,6 +133,21 @@ const StockReportPage: React.FC = () => {
         const status = getStockStatus(q, row);
         return <Badge variant={stockStatusBadgeVariant(status)} size="sm" dot>{stockStatusLabel(status)}</Badge>;
       },
+    },
+    {
+      key: 'details',
+      header: '',
+      render: (_v, row) => (
+        row.hasMultipleUnits ? (
+          <button
+            type="button"
+            onClick={() => setDetailRow(row)}
+            className="rounded-md border border-gray-200 px-2.5 py-1 text-xs font-semibold text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition whitespace-nowrap"
+          >
+            View units
+          </button>
+        ) : null
+      ),
     },
   ], []);
 
@@ -146,57 +168,71 @@ const StockReportPage: React.FC = () => {
   }
 
   return (
-    <ReportPageShell
-      title="Stock Report"
-      description="Closing stock balance by product from the stock ledger."
-      fromDate={fromDate}
-      toDate={toDate}
-      onFromDateChange={setFromDate}
-      onToDateChange={setToDate}
-      extraFilters={(
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Warehouse</label>
-          <select
-            value={warehouseId}
-            onChange={(e) => setWarehouseId(e.target.value === '' ? '' : Number(e.target.value))}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-          >
-            <option value="">All Warehouses</option>
-            {warehouses.map((w) => (
-              <option key={w.id} value={w.id}>{w.name}</option>
-            ))}
-          </select>
-        </div>
-      )}
-      error={error}
-      loading={loading}
-      onRefresh={load}
-      onExport={onExport}
-      exporting={exporting}
-      columns={columns}
-      rows={rows}
-      searchPlaceholder="Search products..."
-      emptyMessage="No stock balances found."
-      pageNumber={pageNumber}
-      pageSize={pageSize}
-      totalRecords={totalRecords}
-      totalPages={totalPages}
-      search={search}
-      sortColumn={sortColumn}
-      sortDirection={sortDirection}
-      onPageChange={setPageNumber}
-      onPageSizeChange={(size) => { setPageSize(size); setPageNumber(1); }}
-      onSearchChange={(value) => { setSearch(value); setPageNumber(1); }}
-      onSortChange={(column, direction) => { setSortColumn(column); setSortDirection(direction); setPageNumber(1); }}
-      footerRow={rows.length > 0 ? footerRow : undefined}
-      summary={(
-        <StockAttractiveSummary
-          loading={loading}
-          productCount={totalRecords}
-          totalClosingBalance={totalClosingBalance}
-        />
-      )}
-    />
+    <>
+      <ReportPageShell
+        title="Stock Report"
+        description="Closing stock balance by product from the stock ledger."
+        fromDate={fromDate}
+        toDate={toDate}
+        onFromDateChange={setFromDate}
+        onToDateChange={setToDate}
+        extraFilters={(
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Warehouse</label>
+            <select
+              value={warehouseId}
+              onChange={(e) => setWarehouseId(e.target.value === '' ? '' : Number(e.target.value))}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+            >
+              <option value="">All Warehouses</option>
+              {warehouses.map((w) => (
+                <option key={w.id} value={w.id}>{w.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+        error={error}
+        loading={loading}
+        onRefresh={load}
+        onExport={onExport}
+        exporting={exporting}
+        columns={columns}
+        rows={rows}
+        searchPlaceholder="Search products..."
+        emptyMessage="No stock balances found."
+        pageNumber={pageNumber}
+        pageSize={pageSize}
+        totalRecords={totalRecords}
+        totalPages={totalPages}
+        search={search}
+        sortColumn={sortColumn}
+        sortDirection={sortDirection}
+        onPageChange={setPageNumber}
+        onPageSizeChange={(size) => { setPageSize(size); setPageNumber(1); }}
+        onSearchChange={(value) => { setSearch(value); setPageNumber(1); }}
+        onSortChange={(column, direction) => { setSortColumn(column); setSortDirection(direction); setPageNumber(1); }}
+        footerRow={rows.length > 0 ? footerRow : undefined}
+        summary={(
+          <StockAttractiveSummary
+            loading={loading}
+            productCount={totalRecords}
+            totalClosingBalance={totalClosingBalance}
+          />
+        )}
+      />
+
+      <StockUnitBreakdownModal
+        open={detailRow != null}
+        onClose={() => setDetailRow(null)}
+        branchId={branchId}
+        productId={detailRow?.productId ?? 0}
+        productName={detailRow?.productName ?? ''}
+        closingBalance={detailRow?.closingBalance ?? 0}
+        baseUnitName={detailRow?.baseUnitName}
+        warehouseId={warehouseId === '' ? undefined : Number(warehouseId)}
+        toDate={toDate}
+      />
+    </>
   );
 };
 
