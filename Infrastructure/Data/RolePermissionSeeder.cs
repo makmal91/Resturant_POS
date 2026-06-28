@@ -172,11 +172,22 @@ public static class RolePermissionSeeder
 
     private static IReadOnlyList<(string ModuleName, bool CanView, bool CanCreate, bool CanEdit, bool CanDelete, bool CanExport, bool CanUpload)> BuildDefaultPermissions(string roleName)
     {
-        if (string.Equals(roleName, RoleNames.SystemAdmin, StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(roleName, RoleNames.SuperAdmin, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(roleName, RoleNames.SystemAdmin, StringComparison.OrdinalIgnoreCase))
         {
             return PermissionModules.All
                 .Select(module => (module, true, true, true, true, true, true))
+                .ToList();
+        }
+
+        if (string.Equals(roleName, RoleNames.SuperAdmin, StringComparison.OrdinalIgnoreCase))
+        {
+            // Super Admin permissions are assigned by System Admin; start with dashboard access only.
+            return PermissionModules.All
+                .Select(module => module switch
+                {
+                    PermissionModules.Dashboard => (module, true, false, false, false, false, false),
+                    _ => (module, false, false, false, false, false, false)
+                })
                 .ToList();
         }
 

@@ -73,7 +73,7 @@ function App() {
                         <Route
                           path="/sales-invoices/edit/:id"
                           element={
-                            <ProtectedRoute module="Sales">
+                            <ProtectedRoute module="Sales" action="edit">
                               <EditInvoicePage />
                             </ProtectedRoute>
                           }

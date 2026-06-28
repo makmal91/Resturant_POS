@@ -4,7 +4,9 @@ import Badge from '../../components/Badge';
 import AuthenticatedImage from '../../components/AuthenticatedImage';
 import { getApiErrorMessage } from '../../services/api';
 import apiClient from '../../services/api';
-import { useBranchWriteAccess } from '../../hooks/useBranchWriteAccess';
+import { useModuleCrudAccess } from '../../hooks/useModuleCrudAccess';
+import { getPermissionDeniedMessage } from '../../utils/permissionUtils';
+import PermissionGate from '../../components/PermissionGate';
 import ProductForm from './ProductForm';
 import { ProductDetail, ProductListItem, ProductPayload, productService } from './productService';
 import { useHasFeature } from '../../hooks/useFeature';
@@ -22,7 +24,7 @@ const fallbackUnits = [
 ];
 
 const ProductPage: React.FC = () => {
-  const { selectedBranchId, canWriteInView, getWriteBlockMessage } = useBranchWriteAccess();
+  const { selectedBranchId, canAdd, canModify, getWriteBlockMessage } = useModuleCrudAccess('Products');
   const [products, setProducts] = useState<ProductListItem[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<ProductDetail | null>(null);
   const [editingProduct, setEditingProduct] = useState<ProductDetail | null>(null);
@@ -186,8 +188,8 @@ const ProductPage: React.FC = () => {
       showNotification('error', 'Select a branch to create products.');
       return;
     }
-    if (!canWriteInView || blockMessage) {
-      showNotification('error', blockMessage ?? 'You do not have permission to create products.');
+    if (!canAdd || blockMessage) {
+      showNotification('error', blockMessage ?? getPermissionDeniedMessage('create', 'Products'));
       return;
     }
     setEditingProduct(null);
@@ -196,8 +198,8 @@ const ProductPage: React.FC = () => {
 
   const openEdit = async (item: ProductListItem) => {
     const blockMessage = getWriteBlockMessage();
-    if (!canWriteInView || blockMessage) {
-      showNotification('error', blockMessage ?? 'You do not have permission to edit products.');
+    if (!canModify || blockMessage) {
+      showNotification('error', blockMessage ?? getPermissionDeniedMessage('edit', 'Products'));
       return;
     }
     try {
@@ -285,9 +287,15 @@ const ProductPage: React.FC = () => {
           <h1 className="mb-2 text-3xl font-bold text-gray-900">Products</h1>
           <p className="text-gray-600">Manage product catalog, units, variants, barcodes, pricing, discounts, and images.</p>
         </div>
-        <button onClick={openCreate} className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
-          Add Product
-        </button>
+        <PermissionGate module="Products" action="create">
+          <button
+            onClick={openCreate}
+            disabled={!canAdd}
+            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Add Product
+          </button>
+        </PermissionGate>
       </div>
 
       {branchId <= 0 && (
@@ -345,7 +353,9 @@ const ProductPage: React.FC = () => {
                   <td className="px-4 py-3">
                     <div className="flex gap-2">
                       <button onClick={() => void openDetail(product)} className="rounded border px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50">View</button>
-                      <button onClick={() => void openEdit(product)} className="rounded border px-3 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50">Edit</button>
+                      {canModify && (
+                        <button onClick={() => void openEdit(product)} className="rounded border px-3 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50">Edit</button>
+                      )}
                       {barcodeFeatureEnabled && (
                         <Link
                           to={`/barcodes?productId=${product.id}`}

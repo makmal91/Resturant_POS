@@ -37,20 +37,20 @@ const resolveInitialBranchId = (
   user: StoredUser,
   branches: StoredBranch[]
 ): number | null => {
+  if (isGlobalAdminUser(user)) {
+    if (branches.length === 1) {
+      return branches[0].id
+    }
+
+    return 0
+  }
+
   if (branches.length === 1) {
     return branches[0].id
   }
 
-  if (isGlobalAdminUser(user) && branches.length > 1) {
-    return 0
-  }
-
   if (branches.length > 1) {
     return branches[0].id
-  }
-
-  if (branches.length === 0 && isGlobalRole(user.roleName)) {
-    return 0
   }
 
   return null
@@ -149,7 +149,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         syncBranchStore(nextBranches, nextBranchId)
         syncPermissionStore(nextPermissions, nextUser.roleName, nextFeatures)
         if (nextUser.roleId) {
-          void useMenuStore.getState().fetchSidebarData(nextUser.roleId)
+          void useMenuStore.getState().refreshSidebarData(nextUser.roleId)
         }
       }
     },
@@ -181,8 +181,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const setBranch = useCallback(
     (branchId: number) => {
-      const globalAdmin = isGlobalAdminUser(user)
-      if (!globalAdmin && branchId > 0 && !branches.some((branch) => branch.id === branchId)) {
+      const currentUser = user ?? authStorage.getUser()
+      const currentBranches = branches.length > 0 ? branches : authStorage.getBranches()
+      const globalAdmin = isGlobalAdminUser(currentUser)
+
+      if (!globalAdmin && branchId > 0 && !currentBranches.some((branch) => branch.id === branchId)) {
         throw new Error('Selected branch is no longer assigned to your account.')
       }
 
@@ -193,7 +196,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setSelectedBranchIdState(branchId)
       authStorage.setSelectedBranchId(branchId)
       useBranchStore.getState().setSelectedBranchId(branchId)
-      syncTenantSession(user, branchId)
+      syncTenantSession(currentUser, branchId)
     },
     [branches, user]
   )
@@ -236,7 +239,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         response.features,
       )
 
-      if (isGlobalAdminUser(response.user) || autoSelectedBranchId !== null) {
+      if (autoSelectedBranchId !== null) {
         return '/'
       }
 
@@ -255,21 +258,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     if (snapshot.token && snapshot.user) {
-      let branchId =
+      const branchId =
         snapshot.selectedBranchId ??
-        (snapshot.branches.length === 1
-          ? snapshot.branches[0].id
-          : isGlobalAdminUser(snapshot.user) && snapshot.branches.length > 1
-            ? 0
-            : snapshot.branches.length > 0
-              ? snapshot.branches[0].id
-              : isGlobalAdminUser(snapshot.user)
-                ? 0
-                : null)
-
-      if (snapshot.branches.length === 1 && (branchId === null || branchId === 0)) {
-        branchId = snapshot.branches[0].id
-      }
+        resolveInitialBranchId(snapshot.user, snapshot.branches)
 
       applySession(
         snapshot.user,
@@ -285,10 +276,77 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [applySession])
 
   useEffect(() => {
+    const refreshSessionFromServer = async () => {
+      const snapshot = authStorage.getSnapshot()
+      if (!snapshot.token || !snapshot.user || isTokenExpired(snapshot.token)) {
+        return
+      }
+
+      try {
+        const fresh = await authService.getPermissions()
+        authStorage.saveSession({
+          user: snapshot.user,
+          token: snapshot.token,
+          branches: snapshot.branches,
+          selectedBranchId: snapshot.selectedBranchId,
+          permissions: fresh.permissions,
+          features: fresh.features,
+        })
+        syncPermissionStore(fresh.permissions, snapshot.user.roleName, fresh.features)
+        if (snapshot.user.roleId) {
+          await useMenuStore.getState().refreshSidebarData(snapshot.user.roleId)
+        }
+      } catch {
+        // Keep cached session when refresh fails (offline / API down).
+      }
+    }
+
+    if (isHydrated && token && user) {
+      void refreshSessionFromServer()
+    }
+  }, [isHydrated, token, user])
+
+  useEffect(() => {
     const handleForcedLogout = () => logout()
     window.addEventListener('auth:logout', handleForcedLogout)
     return () => window.removeEventListener('auth:logout', handleForcedLogout)
   }, [logout])
+
+  useEffect(() => {
+    const refreshPermissionsFromServer = async () => {
+      const snapshot = authStorage.getSnapshot()
+      if (!snapshot.token || !snapshot.user || isTokenExpired(snapshot.token)) {
+        return
+      }
+
+      try {
+        const fresh = await authService.getPermissions()
+        authStorage.saveSession({
+          user: snapshot.user,
+          token: snapshot.token,
+          branches: snapshot.branches,
+          selectedBranchId: snapshot.selectedBranchId,
+          permissions: fresh.permissions,
+          features: fresh.features,
+        })
+        syncPermissionStore(fresh.permissions, snapshot.user.roleName, fresh.features)
+        if (snapshot.user.roleId) {
+          await useMenuStore.getState().refreshSidebarData(snapshot.user.roleId)
+        }
+      } catch {
+        // Ignore background refresh failures; session remains valid until next login.
+      }
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshPermissionsFromServer()
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [])
 
   const value = useMemo<AuthContextValue>(
     () => ({

@@ -167,13 +167,17 @@ public class UserRepository : IUserRepository
 
     public async Task ReplaceUserBranchesAsync(int userId, IReadOnlyList<int> branchIds)
     {
+        var incomingIds = branchIds.Distinct().ToHashSet();
         var existing = await _context.UserBranches
             .Where(ub => ub.UserId == userId)
             .ToListAsync();
 
-        _context.UserBranches.RemoveRange(existing);
+        var existingIds = existing.Select(ub => ub.BranchId).ToHashSet();
 
-        foreach (var branchId in branchIds.Distinct())
+        foreach (var row in existing.Where(ub => !incomingIds.Contains(ub.BranchId)))
+            _context.UserBranches.Remove(row);
+
+        foreach (var branchId in incomingIds.Where(id => !existingIds.Contains(id)))
         {
             await _context.UserBranches.AddAsync(new UserBranch
             {

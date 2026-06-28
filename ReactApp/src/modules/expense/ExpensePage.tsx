@@ -4,9 +4,7 @@ import Badge from '../../components/Badge';
 import SearchableSelect from '../../components/forms/SearchableSelect';
 import PermissionGate from '../../components/PermissionGate';
 import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
-import { usePermission } from '../../hooks/usePermission';
-import { useBranchWriteAccess } from '../../hooks/useBranchWriteAccess';
-import { useBusinessCurrency } from '../../hooks/useBusinessCurrency';
+import { useModuleCrudAccess } from '../../hooks/useModuleCrudAccess';
 import { hasBranchContext } from '../../types/permissions';
 import { getApiErrorMessage } from '../../services/api';
 import { masterDataService } from '../../services/masterDataService';
@@ -287,20 +285,19 @@ const ExpenseFormPanel: React.FC<ExpenseFormPanelProps> = ({
 const ExpensePage: React.FC = () => {
   const { showConfirm } = useConfirmDialog();
   const { fmt, symbol: currencySymbol } = useBusinessCurrency();
-  const { canCreate, canEdit, canDelete } = usePermission('Expenses');
   const {
+    canAdd,
+    canModify,
+    canRemove,
     selectedBranchId,
-    isMasterUser,
+    isGlobalAdmin,
     isGlobalMode,
     canWriteInView,
     resolveEntityBranchId,
     getWriteBlockMessage,
-  } = useBranchWriteAccess();
+  } = useModuleCrudAccess('Expenses');
 
   const hasBranchSelection = hasBranchContext(selectedBranchId);
-  const canAdd    = canWriteInView && (isMasterUser || canCreate);
-  const canModify = canWriteInView && (isMasterUser || canEdit);
-  const canRemove = canWriteInView && (isMasterUser || canDelete);
 
   // List state
   const [items, setItems]             = useState<ExpenseDto[]>([]);
@@ -660,7 +657,7 @@ const ExpensePage: React.FC = () => {
       </div>
 
       {/* Global mode banner */}
-      {isGlobalMode && isMasterUser && (
+      {isGlobalMode && isGlobalAdmin && (
         <div className="mb-6 rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
           Global view is active. Select a target branch when recording expenses.
         </div>

@@ -26,8 +26,11 @@ public static class RoleNames
     public static bool IsProtectedRole(string roleName) =>
         IsMasterUser(roleName) || IsSuperAdmin(roleName);
 
+    /// <summary>
+    /// Only System Admin bypasses permission checks. Super Admin is limited to assigned permissions.
+    /// </summary>
     public static bool CanBypassPermissions(string roleName) =>
-        IsMasterUser(roleName) || IsSuperAdmin(roleName);
+        IsMasterUser(roleName);
 
     public static bool HasGlobalBranchAccess(string roleName) =>
         IsMasterUser(roleName) || IsSuperAdmin(roleName);

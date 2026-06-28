@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import DataTable, { Column, Action } from './DataTable';
 import Badge from './Badge';
 import { useFormModal } from '../contexts/FormModalContext';
-import { useBranchStore } from '../stores/useBranchStore';
+import { useModuleCrudAccess } from '../hooks/useModuleCrudAccess';
+import PermissionGate from './PermissionGate';
 import { getApiErrorMessage } from '../services/api';
 import { productService } from '../modules/product/productService';
 
@@ -16,7 +17,7 @@ interface MenuItem {
 }
 
 const MenuList: React.FC = () => {
-  const selectedBranchId = useBranchStore((state) => state.selectedBranchId);
+  const { canAdd, canModify, selectedBranchId } = useModuleCrudAccess('Menu');
   const branchId = selectedBranchId !== null && selectedBranchId > 0 ? selectedBranchId : 0;
 
   const [items, setItems] = useState<MenuItem[]>([]);
@@ -110,13 +111,13 @@ const MenuList: React.FC = () => {
     },
   ];
 
-  const actions: Action<MenuItem>[] = [
-    {
-      label: 'Edit',
-      onClick: (item) => openForm('product', { id: item.id, branchId }),
-      variant: 'primary',
-    },
-  ];
+  const actions: Action<MenuItem>[] = canModify
+    ? [{
+        label: 'Edit',
+        onClick: (item) => openForm('product', { id: item.id, branchId }),
+        variant: 'primary',
+      }]
+    : [];
 
   return (
     <div>
@@ -125,14 +126,19 @@ const MenuList: React.FC = () => {
           <h1 className="mb-2 text-3xl font-bold text-gray-900">Menu Items</h1>
           <p className="text-gray-600">Browse and manage saleable products</p>
         </div>
-        <button
-          type="button"
-          onClick={() => openForm('product', { branchId })}
-          disabled={branchId <= 0}
-          className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          Add Item
-        </button>
+        <PermissionGate module="Menu" action="create">
+          <button
+            type="button"
+            onClick={() => {
+              if (!canAdd) return;
+              openForm('product', { branchId });
+            }}
+            disabled={branchId <= 0 || !canAdd}
+            className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Add Item
+          </button>
+        </PermissionGate>
       </div>
 
       {branchId <= 0 && (

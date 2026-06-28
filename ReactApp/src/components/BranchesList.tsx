@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import DataTable, { Column, Action } from './DataTable';
 import Badge from './Badge';
+import PermissionGate from './PermissionGate';
 import { useFormModal } from '../contexts/FormModalContext';
 import { useConfirmDialog } from '../contexts/ConfirmDialogContext';
 import { BranchService } from '../services/apiService';
 import { getApiErrorMessage } from '../services/api';
 import { safeString } from '../utils/safeValues';
+import { useModuleCrudAccess } from '../hooks/useModuleCrudAccess';
+import { getPermissionDeniedMessage } from '../utils/permissionUtils';
 
 interface Branch {
   id: number;
@@ -37,6 +40,9 @@ const BranchesList: React.FC = () => {
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const { openForm, isOpen } = useFormModal();
   const { showConfirm } = useConfirmDialog();
+  const { canAdd, canModify, canRemove } = useModuleCrudAccess('Branches', {
+    requireBranchWrite: false,
+  });
 
   const showNotification = useCallback((type: 'success' | 'error', message: string) => {
     setNotification({ type, message });
@@ -127,10 +133,18 @@ const BranchesList: React.FC = () => {
   }, [isOpen, fetchBranches]);
 
   const handleAddBranch = () => {
+    if (!canAdd) {
+      showNotification('error', getPermissionDeniedMessage('create', 'Branches'));
+      return;
+    }
     openForm('branch');
   };
 
   const handleEditBranch = async (branch: Branch) => {
+    if (!canModify) {
+      showNotification('error', getPermissionDeniedMessage('edit', 'Branches'));
+      return;
+    }
     try {
       const response = await BranchService.getById(branch.id, branch.businessId);
       const detail = response?.data ?? branch;
@@ -157,6 +171,10 @@ const BranchesList: React.FC = () => {
   };
 
   const handleDeleteBranch = (branch: Branch) => {
+    if (!canRemove) {
+      showNotification('error', getPermissionDeniedMessage('delete', 'Branches'));
+      return;
+    }
     showConfirm({
       title: 'Delete Branch?',
       message: 'This branch will be removed from the system. If it is used by related records, deletion may be blocked.',
@@ -226,26 +244,30 @@ const BranchesList: React.FC = () => {
   ];
 
   const actions: Action<Branch>[] = [
-    {
-      label: '',
-      onClick: handleEditBranch,
-      icon: (
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" title="Edit">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-        </svg>
-      ),
-      variant: 'secondary',
-    },
-    {
-      label: '',
-      onClick: handleDeleteBranch,
-      icon: (
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" title="Delete">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-        </svg>
-      ),
-      variant: 'danger',
-    },
+    ...(canModify
+      ? [{
+          label: '',
+          onClick: handleEditBranch,
+          icon: (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" title="Edit">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+          ),
+          variant: 'secondary' as const,
+        }]
+      : []),
+    ...(canRemove
+      ? [{
+          label: '',
+          onClick: handleDeleteBranch,
+          icon: (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" title="Delete">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          ),
+          variant: 'danger' as const,
+        }]
+      : []),
   ];
 
   return (
@@ -277,15 +299,18 @@ const BranchesList: React.FC = () => {
 
       <div className="mb-6 flex justify-between items-center">
         <div></div>
-        <button
-          onClick={handleAddBranch}
-          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
-        >
-          <svg className="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-          </svg>
-          Add Branch
-        </button>
+        <PermissionGate module="Branches" action="create">
+          <button
+            onClick={handleAddBranch}
+            disabled={!canAdd}
+            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <svg className="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
+            Add Branch
+          </button>
+        </PermissionGate>
       </div>
 
       <DataTable

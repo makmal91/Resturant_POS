@@ -1,26 +1,34 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import DataTable, { Action, Column } from '../../components/DataTable';
 import Badge from '../../components/Badge';
+import { getActiveBranches } from '../../services/branchContext';
 import { useBranchStore } from '../../stores/useBranchStore';
 import { useFormModal } from '../../contexts/FormModalContext';
 import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
 import { getApiErrorMessage } from '../../services/api';
 import { safeString } from '../../utils/safeValues';
 import { userService, UserListItem } from './userService';
-import { useBranchWriteAccess } from '../../hooks/useBranchWriteAccess';
+import { useModuleCrudAccess } from '../../hooks/useModuleCrudAccess';
+import { getPermissionDeniedMessage } from '../../utils/permissionUtils';
+import PermissionGate from '../../components/PermissionGate';
 import { useIsMasterUser, useIsSuperAdmin } from '../../hooks/usePermission';
 import { isProtectedRole } from '../../types/permissions';
 
 const UserPage: React.FC = () => {
   const selectedBranchId = useBranchStore((state) => state.selectedBranchId);
+  const branches = useBranchStore((state) => state.branches);
+  const hasMultipleBranches = getActiveBranches(branches).length > 1;
   const { openForm, isOpen } = useFormModal();
   const { showConfirm } = useConfirmDialog();
   const {
+    canAdd,
+    canModify,
+    canRemove,
     isGlobalMode,
     canWriteInView,
     resolveEntityBranchId,
     getWriteBlockMessage,
-  } = useBranchWriteAccess();
+  } = useModuleCrudAccess('Users');
   const isSuperAdmin = useIsSuperAdmin();
   const isMasterUser = useIsMasterUser();
 
@@ -36,7 +44,6 @@ const UserPage: React.FC = () => {
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const hasBranchSelection = selectedBranchId !== null;
-  const canWrite = canWriteInView;
 
   const showNotification = useCallback((type: 'success' | 'error', message: string) => {
     setNotification({ type, message });
@@ -95,9 +102,11 @@ const UserPage: React.FC = () => {
 
   const handleAddUser = () => {
     const blockMessage = getWriteBlockMessage();
-    if (!canWrite || blockMessage) {
+    if (!canAdd || blockMessage) {
       if (blockMessage) {
         showNotification('error', blockMessage);
+      } else {
+        showNotification('error', getPermissionDeniedMessage('create', 'Users'));
       }
       return;
     }
@@ -125,9 +134,11 @@ const UserPage: React.FC = () => {
       return;
     }
     const blockMessage = getWriteBlockMessage();
-    if (!canWrite || blockMessage) {
+    if (!canModify || blockMessage) {
       if (blockMessage) {
         showNotification('error', blockMessage);
+      } else {
+        showNotification('error', getPermissionDeniedMessage('edit', 'Users'));
       }
       return;
     }
@@ -162,9 +173,11 @@ const UserPage: React.FC = () => {
       return;
     }
     const blockMessage = getWriteBlockMessage();
-    if (!canWrite || blockMessage) {
+    if (!canRemove || blockMessage) {
       if (blockMessage) {
         showNotification('error', blockMessage);
+      } else {
+        showNotification('error', getPermissionDeniedMessage('delete', 'Users'));
       }
       return;
     }
@@ -264,32 +277,34 @@ const UserPage: React.FC = () => {
     return base;
   }, [isGlobalMode]);
 
-  const actions: Action<UserListItem>[] = canWrite
-    ? [
-        {
+  const actions: Action<UserListItem>[] = [
+    ...(canModify
+      ? [{
           label: '',
           onClick: handleEditUser,
-          variant: 'secondary',
-          hidden: (row) => !canManageUser(row),
+          variant: 'secondary' as const,
+          hidden: (row: UserListItem) => !canManageUser(row),
           icon: (
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" title="Edit">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
             </svg>
           ),
-        },
-        {
+        }]
+      : []),
+    ...(canRemove
+      ? [{
           label: '',
           onClick: handleDeleteUser,
-          variant: 'danger',
-          hidden: (row) => !canManageUser(row),
+          variant: 'danger' as const,
+          hidden: (row: UserListItem) => !canManageUser(row),
           icon: (
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" title="Delete">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
             </svg>
           ),
-        },
-      ]
-    : [];
+        }]
+      : []),
+  ];
 
   return (
     <div>
@@ -320,26 +335,28 @@ const UserPage: React.FC = () => {
       </div>
 
       <div className="mb-6 flex justify-end">
-        {canWrite && (
-          <button
-            onClick={handleAddUser}
-            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
-          >
-            <svg className="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-            </svg>
-            Add User
-          </button>
-        )}
+        <PermissionGate module="Users" action="create">
+          {canAdd && (
+            <button
+              onClick={handleAddUser}
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+            >
+              <svg className="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+              Add User
+            </button>
+          )}
+        </PermissionGate>
       </div>
 
-      {isGlobalMode && !canWriteInView && (
+      {isGlobalMode && !canWriteInView && hasMultipleBranches && (
         <div className="mb-6 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           Global view is read-only. Select a specific branch to create or edit users.
         </div>
       )}
 
-      {isGlobalMode && canWriteInView && (
+      {isGlobalMode && canWriteInView && hasMultipleBranches && (
         <div className="mb-6 rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
           Global view is active. Assign branches in the user form when creating or editing users.
         </div>

@@ -4,8 +4,7 @@ import Badge from '../../components/Badge';
 import PermissionGate from '../../components/PermissionGate';
 import { useFormModal } from '../../contexts/FormModalContext';
 import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
-import { usePermission } from '../../hooks/usePermission';
-import { useBranchWriteAccess } from '../../hooks/useBranchWriteAccess';
+import { useModuleCrudAccess } from '../../hooks/useModuleCrudAccess';
 import { hasBranchContext } from '../../types/permissions';
 import { getApiErrorMessage } from '../../services/api';
 import { safeString } from '../../utils/safeValues';
@@ -26,20 +25,17 @@ const SupplierPage: React.FC = () => {
   const [totalPages, setTotalPages] = useState(0);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  const { canCreate, canEdit, canDelete } = usePermission('Suppliers');
   const {
+    canAdd,
+    canModify,
+    canRemove,
     selectedBranchId,
     isGlobalMode,
-    isGlobalAdmin,
-    canWriteInView,
     resolveEntityBranchId,
     getWriteBlockMessage,
-  } = useBranchWriteAccess();
+  } = useModuleCrudAccess('Suppliers');
 
   const hasBranchSelection = hasBranchContext(selectedBranchId);
-  const canAdd = canWriteInView && (isGlobalAdmin || canCreate);
-  const canModify = canWriteInView && (isGlobalAdmin || canEdit);
-  const canRemove = canWriteInView && (isGlobalAdmin || canDelete);
 
   const normalizeSupplier = (row: unknown, fallbackBranchId: number): SupplierItem | null => {
     const item = row as Record<string, unknown>;
@@ -48,6 +44,7 @@ const SupplierPage: React.FC = () => {
 
     return {
       id,
+      supplierCode: safeString(item?.supplierCode ?? item?.SupplierCode),
       name: safeString(item?.name ?? item?.Name),
       contactPerson: safeString(item?.contactPerson ?? item?.ContactPerson),
       phone: safeString(item?.phone ?? item?.Phone),
@@ -86,8 +83,8 @@ const SupplierPage: React.FC = () => {
       const rows = Array.isArray(response.data?.suppliers) ? response.data.suppliers : [];
       setSuppliers(
         rows
-          .map((row) => normalizeSupplier(row, selectedBranchId))
-          .filter((item): item is SupplierItem => item !== null)
+          .map((row: unknown) => normalizeSupplier(row, selectedBranchId))
+          .filter((item: SupplierItem | null): item is SupplierItem => item !== null)
       );
       setTotalRecords(Number(response.data?.totalRecords ?? 0));
       setTotalPages(Number(response.data?.totalPages ?? 0));

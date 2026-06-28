@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using POSSystem.Application.Common.Constants;
 using POSSystem.Application.Modules.DTOs;
 using POSSystem.Application.Modules.Interfaces;
 using POSSystem.Infrastructure.Data;
@@ -145,7 +146,19 @@ public class ModuleRepository : IModuleRepository
 
         foreach (var item in deduped)
         {
-            var row = existing.FirstOrDefault(r => r.FormId == item.FormId);
+            var matches = existing
+                .Where(r => r.FormId == item.FormId)
+                .OrderByDescending(r => !r.IsDeleted)
+                .ThenByDescending(r => r.UpdatedDate ?? r.CreatedDate)
+                .ToList();
+
+            var row = matches.FirstOrDefault();
+            foreach (var duplicate in matches.Skip(1))
+            {
+                duplicate.IsDeleted = true;
+                duplicate.UpdatedDate = DateTime.UtcNow;
+            }
+
             if (row == null)
             {
                 await _context.RoleFormPermissions.AddAsync(new Domain.RoleFormPermission

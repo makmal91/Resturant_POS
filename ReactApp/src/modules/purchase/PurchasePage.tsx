@@ -4,8 +4,7 @@ import Badge from '../../components/Badge';
 import PermissionGate from '../../components/PermissionGate';
 import { useFormModal } from '../../contexts/FormModalContext';
 import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
-import { usePermission } from '../../hooks/usePermission';
-import { useBranchWriteAccess } from '../../hooks/useBranchWriteAccess';
+import { useModuleCrudAccess } from '../../hooks/useModuleCrudAccess';
 import { hasBranchContext } from '../../types/permissions';
 import { getApiErrorMessage } from '../../services/api';
 import { safeString } from '../../utils/safeValues';
@@ -42,13 +41,18 @@ const PurchasePage: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<PurchaseStatus | null>(null);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  const { canCreate, canEdit, canDelete } = usePermission('Purchase');
-  const { selectedBranchId, isGlobalMode, isGlobalAdmin, canWriteInView, resolveEntityBranchId, getWriteBlockMessage } = useBranchWriteAccess();
+  const {
+    canAdd,
+    canModify,
+    canRemove,
+    selectedBranchId,
+    isGlobalMode,
+    canWriteInView,
+    resolveEntityBranchId,
+    getWriteBlockMessage,
+  } = useModuleCrudAccess('Purchase');
 
   const hasBranchSelection = hasBranchContext(selectedBranchId);
-  const canAdd = canWriteInView && (isGlobalAdmin || canCreate);
-  const canModify = canWriteInView && (isGlobalAdmin || canEdit);
-  const canRemove = canWriteInView && (isGlobalAdmin || canDelete);
 
   const showNotification = useCallback((type: 'success' | 'error', message: string) => {
     setNotification({ type, message });

@@ -54,16 +54,23 @@ export const canBypassPermissionsSession = (
   storedRoleName?: string | null,
   user?: { roleName?: string; isMasterUser?: boolean; isGlobalAdmin?: boolean } | null
 ): boolean =>
-  isMasterUserSession(storedRoleName, user) || isSuperAdminRole(storedRoleName) || isSuperAdminRole(user?.roleName)
+  isMasterUserSession(storedRoleName, user)
 
 export const hasBranchContext = (branchId: number | null | undefined): boolean =>
   branchId !== null && branchId !== undefined
+
+export const isBranchSelectionReady = (branchId: number | null | undefined): boolean =>
+  hasBranchContext(branchId)
 
 export const isGlobalBranchView = (branchId: number | null | undefined): boolean =>
   branchId === 0
 
 /** @deprecated Use isMasterUserRole for System Admin only checks */
 export const GLOBAL_BYPASS_ROLES = [MASTER_USER_ROLE, SUPER_ADMIN_ROLE]
+
+import { modulePermissionMatches } from '../utils/modulePermissionResolver'
+
+export { modulePermissionMatches, normalizeModuleName } from '../utils/modulePermissionResolver'
 
 export const normalizeModulePermission = (value: Record<string, unknown>): ModulePermission => ({
   moduleName: String(value.moduleName ?? value.ModuleName ?? ''),
@@ -74,26 +81,6 @@ export const normalizeModulePermission = (value: Record<string, unknown>): Modul
   canExport: Boolean(value.canExport ?? value.CanExport),
   canUpload: Boolean(value.canUpload ?? value.CanUpload),
 })
-
-const MODULE_ALIAS_GROUPS: string[][] = [
-  ['pos billing', 'pos', 'posbilling'],
-  ['sales', 'orders'],
-  ['dashboard'],
-]
-
-const normalizeAlias = (name: string): string => name.trim().toLowerCase()
-
-export const modulePermissionMatches = (storedName: string, requestedName: string): boolean => {
-  const stored = normalizeAlias(storedName)
-  const requested = normalizeAlias(requestedName)
-  if (stored === requested) return true
-
-  for (const group of MODULE_ALIAS_GROUPS) {
-    if (group.includes(stored) && group.includes(requested)) return true
-  }
-
-  return false
-}
 
 export const findModulePermission = (
   permissions: ModulePermission[],

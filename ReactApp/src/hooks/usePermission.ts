@@ -4,6 +4,8 @@ import { authStorage } from '../utils/storage'
 import { isGlobalAdminSession, isMasterUserSession, isSuperAdminRole } from '../types/permissions'
 import type { PermissionAction } from '../types/permissions'
 
+export { hasPermission, hasFeaturePermission } from '../utils/permissionUtils'
+
 export const usePermission = (moduleName: string) => {
   const can = usePermissionStore((state) => state.can)
 

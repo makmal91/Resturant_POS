@@ -1,3 +1,4 @@
+using POSSystem.Application.Auth.Interfaces;
 using POSSystem.Application.Common.Constants;
 using POSSystem.Application.Users.DTOs;
 using POSSystem.Application.Users.Interfaces;
@@ -8,10 +9,14 @@ namespace POSSystem.Application.Users.Services;
 public class RoleService : IRoleService
 {
     private readonly IRoleRepository _repository;
+    private readonly IPermissionAssignmentValidator _permissionAssignmentValidator;
 
-    public RoleService(IRoleRepository repository)
+    public RoleService(
+        IRoleRepository repository,
+        IPermissionAssignmentValidator permissionAssignmentValidator)
     {
         _repository = repository;
+        _permissionAssignmentValidator = permissionAssignmentValidator;
     }
 
     public Task<IReadOnlyList<RoleListItemDto>> GetRolesAsync() =>
@@ -86,7 +91,11 @@ public class RoleService : IRoleService
     public Task<IReadOnlyList<RolePermissionDto>> GetRolePermissionsAsync(int roleId) =>
         _repository.GetPermissionsAsync(roleId);
 
-    public async Task UpdateRolePermissionsAsync(int roleId, UpdateRolePermissionsDto dto, string? actorRoleName = null)
+    public async Task UpdateRolePermissionsAsync(
+        int roleId,
+        UpdateRolePermissionsDto dto,
+        int? actorRoleId = null,
+        string? actorRoleName = null)
     {
         var role = await _repository.GetTrackedByIdAsync(roleId);
         if (role == null)
@@ -107,6 +116,15 @@ public class RoleService : IRoleService
                 CanUpload = p.CanUpload
             })
             .ToList();
+
+        if (actorRoleId.HasValue)
+        {
+            await _permissionAssignmentValidator.ValidateLegacyPermissionsAsync(
+                actorRoleId.Value,
+                actorRoleName,
+                roleId,
+                permissions);
+        }
 
         await _repository.ReplacePermissionsAsync(roleId, permissions);
         await _repository.SaveChangesAsync();

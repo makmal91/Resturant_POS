@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { isGlobalAdminSession } from '../types/permissions'
+import { isGlobalAdminSession, isBranchSelectionReady } from '../types/permissions'
 
 const BranchSelectionPage: React.FC = () => {
   const { user, branches, selectedBranchId, setBranch, isAuthenticated } = useAuth()
@@ -11,13 +11,11 @@ const BranchSelectionPage: React.FC = () => {
   const globalAdmin = isGlobalAdminSession(user?.roleName, user)
 
   useEffect(() => {
-    if (!globalAdmin) {
+    if (!globalAdmin || isBranchSelectionReady(selectedBranchId)) {
       return
     }
 
-    if (selectedBranchId === null) {
-      setBranch(0)
-    }
+    setBranch(0)
   }, [globalAdmin, selectedBranchId, setBranch])
 
   if (!isAuthenticated) {
@@ -25,6 +23,14 @@ const BranchSelectionPage: React.FC = () => {
   }
 
   if (globalAdmin) {
+    if (!isBranchSelectionReady(selectedBranchId)) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-gray-50">
+          <p className="text-sm text-gray-600">Preparing your session...</p>
+        </div>
+      )
+    }
+
     return <Navigate to="/" replace />
   }
 

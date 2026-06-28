@@ -23,5 +23,8 @@ public interface IModuleService
 public interface IRolePermissionService
 {
     Task<IReadOnlyList<ModulePermissionItemDto>> GetRolePermissionsAsync(int roleId);
-    Task<IReadOnlyList<ModulePermissionItemDto>> SaveRolePermissionsAsync(SaveRolePermissionsRequestDto dto, string? actorRoleName = null);
+    Task<IReadOnlyList<ModulePermissionItemDto>> SaveRolePermissionsAsync(
+        SaveRolePermissionsRequestDto dto,
+        int? actorRoleId = null,
+        string? actorRoleName = null);
 }

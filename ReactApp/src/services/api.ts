@@ -163,15 +163,18 @@ api.interceptors.response.use(
     const responseData = error.response?.data as { message?: string } | undefined;
     const message = responseData?.message?.toLowerCase() ?? '';
 
+    const isBranchAccessDenied =
+      status === 403 &&
+      (message.includes('access to the selected branch') ||
+        message.includes('x-branch-id header is required') ||
+        message.includes('you do not have access to the selected branch'))
+
     if (status === 401) {
       dispatchAuthLogout();
       if (window.location.pathname !== '/login') {
         window.location.href = '/login';
       }
-    } else if (
-      status === 403 &&
-      (message.includes('branch') || message.includes('access to the selected branch'))
-    ) {
+    } else if (isBranchAccessDenied) {
       authStorage.setSelectedBranchId(null);
       if (window.location.pathname !== '/select-branch') {
         window.location.href = '/select-branch';
@@ -203,7 +206,11 @@ export const getApiErrorMessage = (
   }
 
   if (isBackendUnavailableError(error)) {
-    return 'Backend server is not running.';
+    return 'Backend server is not running. Start the API with: dotnet run (in the API folder).'
+  }
+
+  if (error.code === 'ECONNABORTED' || error.message.toLowerCase().includes('timeout')) {
+    return 'Request timed out. Ensure the API is running at http://localhost:5226 and try again.'
   }
 
   const responseData = error.response?.data as

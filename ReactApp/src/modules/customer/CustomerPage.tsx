@@ -5,7 +5,9 @@ import { useFormModal } from '../../contexts/FormModalContext';
 import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
 import { customerService, type CustomerListItem } from './customerService';
 import { getApiErrorMessage } from '../../services/api';
-import { useBranchStore } from '../../stores/useBranchStore';
+import { useModuleCrudAccess } from '../../hooks/useModuleCrudAccess';
+import { getPermissionDeniedMessage } from '../../utils/permissionUtils';
+import PermissionGate from '../../components/PermissionGate';
 
 const TYPE_BADGE: Record<string, 'info' | 'warning' | 'success'> = {
   Retail:    'info',
@@ -14,7 +16,7 @@ const TYPE_BADGE: Record<string, 'info' | 'warning' | 'success'> = {
 };
 
 const CustomerPage: React.FC = () => {
-  const selectedBranchId = useBranchStore((state) => state.selectedBranchId);
+  const { canAdd, canModify, canRemove, selectedBranchId } = useModuleCrudAccess('Customers');
   const [customers, setCustomers]       = useState<CustomerListItem[]>([]);
   const [loading, setLoading]           = useState(true);
   const [currentPage, setCurrentPage]   = useState(1);
@@ -68,9 +70,19 @@ const CustomerPage: React.FC = () => {
     return () => { fetchCustomers(); };
   }, [isOpen, fetchCustomers]);
 
-  const handleAdd = () => openForm('customer');
+  const handleAdd = () => {
+    if (!canAdd) {
+      showNotification('error', getPermissionDeniedMessage('create', 'Customers'));
+      return;
+    }
+    openForm('customer');
+  };
 
   const handleEdit = async (c: CustomerListItem) => {
+    if (!canModify) {
+      showNotification('error', getPermissionDeniedMessage('edit', 'Customers'));
+      return;
+    }
     try {
       const res = await customerService.getById(c.id, branchId);
       const d = res.data;
@@ -97,6 +109,10 @@ const CustomerPage: React.FC = () => {
   };
 
   const handleDelete = (c: CustomerListItem) => {
+    if (!canRemove) {
+      showNotification('error', getPermissionDeniedMessage('delete', 'Customers'));
+      return;
+    }
     if (c.isWalkIn) { showNotification('error', 'The walk-in customer cannot be deleted.'); return; }
     showConfirm({
       title: 'Delete Customer?',
@@ -172,28 +188,33 @@ const CustomerPage: React.FC = () => {
   ];
 
   const actions: Action<CustomerListItem>[] = [
-    {
-      label: '',
-      onClick: handleEdit,
-      icon: (
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" title="Edit">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-        </svg>
-      ),
-      variant: 'secondary',
-    },
-    {
-      label: '',
-      onClick: handleDelete,
-      icon: (
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" title="Delete">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-        </svg>
-      ),
-      variant: 'danger',
-    },
+    ...(canModify
+      ? [{
+          label: '',
+          onClick: handleEdit,
+          icon: (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" title="Edit">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+          ),
+          variant: 'secondary' as const,
+        }]
+      : []),
+    ...(canRemove
+      ? [{
+          label: '',
+          onClick: handleDelete,
+          hidden: (row: CustomerListItem) => row.isWalkIn,
+          icon: (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" title="Delete">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          ),
+          variant: 'danger' as const,
+        }]
+      : []),
   ];
 
   return (
@@ -225,15 +246,18 @@ const CustomerPage: React.FC = () => {
       {/* Add button */}
       <div className="mb-6 flex justify-between items-center">
         <div />
-        <button
-          onClick={handleAdd}
-          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
-        >
-          <svg className="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-          </svg>
-          Add Customer
-        </button>
+        <PermissionGate module="Customers" action="create">
+          <button
+            onClick={handleAdd}
+            disabled={!canAdd}
+            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <svg className="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
+            Add Customer
+          </button>
+        </PermissionGate>
       </div>
 
       <DataTable

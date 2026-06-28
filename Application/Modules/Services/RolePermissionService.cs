@@ -1,3 +1,4 @@
+using POSSystem.Application.Auth.Interfaces;
 using POSSystem.Application.Common.Constants;
 using POSSystem.Application.Modules.DTOs;
 using POSSystem.Application.Modules.Interfaces;
@@ -11,13 +12,16 @@ public class RolePermissionService : IRolePermissionService
 {
     private readonly IRoleRepository _roleRepository;
     private readonly IModuleRepository _moduleRepository;
+    private readonly IPermissionAssignmentValidator _permissionAssignmentValidator;
 
     public RolePermissionService(
         IRoleRepository roleRepository,
-        IModuleRepository moduleRepository)
+        IModuleRepository moduleRepository,
+        IPermissionAssignmentValidator permissionAssignmentValidator)
     {
         _roleRepository = roleRepository;
         _moduleRepository = moduleRepository;
+        _permissionAssignmentValidator = permissionAssignmentValidator;
     }
 
     public async Task<IReadOnlyList<ModulePermissionItemDto>> GetRolePermissionsAsync(int roleId)
@@ -82,6 +86,7 @@ public class RolePermissionService : IRolePermissionService
 
     public async Task<IReadOnlyList<ModulePermissionItemDto>> SaveRolePermissionsAsync(
         SaveRolePermissionsRequestDto dto,
+        int? actorRoleId = null,
         string? actorRoleName = null)
     {
         var role = await _roleRepository.GetTrackedByIdAsync(dto.RoleId);
@@ -92,8 +97,29 @@ public class RolePermissionService : IRolePermissionService
 
         var modules = await _moduleRepository.GetAllModulesFlatAsync();
         var moduleLookup = modules.ToDictionary(m => m.Id);
+        var moduleInfoLookup = modules.ToDictionary(
+            m => m.Id,
+            m => (m.ModuleKey, m.ModuleName));
         var allForms = await _moduleRepository.GetAllFormsAsync();
         var formsByModule = allForms.ToLookup(f => f.ModuleId);
+        var formToModuleMap = allForms.ToDictionary(f => f.Id, f => f.ModuleId);
+
+        if (actorRoleId.HasValue)
+        {
+            await _permissionAssignmentValidator.ValidateModulePermissionsAsync(
+                actorRoleId.Value,
+                actorRoleName,
+                dto.RoleId,
+                dto.Permissions,
+                moduleInfoLookup);
+
+            await _permissionAssignmentValidator.ValidateFormPermissionsAsync(
+                actorRoleId.Value,
+                actorRoleName,
+                dto.RoleId,
+                dto.FormPermissions,
+                formToModuleMap);
+        }
 
         var normalizedFormPermissions = dto.FormPermissions
             .GroupBy(fp => fp.FormId)

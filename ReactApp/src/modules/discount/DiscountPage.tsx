@@ -11,6 +11,7 @@ const DiscountPage: React.FC = () => {
       entityLabel="Discount"
       service={discountService}
       FormComponent={DiscountForm}
+      permissionModule="Discounts"
     />
   );
 };

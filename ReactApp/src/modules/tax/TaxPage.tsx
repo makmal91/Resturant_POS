@@ -11,6 +11,7 @@ const TaxPage: React.FC = () => {
       entityLabel="Tax"
       service={taxService}
       FormComponent={TaxForm}
+      permissionModule="Taxes"
     />
   );
 };

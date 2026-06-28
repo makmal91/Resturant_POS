@@ -1,9 +1,11 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using POSSystem.Application.Auth.Exceptions;
 using POSSystem.Application.Common.Constants;
 using POSSystem.Application.Modules.DTOs;
 using POSSystem.Application.Modules.Interfaces;
 using POSSystem.API.Authorization;
+using System.Security.Claims;
 
 namespace POSSystem.API.Controllers;
 
@@ -40,8 +42,15 @@ public class RolePermissionsController : ControllerBase
     {
         try
         {
-            var permissions = await _rolePermissionService.SaveRolePermissionsAsync(dto, ResolveRoleName());
+            var permissions = await _rolePermissionService.SaveRolePermissionsAsync(
+                dto,
+                ResolveRoleId(),
+                ResolveRoleName());
             return Ok(permissions);
+        }
+        catch (PermissionEscalationException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
         }
         catch (InvalidOperationException ex)
         {
@@ -50,5 +59,11 @@ public class RolePermissionsController : ControllerBase
     }
 
     private string? ResolveRoleName() =>
-        User?.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+        User?.FindFirst(ClaimTypes.Role)?.Value;
+
+    private int? ResolveRoleId()
+    {
+        var claim = User?.FindFirstValue("roleId");
+        return int.TryParse(claim, out var roleId) ? roleId : null;
+    }
 }

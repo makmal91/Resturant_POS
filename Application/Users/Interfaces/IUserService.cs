@@ -72,7 +72,11 @@ public interface IRoleService
     Task<RoleDetailDto?> UpdateRoleAsync(int id, UpdateRoleDto dto, string? actorRoleName = null);
     Task DeleteRoleAsync(int id, string? actorRoleName = null);
     Task<IReadOnlyList<RolePermissionDto>> GetRolePermissionsAsync(int roleId);
-    Task UpdateRolePermissionsAsync(int roleId, UpdateRolePermissionsDto dto, string? actorRoleName = null);
+    Task UpdateRolePermissionsAsync(
+        int roleId,
+        UpdateRolePermissionsDto dto,
+        int? actorRoleId = null,
+        string? actorRoleName = null);
 }
 
 public interface IPasswordHasher

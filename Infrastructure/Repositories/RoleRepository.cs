@@ -110,6 +110,8 @@ public class RoleRepository : IRoleRepository
             .Where(rp => rp.RoleId == roleId)
             .ToListAsync();
 
+        ConsolidateDuplicateModuleRows(existing);
+
         var incomingKeys = permissions
             .Select(p => p.ModuleName.Trim())
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -120,6 +122,7 @@ public class RoleRepository : IRoleRepository
             .ToHashSet();
 
         foreach (var row in existing.Where(r =>
+                     !r.IsDeleted &&
                      r.ModuleId.HasValue &&
                      !incomingModuleIds.Contains(r.ModuleId.Value) &&
                      !incomingKeys.Contains(r.ModuleName)))
@@ -129,6 +132,7 @@ public class RoleRepository : IRoleRepository
         }
 
         foreach (var row in existing.Where(r =>
+                     !r.IsDeleted &&
                      !r.ModuleId.HasValue &&
                      !incomingKeys.Contains(r.ModuleName)))
         {
@@ -139,12 +143,7 @@ public class RoleRepository : IRoleRepository
         foreach (var permission in permissions)
         {
             var moduleName = permission.ModuleName.Trim();
-            var row = permission.ModuleId.HasValue
-                ? existing.FirstOrDefault(r => r.ModuleId == permission.ModuleId)
-                : null;
-
-            row ??= existing.FirstOrDefault(r =>
-                string.Equals(r.ModuleName, moduleName, StringComparison.OrdinalIgnoreCase));
+            var row = FindMatchingPermissionRow(existing, permission.ModuleId, moduleName);
 
             if (row == null)
             {
@@ -178,6 +177,66 @@ public class RoleRepository : IRoleRepository
         }
 
         _cache.Remove(GetPermissionCacheKey(roleId));
+    }
+
+    private static void ConsolidateDuplicateModuleRows(List<RolePermission> existing)
+    {
+        var activeRows = existing.Where(r => !r.IsDeleted).ToList();
+
+        foreach (var group in activeRows.GroupBy(r => ResolveModuleGroupKey(r)))
+        {
+            var keeper = group
+                .OrderByDescending(r => r.ModuleId.HasValue)
+                .ThenByDescending(r => r.UpdatedDate ?? r.CreatedDate)
+                .First();
+
+            foreach (var duplicate in group.Where(r => r.Id != keeper.Id))
+            {
+                duplicate.IsDeleted = true;
+                duplicate.UpdatedDate = DateTime.UtcNow;
+            }
+        }
+    }
+
+    private static string ResolveModuleGroupKey(RolePermission row)
+    {
+        if (row.ModuleId.HasValue)
+            return $"id:{row.ModuleId.Value}";
+
+        return $"name:{PermissionModuleResolver.Normalize(row.ModuleName)}";
+    }
+
+    private static RolePermission? FindMatchingPermissionRow(
+        IReadOnlyList<RolePermission> existing,
+        int? moduleId,
+        string moduleName)
+    {
+        var matches = existing
+            .Where(r => MatchesModulePermission(r, moduleId, moduleName))
+            .OrderByDescending(r => !r.IsDeleted)
+            .ThenByDescending(r => r.ModuleId.HasValue)
+            .ThenByDescending(r => r.UpdatedDate ?? r.CreatedDate)
+            .ToList();
+
+        if (matches.Count == 0)
+            return null;
+
+        var keeper = matches[0];
+        foreach (var duplicate in matches.Skip(1))
+        {
+            duplicate.IsDeleted = true;
+            duplicate.UpdatedDate = DateTime.UtcNow;
+        }
+
+        return keeper;
+    }
+
+    private static bool MatchesModulePermission(RolePermission row, int? moduleId, string moduleName)
+    {
+        if (moduleId.HasValue && row.ModuleId == moduleId)
+            return true;
+
+        return PermissionModuleResolver.Matches(row.ModuleName, moduleName);
     }
 
     private const string CacheGenerationKey = "perm-cache-gen";

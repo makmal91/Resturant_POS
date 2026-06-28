@@ -44,7 +44,6 @@ export const useBranchWriteAccess = () => {
   return {
     selectedBranchId,
     isGlobalAdmin,
-    isMasterUser: isGlobalAdmin,
     hasBranchSelection,
     isGlobalMode,
     canWriteInView,

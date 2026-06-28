@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import apiClient, { getApiErrorMessage } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
-import { useBranchWriteAccess } from '../../hooks/useBranchWriteAccess';
+import { useModuleCrudAccess } from '../../hooks/useModuleCrudAccess';
 import { useBranchStore } from '../../stores/useBranchStore';
 import { salesService } from './salesService';
 import type { SaleInvoiceDto, SaleInvoiceItemResult } from '../pos/posService';
@@ -159,7 +159,7 @@ const EditInvoicePage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
-  const { resolveEntityBranchId } = useBranchWriteAccess();
+  const { resolveEntityBranchId } = useModuleCrudAccess('Sales');
   const selectedBranchId = useBranchStore((s) => s.selectedBranchId);
 
   // branchId passed via navigation state from Invoice History page

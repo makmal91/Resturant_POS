@@ -5,8 +5,7 @@ import AuthenticatedImage from '../../components/AuthenticatedImage';
 import { useBranchStore } from '../../stores/useBranchStore';
 import { useFormModal } from '../../contexts/FormModalContext';
 import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
-import { usePermission } from '../../hooks/usePermission';
-import { useBranchWriteAccess } from '../../hooks/useBranchWriteAccess';
+import { useModuleCrudAccess } from '../../hooks/useModuleCrudAccess';
 import PermissionGate from '../../components/PermissionGate';
 import { getApiErrorMessage } from '../../services/api';
 import { safeString } from '../../utils/safeValues';
@@ -44,20 +43,18 @@ const CategoryPage: React.FC = () => {
   const [totalPages, setTotalPages] = useState(0);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  const { canCreate, canEdit, canDelete } = usePermission('Categories');
   const {
+    canAdd,
+    canModify,
+    canRemove,
     selectedBranchId,
-    isMasterUser,
+    isGlobalAdmin,
     hasBranchSelection,
     isGlobalMode,
     canWriteInView,
     resolveEntityBranchId,
     getWriteBlockMessage,
-  } = useBranchWriteAccess();
-
-  const canAdd = canWriteInView && (isMasterUser || canCreate);
-  const canModify = canWriteInView && (isMasterUser || canEdit);
-  const canRemove = canWriteInView && (isMasterUser || canDelete);
+  } = useModuleCrudAccess('Categories');
 
   const showNotification = useCallback((type: 'success' | 'error', message: string) => {
     setNotification({ type, message });
@@ -432,7 +429,7 @@ const CategoryPage: React.FC = () => {
         <p className="text-gray-600">Manage menu categories by branch and active status</p>
       </div>
 
-      {isGlobalMode && isMasterUser && (
+      {isGlobalMode && isGlobalAdmin && (
         <div className="mb-6 rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
           Global view is active. Choose a target branch in the form when creating records.
         </div>

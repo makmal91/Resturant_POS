@@ -11,6 +11,7 @@ const UnitPage: React.FC = () => {
       entityLabel="Unit"
       service={unitService}
       FormComponent={UnitForm}
+      permissionModule="Units"
     />
   );
 };

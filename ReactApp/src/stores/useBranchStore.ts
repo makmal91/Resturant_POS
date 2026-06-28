@@ -40,7 +40,11 @@ export const useBranchStore = create<BranchState>((set, get) => ({
       const storedBranchId = authStorage.getSelectedBranchId()
       let nextSelectedBranchId = get().selectedBranchId ?? storedBranchId
 
-      // Single active branch: always auto-select globally (no manual selection).
+      if (globalAdmin && (nextSelectedBranchId === null || nextSelectedBranchId === undefined)) {
+        nextSelectedBranchId = activeBranches.length > 1 ? 0 : null
+      }
+
+      // Single active branch: always select it (no global / all-branches mode).
       if (activeBranches.length === 1) {
         nextSelectedBranchId = activeBranches[0].id
         authStorage.setSelectedBranchId(nextSelectedBranchId)
@@ -65,6 +69,9 @@ export const useBranchStore = create<BranchState>((set, get) => ({
           nextSelectedBranchId = 0
           authStorage.setSelectedBranchId(nextSelectedBranchId)
         }
+      } else if (globalAdmin) {
+        nextSelectedBranchId = storedBranchId ?? 0
+        authStorage.setSelectedBranchId(nextSelectedBranchId)
       } else {
         nextSelectedBranchId = null
         authStorage.setSelectedBranchId(null)
@@ -77,14 +84,21 @@ export const useBranchStore = create<BranchState>((set, get) => ({
       }
     }
 
-    if (!globalAdmin && authBranches.length > 0) {
-      applyBranches(
-        authBranches.map((branch) => ({
-          id: branch.id,
-          name: branch.name,
-          isActive: true,
-        }))
-      )
+    const authBranchOptions = authBranches.map((branch) => ({
+      id: branch.id,
+      name: branch.name,
+      isActive: true,
+    }))
+
+    if (authBranchOptions.length > 0) {
+      applyBranches(authBranchOptions)
+      if (!globalAdmin) {
+        return
+      }
+    }
+
+    if (!globalAdmin) {
+      set({ isLoading: false, error: null })
       return
     }
 
@@ -104,7 +118,7 @@ export const useBranchStore = create<BranchState>((set, get) => ({
         isActive: Boolean(item.isActive ?? item.IsActive ?? true),
       }))
 
-      if (globalAdmin && branches.length > 0) {
+      if (branches.length > 0) {
         authStorage.setBranches(
           branches.map((branch) => ({
             id: branch.id,
@@ -113,24 +127,23 @@ export const useBranchStore = create<BranchState>((set, get) => ({
         )
       }
 
-      applyBranches(branches, false)
+      applyBranches(branches.length > 0 ? branches : authBranchOptions, false)
     } catch (error) {
-      if (authBranches.length > 0) {
-        applyBranches(
-          authBranches.map((branch) => ({
-            id: branch.id,
-            name: branch.name,
-            isActive: true,
-          }))
-        )
+      if (authBranchOptions.length > 0) {
+        applyBranches(authBranchOptions)
         return
       }
 
+      const storedBranchId = authStorage.getSelectedBranchId()
       set({
         branches: [],
+        selectedBranchId: globalAdmin ? (storedBranchId ?? 0) : null,
         isLoading: false,
         error: getApiErrorMessage(error, 'Failed to load branches.'),
       })
+      if (globalAdmin) {
+        authStorage.setSelectedBranchId(storedBranchId ?? 0)
+      }
     }
   },
 

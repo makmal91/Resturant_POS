@@ -3,8 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import DataTable, { type Action, type Column } from '../../components/DataTable';
 import Badge from '../../components/Badge';
 import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
-import { usePermission } from '../../hooks/usePermission';
-import { useBranchWriteAccess } from '../../hooks/useBranchWriteAccess';
+import { useModuleCrudAccess } from '../../hooks/useModuleCrudAccess';
 import { hasBranchContext } from '../../types/permissions';
 import { getApiErrorMessage } from '../../services/api';
 import { safeString } from '../../utils/safeValues';
@@ -124,10 +123,8 @@ const SaleInvoicesPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { showConfirm } = useConfirmDialog();
-  const { canEdit } = usePermission('Sales');
-  const { selectedBranchId, isGlobalAdmin, canWriteInView, resolveEntityBranchId } = useBranchWriteAccess();
+  const { canModify, selectedBranchId, canWriteInView, resolveEntityBranchId } = useModuleCrudAccess('Sales');
   const hasBranchSelection = hasBranchContext(selectedBranchId);
-  const canModify = canWriteInView && (isGlobalAdmin || canEdit);
 
   const [items, setItems]               = useState<SaleInvoiceListDto[]>([]);
   const [loading, setLoading]           = useState(false);

@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import DataTable, { Action, Column } from '../../components/DataTable';
-import { useBranchWriteAccess } from '../../hooks/useBranchWriteAccess';
+import { useModuleCrudAccess } from '../../hooks/useModuleCrudAccess';
+import { getPermissionDeniedMessage } from '../../utils/permissionUtils';
+import PermissionGate from '../../components/PermissionGate';
 import { hasBranchContext } from '../../types/permissions';
 import {
   CrudEntityService,
@@ -25,6 +27,7 @@ interface ManagementPageProps {
   entityLabel: string;
   service: CrudEntityService;
   FormComponent: React.ComponentType<EntityFormProps>;
+  permissionModule?: string;
 }
 
 const toRecord = (value: unknown): Record<string, unknown> => {
@@ -133,8 +136,17 @@ const ManagementPage: React.FC<ManagementPageProps> = ({
   entityLabel,
   service,
   FormComponent,
+  permissionModule,
 }) => {
-  const { selectedBranchId } = useBranchWriteAccess();
+  const {
+    canAdd,
+    canModify,
+    canRemove,
+    selectedBranchId,
+    getWriteBlockMessage,
+  } = useModuleCrudAccess(permissionModule ?? '', {
+    requireBranchWrite: Boolean(permissionModule),
+  });
   const hasBranchSelection = hasBranchContext(selectedBranchId);
   const usesServerSide = Boolean(service.getPaged);
 
@@ -251,6 +263,11 @@ const ManagementPage: React.FC<ManagementPageProps> = ({
   }, [branchId, pageSize]);
 
   const openAddModal = () => {
+    const blockMessage = getWriteBlockMessage();
+    if (permissionModule && (!canAdd || blockMessage)) {
+      setErrorMessage(blockMessage ?? getPermissionDeniedMessage('create', permissionModule));
+      return;
+    }
     setSelectedEntity(null);
     setSuccessMessage('');
     setErrorMessage('');
@@ -258,8 +275,11 @@ const ManagementPage: React.FC<ManagementPageProps> = ({
   };
 
   const openEditModal = async (item: ManagementEntity) => {
-    setErrorMessage('');
-    setSuccessMessage('');
+    const blockMessage = getWriteBlockMessage();
+    if (permissionModule && (!canModify || blockMessage)) {
+      setErrorMessage(blockMessage ?? getPermissionDeniedMessage('edit', permissionModule));
+      return;
+    }
 
     try {
       const response = await service.getById(item.id, item.branchId ?? branchId);
@@ -278,6 +298,12 @@ const ManagementPage: React.FC<ManagementPageProps> = ({
   };
 
   const handleDelete = async (item: ManagementEntity) => {
+    const blockMessage = getWriteBlockMessage();
+    if (permissionModule && (!canRemove || blockMessage)) {
+      setErrorMessage(blockMessage ?? getPermissionDeniedMessage('delete', permissionModule));
+      return;
+    }
+
     const confirmed = window.confirm(`Delete ${entityLabel} "${item.name}"?`);
     if (!confirmed) {
       return;
@@ -298,6 +324,19 @@ const ManagementPage: React.FC<ManagementPageProps> = ({
   };
 
   const handleSubmit = async (data: ManagementFormValues) => {
+    const blockMessage = getWriteBlockMessage();
+    const isEdit = Boolean(isEditMode && selectedEntity?.id);
+    if (permissionModule) {
+      if (isEdit && (!canModify || blockMessage)) {
+        setErrorMessage(blockMessage ?? getPermissionDeniedMessage('edit', permissionModule));
+        return;
+      }
+      if (!isEdit && (!canAdd || blockMessage)) {
+        setErrorMessage(blockMessage ?? getPermissionDeniedMessage('create', permissionModule));
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     setErrorMessage('');
 
@@ -368,20 +407,24 @@ const ManagementPage: React.FC<ManagementPageProps> = ({
   ];
 
   const actions: Action<ManagementEntity>[] = [
-    {
-      label: 'Edit',
-      onClick: (item) => {
-        void openEditModal(item);
-      },
-      variant: 'primary',
-    },
-    {
-      label: 'Delete',
-      onClick: (item) => {
-        void handleDelete(item);
-      },
-      variant: 'danger',
-    },
+    ...(canModify || !permissionModule
+      ? [{
+          label: 'Edit',
+          onClick: (item: ManagementEntity) => {
+            void openEditModal(item);
+          },
+          variant: 'primary' as const,
+        }]
+      : []),
+    ...(canRemove || !permissionModule
+      ? [{
+          label: 'Delete',
+          onClick: (item: ManagementEntity) => {
+            void handleDelete(item);
+          },
+          variant: 'danger' as const,
+        }]
+      : []),
   ];
 
   const tableEnabled = !usesServerSide || hasBranchSelection;
@@ -393,13 +436,27 @@ const ManagementPage: React.FC<ManagementPageProps> = ({
           <h1 className="mb-2 text-3xl font-bold text-gray-900">{title}</h1>
           <p className="text-gray-600">{subtitle}</p>
         </div>
-        <button
-          onClick={openAddModal}
-          disabled={isSubmitting || (usesServerSide && !hasBranchSelection)}
-          className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          Add {entityLabel}
-        </button>
+        {(!permissionModule || canAdd) && (
+          permissionModule ? (
+            <PermissionGate module={permissionModule} action="create">
+              <button
+                onClick={openAddModal}
+                disabled={isSubmitting || (usesServerSide && !hasBranchSelection) || !canAdd}
+                className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Add {entityLabel}
+              </button>
+            </PermissionGate>
+          ) : (
+            <button
+              onClick={openAddModal}
+              disabled={isSubmitting || (usesServerSide && !hasBranchSelection)}
+              className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Add {entityLabel}
+            </button>
+          )
+        )}
       </div>
 
       {usesServerSide && !hasBranchSelection && (

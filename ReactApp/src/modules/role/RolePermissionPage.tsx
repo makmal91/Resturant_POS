@@ -13,6 +13,7 @@ import { usePermissionStore } from '../../stores/usePermissionStore';
 import { usePermission, useIsMasterUser, useIsSuperAdmin } from '../../hooks/usePermission';
 import { isProtectedRole } from '../../types/permissions';
 import { authStorage } from '../../utils/storage';
+import { canAssignModulePermission } from '../../utils/permissionUtils';
 import { useFormModal } from '../../contexts/FormModalContext';
 import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
 import { isFeatureFormCode } from '../../types/featurePermissions';
@@ -241,6 +242,8 @@ const RolePermissionPage: React.FC = () => {
   const { canCreate, canEdit, canDelete } = usePermission('Roles');
   const isSuperAdmin = useIsSuperAdmin();
   const isMasterUser = useIsMasterUser();
+  const actorPermissions = usePermissionStore((s) => s.permissions);
+  const actorRoleName = usePermissionStore((s) => s.roleName);
   const { openForm, isOpen } = useFormModal();
   const { showConfirm } = useConfirmDialog();
 
@@ -316,6 +319,36 @@ const RolePermissionPage: React.FC = () => {
   const tree = useMemo(() => buildTreeFromFlat(permissions), [permissions]);
   const permissionMap = useMemo(() => new Map(permissions.map((p) => [p.moduleId, p])), [permissions]);
 
+  const isModuleAssignable = useCallback(
+    (moduleKey: string, moduleName: string) =>
+      canAssignModulePermission(actorPermissions, moduleKey, moduleName, actorRoleName),
+    [actorPermissions, actorRoleName],
+  );
+
+  const filterVisibleTree = useCallback(
+    (nodes: ModuleTreeNode[]): ModuleTreeNode[] =>
+      nodes
+        .map((node) => {
+          if (node.moduleKey === '') {
+            const children = filterVisibleTree(node.children);
+            if (children.length === 0) {
+              return null;
+            }
+            return { ...node, children };
+          }
+
+          if (!isModuleAssignable(node.moduleKey, node.moduleName)) {
+            return null;
+          }
+
+          return { ...node, children: [] };
+        })
+        .filter((node): node is ModuleTreeNode => node !== null),
+    [isModuleAssignable],
+  );
+
+  const visibleTree = useMemo(() => filterVisibleTree(tree), [tree, filterVisibleTree]);
+
   const selectedRole = roles.find((role) => role.id === selectedRoleId);
   const isProtectedRoleSelected = isProtectedRole(selectedRole?.name);
   const canEditSelectedRole = canEdit && (isMasterUser || !isProtectedRoleSelected);
@@ -356,8 +389,9 @@ const RolePermissionPage: React.FC = () => {
     });
   };
 
-  const standaloneModules = tree.filter((n) => n.moduleKey !== '' && n.children.length === 0);
-  const groupModules = tree.filter((n) => n.moduleKey === '' && n.children.length > 0);
+  const standaloneModules = visibleTree.filter((n) => n.moduleKey !== '' && n.children.length === 0);
+  const groupModules = visibleTree.filter((n) => n.moduleKey === '' && n.children.length > 0);
+  const showAssignableHint = !isMasterUser && !isSuperAdmin && actorPermissions.length > 0;
 
   const applyToModules = useCallback((moduleIds: number[], updater: (item: RolePermissionItem) => RolePermissionItem) => {
     setPermissions((current) =>
@@ -506,6 +540,11 @@ const RolePermissionPage: React.FC = () => {
         <p className="text-sm text-gray-600 mt-1">
           Create and manage user roles, then control which menu items appear in the sidebar and what actions users can perform.
         </p>
+        {showAssignableHint && (
+          <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3">
+            You can only assign permissions that are granted to your own role.
+          </p>
+        )}
       </div>
 
       {notification && (
