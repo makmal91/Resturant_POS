@@ -18,6 +18,12 @@ public class HttpTenantContext : ITenantContext
         TryReadIntClaim("userId") ??
         TryReadIntClaim("UserId");
 
+    public int? RoleId =>
+        TryReadIntClaim("roleId") ??
+        TryReadIntClaim("RoleId");
+
+    public string? RoleName => ResolveRoleName();
+
     public int? BusinessId =>
         TryReadIntClaim("businessId") ??
         TryReadIntClaim("BusinessId") ??

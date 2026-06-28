@@ -72,8 +72,8 @@ const isValidBranchSelection = (
   return branches.some((branch) => branch.id === branchId)
 }
 
-const syncPermissionStore = (permissions: ModulePermission[], roleName?: string) => {
-  usePermissionStore.getState().setPermissions(permissions, roleName ?? null)
+const syncPermissionStore = (permissions: ModulePermission[], roleName?: string, features?: string[]) => {
+  usePermissionStore.getState().setPermissions(permissions, roleName ?? null, features ?? [])
 }
 
 const mapRole = (roleName?: string): TenantRole => {
@@ -128,7 +128,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       nextToken: string | null,
       nextBranches: StoredBranch[],
       nextBranchId: number | null,
-      nextPermissions: ModulePermission[] = authStorage.getPermissions()
+      nextPermissions: ModulePermission[] = authStorage.getPermissions(),
+      nextFeatures: string[] = authStorage.getFeatures(),
     ) => {
       setUser(nextUser)
       setToken(nextToken)
@@ -142,10 +143,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           branches: nextBranches,
           selectedBranchId: nextBranchId,
           permissions: nextPermissions,
+          features: nextFeatures,
         })
         syncTenantSession(nextUser, nextBranchId)
         syncBranchStore(nextBranches, nextBranchId)
-        syncPermissionStore(nextPermissions, nextUser.roleName)
+        syncPermissionStore(nextPermissions, nextUser.roleName, nextFeatures)
         if (nextUser.roleId) {
           void useMenuStore.getState().fetchSidebarData(nextUser.roleId)
         }
@@ -230,7 +232,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         response.token,
         response.branches,
         autoSelectedBranchId,
-        response.permissions
+        response.permissions,
+        response.features,
       )
 
       if (isGlobalAdminUser(response.user) || autoSelectedBranchId !== null) {
@@ -273,7 +276,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         snapshot.token,
         snapshot.branches,
         branchId,
-        snapshot.permissions
+        snapshot.permissions,
+        snapshot.features,
       )
     }
 

@@ -4,6 +4,7 @@ export interface RouteDefinition {
   component: React.ComponentType;
   module?: string;
   form?: string;
+  feature?: string;
 }
 
 import DashboardPage from './modules/dashboard/DashboardPage';
@@ -66,9 +67,9 @@ export const routeRegistry: RouteDefinition[] = [
   { path: '/products', label: 'Products', component: ProductPage, module: 'Products' },
   { path: '/customers', label: 'Customers', component: CustomerPage, module: 'Customers' },
   { path: '/suppliers', label: 'Suppliers', component: SupplierPage, module: 'Suppliers' },
-  { path: '/units', label: 'Units', component: UnitPage, module: 'Units' },
-  { path: '/settings/sizes', label: 'Sizes', component: SizePage, module: 'Sizes' },
-  { path: '/settings/colors', label: 'Colors', component: ColorPage, module: 'Colors' },
+  { path: '/units', label: 'Units', component: UnitPage, module: 'Units', feature: 'product.unit.enable' },
+  { path: '/settings/sizes', label: 'Sizes', component: SizePage, module: 'Sizes', feature: 'product.variant.enable' },
+  { path: '/settings/colors', label: 'Colors', component: ColorPage, module: 'Colors', feature: 'product.variant.enable' },
   { path: '/settings/countries', label: 'Countries', component: CountryPage, module: 'Countries' },
   { path: '/settings/cities', label: 'Cities', component: CityPage, module: 'Cities' },
   { path: '/taxes', label: 'Taxes', component: TaxPage },
@@ -77,15 +78,15 @@ export const routeRegistry: RouteDefinition[] = [
   { path: '/orders', label: 'Orders', component: OrderScreen, module: 'Orders' },
   { path: '/warehouses', label: 'Warehouses', component: WarehousePage, module: 'Warehouses' },
   { path: '/purchase', label: 'Purchase', component: PurchasePage, module: 'Purchase' },
-  { path: '/stock', label: 'Stock', component: StockLedgerPage, module: 'Stock' },
+  { path: '/stock', label: 'Stock', component: StockLedgerPage, module: 'Stock', feature: 'product.stock.enable' },
   { path: '/reports/sales', label: 'Sales Report', component: SalesReportPage, module: 'Sales Reports' },
   { path: '/reports/product-wise-sales', label: 'Product Wise Sales', component: ProductWiseSalesReportPage, module: 'Product Wise Sales Report' },
   { path: '/reports/purchases', label: 'Purchase Report', component: PurchaseReportPage, module: 'Purchase Reports' },
   { path: '/reports/customer-outstanding', label: 'Customer Outstanding', component: CustomerOutstandingReportPage, module: 'Customer Outstanding Report' },
   { path: '/reports/supplier-payable', label: 'Supplier Payable', component: SupplierPayableReportPage, module: 'Supplier Payable Report' },
   { path: '/reports/profit-loss', label: 'Profit & Loss', component: ProfitLossReportPage, module: 'Profit & Loss Report' },
-  { path: '/reports/stock', label: 'Stock Report', component: StockReportPage, module: 'Stock Reports' },
-  { path: '/reports/stock-by-unit', label: 'Stock By Unit Report', component: StockByUnitPivotReportPage, module: 'Stock Reports' },
+  { path: '/reports/stock', label: 'Stock Report', component: StockReportPage, module: 'Stock Reports', feature: 'product.stock.enable' },
+  { path: '/reports/stock-by-unit', label: 'Stock By Unit Report', component: StockByUnitPivotReportPage, module: 'Stock Reports', feature: 'product.stock.enable' },
   { path: '/reports/receivable-aging', label: 'Receivable Aging', component: ReceivableAgingReportPage, module: 'Customer Receivable Aging' },
   { path: '/reports/payable-aging', label: 'Payable Aging', component: PayableAgingReportPage, module: 'Supplier Payable Aging' },
   { path: '/sales-invoices', label: 'Invoice History', component: SaleInvoicesPage, module: 'Sales' },

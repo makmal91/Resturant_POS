@@ -15,6 +15,7 @@ import { isProtectedRole } from '../../types/permissions';
 import { authStorage } from '../../utils/storage';
 import { useFormModal } from '../../contexts/FormModalContext';
 import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
+import { isFeatureFormCode } from '../../types/featurePermissions';
 
 interface ModuleTreeNode {
   id: number;
@@ -163,7 +164,7 @@ const GroupCard: React.FC<GroupCardProps> = ({
             visibleChildren.map((child) => {
               const perm = permissionMap.get(child.id);
               const hasAccess = perm?.canView ?? false;
-              const forms = perm?.forms ?? [];
+              const forms = (perm?.forms ?? []).filter((f) => !isFeatureFormCode(f.formCode));
 
               return (
                 <div
@@ -458,15 +459,16 @@ const RolePermissionPage: React.FC = () => {
     if (user?.roleId !== roleId) return;
 
     try {
-      const freshPermissions = await authService.getPermissions();
+      const fresh = await authService.getPermissions();
       authStorage.saveSession({
         user: authStorage.getUser()!,
         token: authStorage.getToken()!,
         branches: authStorage.getBranches(),
         selectedBranchId: authStorage.getSelectedBranchId(),
-        permissions: freshPermissions,
+        permissions: fresh.permissions,
+        features: fresh.features,
       });
-      usePermissionStore.getState().setPermissions(freshPermissions, user.roleName ?? null);
+      usePermissionStore.getState().setPermissions(fresh.permissions, user.roleName ?? null, fresh.features);
       await refreshSidebar(roleId);
     } catch {
       showNotification('error', 'Permissions saved but sidebar refresh failed. Please log out and log in again.');

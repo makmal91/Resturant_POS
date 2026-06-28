@@ -22,6 +22,7 @@ export interface AuthStorageSnapshot {
   branches: StoredBranch[]
   selectedBranchId: number | null
   permissions: ModulePermission[]
+  features: string[]
 }
 
 const STORAGE_KEYS = {
@@ -30,6 +31,7 @@ const STORAGE_KEYS = {
   branches: 'branches',
   selectedBranchId: 'selectedBranchId',
   permissions: 'permissions',
+  features: 'features',
 } as const
 
 const parseJson = <T>(value: string | null): T | null => {
@@ -103,6 +105,14 @@ export const authStorage = {
     localStorage.setItem(STORAGE_KEYS.permissions, JSON.stringify(permissions))
   },
 
+  getFeatures(): string[] {
+    return parseJson<string[]>(localStorage.getItem(STORAGE_KEYS.features)) ?? []
+  },
+
+  setFeatures(features: string[]): void {
+    localStorage.setItem(STORAGE_KEYS.features, JSON.stringify(features))
+  },
+
   getSnapshot(): AuthStorageSnapshot {
     return {
       user: this.getUser(),
@@ -110,6 +120,7 @@ export const authStorage = {
       branches: this.getBranches(),
       selectedBranchId: this.getSelectedBranchId(),
       permissions: this.getPermissions(),
+      features: this.getFeatures(),
     }
   },
 
@@ -119,6 +130,7 @@ export const authStorage = {
     branches: StoredBranch[]
     selectedBranchId: number | null
     permissions?: ModulePermission[]
+    features?: string[]
   }): void {
     this.setUser(data.user)
     this.setToken(data.token)
@@ -126,6 +138,9 @@ export const authStorage = {
     this.setSelectedBranchId(data.selectedBranchId)
     if (data.permissions) {
       this.setPermissions(data.permissions)
+    }
+    if (data.features) {
+      this.setFeatures(data.features)
     }
   },
 
@@ -135,6 +150,7 @@ export const authStorage = {
     localStorage.removeItem(STORAGE_KEYS.branches)
     localStorage.removeItem(STORAGE_KEYS.selectedBranchId)
     localStorage.removeItem(STORAGE_KEYS.permissions)
+    localStorage.removeItem(STORAGE_KEYS.features)
     localStorage.removeItem('tenantSession')
     localStorage.removeItem('businessId')
     localStorage.removeItem('branchId')

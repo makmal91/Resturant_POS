@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using POSSystem.API.Extensions;
+using POSSystem.Application.Auth.Interfaces;
+using POSSystem.Application.Common.Constants;
 using POSSystem.Application.Product.DTOs;
 using POSSystem.Application.Product.Interfaces;
 using POSSystem.Domain;
@@ -24,11 +26,16 @@ public class ProductsController : ControllerBase
 
     private readonly IProductService _productService;
     private readonly IUnitPricingService _unitPricingService;
+    private readonly IFeaturePermissionService _featurePermission;
 
-    public ProductsController(IProductService productService, IUnitPricingService unitPricingService)
+    public ProductsController(
+        IProductService productService,
+        IUnitPricingService unitPricingService,
+        IFeaturePermissionService featurePermission)
     {
         _productService = productService;
         _unitPricingService = unitPricingService;
+        _featurePermission = featurePermission;
     }
 
     [HttpGet]
@@ -148,6 +155,9 @@ public class ProductsController : ControllerBase
     [HttpPut("{id:int}/units")]
     public async Task<IActionResult> UpdateProductUnits(int id, [FromBody] ProductChildUpdateDto<ProductUnitWriteDto> dto)
     {
+        if (!await _featurePermission.IsEnabledAsync(PermissionFeatureKeys.UnitEnable))
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Unit management is not enabled for your role." });
+
         dto.BusinessId = this.ResolveBusinessId(dto.BusinessId > 0 ? dto.BusinessId : null);
         dto.BranchId = this.ResolveBranchId(dto.BranchId > 0 ? dto.BranchId : null);
         if (dto.BranchId <= 0)
@@ -166,6 +176,9 @@ public class ProductsController : ControllerBase
     [HttpGet("{id:int}/unit-pricing")]
     public async Task<IActionResult> GetUnitPricing(int id, [FromQuery] int branchId, [FromQuery] int? businessId = null)
     {
+        if (!await _featurePermission.IsEnabledAsync(PermissionFeatureKeys.UnitEnable))
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Unit management is not enabled for your role." });
+
         var resolvedBusinessId = this.ResolveBusinessId(businessId);
         var resolvedBranchId = this.ResolveBranchId(branchId);
         if (resolvedBranchId <= 0)
@@ -233,6 +246,9 @@ public class ProductsController : ControllerBase
     [HttpPut("{id:int}/variants")]
     public async Task<IActionResult> UpdateProductVariants(int id, [FromBody] ProductChildUpdateDto<ProductVariantWriteDto> dto)
     {
+        if (!await _featurePermission.IsEnabledAsync(PermissionFeatureKeys.VariantEnable))
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Variant management is not enabled for your role." });
+
         dto.BusinessId = this.ResolveBusinessId(dto.BusinessId > 0 ? dto.BusinessId : null);
         dto.BranchId = this.ResolveBranchId(dto.BranchId > 0 ? dto.BranchId : null);
         if (dto.BranchId <= 0)
@@ -251,6 +267,9 @@ public class ProductsController : ControllerBase
     [HttpPut("{id:int}/barcodes")]
     public async Task<IActionResult> UpdateProductBarcodes(int id, [FromBody] ProductChildUpdateDto<ProductBarcodeWriteDto> dto)
     {
+        if (!await _featurePermission.IsEnabledAsync(PermissionFeatureKeys.BarcodeEnable))
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Barcode management is not enabled for your role." });
+
         dto.BusinessId = this.ResolveBusinessId(dto.BusinessId > 0 ? dto.BusinessId : null);
         dto.BranchId = this.ResolveBranchId(dto.BranchId > 0 ? dto.BranchId : null);
         if (dto.BranchId <= 0)
@@ -269,6 +288,9 @@ public class ProductsController : ControllerBase
     [HttpDelete("{id:int}/barcodes/{barcodeId:int}")]
     public async Task<IActionResult> RemoveProductBarcode(int id, int barcodeId, [FromQuery] int branchId, [FromQuery] int? businessId = null)
     {
+        if (!await _featurePermission.IsEnabledAsync(PermissionFeatureKeys.BarcodeEnable))
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Barcode management is not enabled for your role." });
+
         var resolvedBusinessId = this.ResolveBusinessId(businessId);
         var resolvedBranchId = this.ResolveBranchId(branchId);
 

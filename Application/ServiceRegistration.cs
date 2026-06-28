@@ -91,6 +91,7 @@ public static class ServiceRegistration
         services.AddScoped<IRoleService, RoleService>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IPermissionService, PermissionService>();
+        services.AddScoped<IFeaturePermissionService, FeaturePermissionService>();
         services.AddScoped<INavigationMenuService, NavigationMenuService>();
         services.AddScoped<IModuleService, ModuleService>();
         services.AddScoped<IRolePermissionService, RolePermissionService>();

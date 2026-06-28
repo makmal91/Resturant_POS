@@ -8,6 +8,8 @@ namespace POSSystem.Infrastructure.Data;
 internal sealed class DesignTimeTenantContext : ITenantContext
 {
     public int? UserId => 1;
+    public int? RoleId => 1;
+    public string? RoleName => "System Admin";
     public int? BusinessId => 1;
     public int? BranchId => 1;
     public bool IsMasterUser => true;

@@ -49,7 +49,8 @@ public class AuthController : ControllerBase
         if (!int.TryParse(roleIdValue, out var roleId))
             return Unauthorized(new { message = "Role information is missing from the token." });
 
-        var permissions = await _authService.GetCurrentUserPermissionsAsync(roleId);
-        return Ok(permissions);
+        var roleName = User.FindFirstValue(System.Security.Claims.ClaimTypes.Role) ?? string.Empty;
+        var response = await _authService.GetCurrentUserPermissionsAsync(roleId, roleName);
+        return Ok(response);
     }
 }

@@ -181,7 +181,8 @@ public static class PermissionModuleSeeder
         new("Brands", PermissionModules.Brands, "Product Management", 3, "/brands", "Bn"),
         new("Products", PermissionModules.Products, "Product Management", 4, "/products", "P"),
         new("Units", PermissionModules.Units, "Product Management", 5, "/units", "Un"),
-        new("Variants", PermissionModules.Variants, "Product Management", 6, "/products", "V"),
+        new("Variants", PermissionModules.Variants, "Product Management", 6, null, "V"),
+        new("Barcodes", PermissionModules.Barcodes, "Product Management", 7, null, "Bc"),
 
         // Inventory Management
         new("Stock", PermissionModules.Stock, "Inventory Management", 1, "/stock", "St"),

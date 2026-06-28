@@ -6,5 +6,5 @@ namespace POSSystem.Application.Auth.Interfaces;
 public interface IAuthService
 {
     Task<LoginResponseDto> LoginAsync(LoginRequestDto request);
-    Task<IReadOnlyList<RolePermissionDto>> GetCurrentUserPermissionsAsync(int roleId);
+    Task<AuthPermissionsResponseDto> GetCurrentUserPermissionsAsync(int roleId, string roleName);
 }

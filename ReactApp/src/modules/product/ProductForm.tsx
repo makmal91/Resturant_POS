@@ -15,6 +15,8 @@ import MasterSelect from '../../components/forms/MasterSelect';
 import { useBranchStore } from '../../stores/useBranchStore';
 import { resolveEffectiveBranchId } from '../../utils/resolveBranchId';
 import { warehouseService, type WarehouseItem } from '../warehouse/warehouseService';
+import { useHasFeature } from '../../hooks/useFeature';
+import { FEATURE_KEYS } from '../../types/featurePermissions';
 
 export interface ProductOption {
   id: number;
@@ -114,9 +116,31 @@ const ProductForm: React.FC<ProductFormProps> = ({
     [branchId, selectedBranchId],
   );
 
+  const unitFeatureEnabled = useHasFeature(FEATURE_KEYS.UNIT);
+  const variantFeatureEnabled = useHasFeature(FEATURE_KEYS.VARIANT);
+  const stockFeatureEnabled = useHasFeature(FEATURE_KEYS.STOCK);
+  const barcodeFeatureEnabled = useHasFeature(FEATURE_KEYS.BARCODE);
+
+  const visibleTabs = useMemo(
+    () => formTabs.filter((tab) => {
+      if (tab.id === 'units') return unitFeatureEnabled;
+      if (tab.id === 'variants') return variantFeatureEnabled;
+      if (tab.id === 'stock') return stockFeatureEnabled;
+      if (tab.id === 'barcodes') return barcodeFeatureEnabled;
+      return true;
+    }),
+    [unitFeatureEnabled, variantFeatureEnabled, stockFeatureEnabled, barcodeFeatureEnabled],
+  );
+
   const [error, setError] = useState('');
   const [isGeneratingBarcode, setIsGeneratingBarcode] = useState(false);
   const [activeTab, setActiveTab] = useState<ProductFormTab>('basic');
+
+  useEffect(() => {
+    if (!visibleTabs.some((tab) => tab.id === activeTab)) {
+      setActiveTab(visibleTabs[0]?.id ?? 'basic');
+    }
+  }, [activeTab, visibleTabs]);
   const [primaryImageFile, setPrimaryImageFile] = useState<File | null>(null);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [warehouses, setWarehouses] = useState<WarehouseItem[]>([]);
@@ -695,35 +719,37 @@ const ProductForm: React.FC<ProductFormProps> = ({
         sellingPrice: Number(formData.sellingPrice ?? 0),
         wholesalePrice: Number(formData.wholesalePrice ?? 0),
         discountValue: Number(formData.discountValue ?? 0),
-        allowNegativeStock: Boolean(formData.allowNegativeStock),
-        enableLowStockAlert: Boolean(formData.enableLowStockAlert),
-        lowStockAlertLevel: formData.enableLowStockAlert ? Number(formData.lowStockAlertLevel ?? 0) : null,
-        openingStock: initialData
-          ? 0
-          : formData.openingStockVariantWise && canUseVariantWiseOpening
+        allowNegativeStock: stockFeatureEnabled ? Boolean(formData.allowNegativeStock) : true,
+        enableLowStockAlert: stockFeatureEnabled ? Boolean(formData.enableLowStockAlert) : false,
+        lowStockAlertLevel: stockFeatureEnabled && formData.enableLowStockAlert ? Number(formData.lowStockAlertLevel ?? 0) : null,
+        openingStock: stockFeatureEnabled && !initialData
+          ? (formData.openingStockVariantWise && canUseVariantWiseOpening
             ? variantOpeningLines.reduce((sum, line) => sum + Number(line.quantity ?? 0), 0)
-            : Number(formData.openingStock ?? 0),
-        openingStockWarehouseId: initialData ? null : (formData.openingStockWarehouseId ? Number(formData.openingStockWarehouseId) : null),
-        openingStockVariantWise: Boolean(formData.openingStockVariantWise && canUseVariantWiseOpening),
-        openingStockByVariant: formData.openingStockVariantWise && canUseVariantWiseOpening
+            : Number(formData.openingStock ?? 0))
+          : 0,
+        openingStockWarehouseId: stockFeatureEnabled && !initialData ? (formData.openingStockWarehouseId ? Number(formData.openingStockWarehouseId) : null) : null,
+        openingStockVariantWise: stockFeatureEnabled && Boolean(formData.openingStockVariantWise && canUseVariantWiseOpening),
+        openingStockByVariant: stockFeatureEnabled && formData.openingStockVariantWise && canUseVariantWiseOpening
           ? variantOpeningLines.map((line) => ({
               variantName: line.variantName,
               variantId: line.variantId ?? null,
               quantity: Number(line.quantity ?? 0),
             }))
           : [],
-        units: recalculateUnitPrices(
-          formData.units.map((unit) => ({
-            ...unit,
-            unitName: unit.unitName.trim(),
-            conversionFactor: Number(unit.conversionFactor),
-          })),
-          Number(formData.costPrice ?? 0),
-          Number(formData.sellingPrice ?? 0),
-          Number(formData.wholesalePrice ?? 0),
-          formData.useAutoUnitPricing !== false,
-        ),
-        variants: formData.isVariantEnabled
+        units: unitFeatureEnabled
+          ? recalculateUnitPrices(
+              formData.units.map((unit) => ({
+                ...unit,
+                unitName: unit.unitName.trim(),
+                conversionFactor: Number(unit.conversionFactor),
+              })),
+              Number(formData.costPrice ?? 0),
+              Number(formData.sellingPrice ?? 0),
+              Number(formData.wholesalePrice ?? 0),
+              formData.useAutoUnitPricing !== false,
+            )
+          : [],
+        variants: variantFeatureEnabled && formData.isVariantEnabled
           ? formData.variants
               .filter((variant) => variant.variantName.trim())
               .map((variant) => ({
@@ -732,9 +758,13 @@ const ProductForm: React.FC<ProductFormProps> = ({
                 additionalPrice: Number(variant.additionalPrice ?? 0),
               }))
           : [],
-        barcodes: formData.barcodes
-          .filter((barcode) => barcode.barcodeValue.trim())
-          .map((barcode) => ({ ...barcode, barcodeValue: barcode.barcodeValue.trim() })),
+        isVariantEnabled: variantFeatureEnabled ? Boolean(formData.isVariantEnabled) : false,
+        useAutoUnitPricing: unitFeatureEnabled ? formData.useAutoUnitPricing !== false : false,
+        barcodes: barcodeFeatureEnabled
+          ? formData.barcodes
+              .filter((barcode) => barcode.barcodeValue.trim())
+              .map((barcode) => ({ ...barcode, barcodeValue: barcode.barcodeValue.trim() }))
+          : [],
       }, primaryImageFile, imageFiles);
     } catch (submitError) {
       setError(getApiErrorMessage(submitError, 'Failed to save product. Please check the form and try again.'));
@@ -745,7 +775,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
     <form onSubmit={handleSubmit} className="flex h-full flex-col">
       <div className="border-b border-gray-200 bg-gray-50 px-6 py-4">
         <div className="flex gap-2 overflow-x-auto pb-1">
-          {formTabs.map((tab, index) => {
+          {visibleTabs.map((tab, index) => {
             const isActive = activeTab === tab.id;
             return (
               <button
@@ -882,38 +912,50 @@ const ProductForm: React.FC<ProductFormProps> = ({
           <div>
             <h3 className="text-lg font-semibold text-gray-900">Pricing & Discount</h3>
             <p className="mt-1 text-sm text-gray-500">
-              Set base-unit prices. Child unit prices = base price ÷ conversion factor (child units per base).
+              {unitFeatureEnabled
+                ? 'Set base-unit prices. Child unit prices = base price ÷ conversion factor (child units per base).'
+                : 'Set product retail, cost, and wholesale prices.'}
             </p>
           </div>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             {(['costPrice', 'sellingPrice', 'wholesalePrice'] as const).map((field) => (
               <div key={field}>
-                <label className="mb-1 block text-sm font-medium text-gray-700">{field === 'costPrice' ? 'Base Cost Price' : field === 'sellingPrice' ? 'Base Selling Price' : 'Base Wholesale Price'}</label>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  {field === 'costPrice'
+                    ? (unitFeatureEnabled ? 'Base Cost Price' : 'Cost Price')
+                    : field === 'sellingPrice'
+                      ? (unitFeatureEnabled ? 'Base Selling Price' : 'Selling Price')
+                      : (unitFeatureEnabled ? 'Base Wholesale Price' : 'Wholesale Price')}
+                </label>
                 <input type="number" min={0} step="0.01" value={Number(formData[field] ?? 0)} onChange={(event) => updateBasePrices({ [field]: Number(event.target.value || 0) })} className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none" />
               </div>
             ))}
           </div>
-          <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
-            <input
-              type="checkbox"
-              checked={formData.useAutoUnitPricing !== false}
-              onChange={(event) => setFormData((prev) => ({
-                ...prev,
-                useAutoUnitPricing: event.target.checked,
-                units: recalculateUnitPrices(
-                  prev.units,
-                  prev.costPrice,
-                  prev.sellingPrice,
-                  prev.wholesalePrice,
-                  event.target.checked,
-                ),
-              }))}
-            />
-            Auto-calculate alternate unit prices from base price
-          </label>
-          <p className="text-xs text-gray-500">
-            When enabled, child unit price = base price ÷ factor (e.g. 1250 ÷ 50 = 25 per KG). Override per unit on the Units tab.
-          </p>
+          {unitFeatureEnabled && (
+            <>
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={formData.useAutoUnitPricing !== false}
+                  onChange={(event) => setFormData((prev) => ({
+                    ...prev,
+                    useAutoUnitPricing: event.target.checked,
+                    units: recalculateUnitPrices(
+                      prev.units,
+                      prev.costPrice,
+                      prev.sellingPrice,
+                      prev.wholesalePrice,
+                      event.target.checked,
+                    ),
+                  }))}
+                />
+                Auto-calculate alternate unit prices from base price
+              </label>
+              <p className="text-xs text-gray-500">
+                When enabled, child unit price = base price ÷ factor (e.g. 1250 ÷ 50 = 25 per KG). Override per unit on the Units tab.
+              </p>
+            </>
+          )}
           <label className="flex items-center gap-2 text-sm text-gray-700">
             <input type="checkbox" checked={formData.isDiscountAllowed} onChange={(event) => setFormData((prev) => ({ ...prev, isDiscountAllowed: event.target.checked }))} />
             Discount allowed
@@ -1444,10 +1486,10 @@ const ProductForm: React.FC<ProductFormProps> = ({
           <button
             type="button"
             onClick={() => {
-              const currentIndex = formTabs.findIndex((tab) => tab.id === activeTab);
-              setActiveTab(formTabs[Math.max(0, currentIndex - 1)].id);
+              const currentIndex = visibleTabs.findIndex((tab) => tab.id === activeTab);
+              setActiveTab(visibleTabs[Math.max(0, currentIndex - 1)].id);
             }}
-            disabled={activeTab === formTabs[0].id}
+            disabled={activeTab === visibleTabs[0]?.id}
             className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Previous
@@ -1455,10 +1497,10 @@ const ProductForm: React.FC<ProductFormProps> = ({
           <button
             type="button"
             onClick={() => {
-              const currentIndex = formTabs.findIndex((tab) => tab.id === activeTab);
-              setActiveTab(formTabs[Math.min(formTabs.length - 1, currentIndex + 1)].id);
+              const currentIndex = visibleTabs.findIndex((tab) => tab.id === activeTab);
+              setActiveTab(visibleTabs[Math.min(visibleTabs.length - 1, currentIndex + 1)].id);
             }}
-            disabled={activeTab === formTabs[formTabs.length - 1].id}
+            disabled={activeTab === visibleTabs[visibleTabs.length - 1]?.id}
             className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Next

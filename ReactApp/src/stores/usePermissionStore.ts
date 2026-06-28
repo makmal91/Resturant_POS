@@ -7,13 +7,16 @@ import {
   type ModulePermission,
   type PermissionAction,
 } from '../types/permissions'
+import { FEATURE_MODULE_MAP, parseFeaturesResponse } from '../types/featurePermissions'
 
 interface PermissionState {
   permissions: ModulePermission[]
+  features: string[]
   roleName: string | null
-  setPermissions: (permissions: ModulePermission[], roleName?: string | null) => void
+  setPermissions: (permissions: ModulePermission[], roleName?: string | null, features?: string[]) => void
   clearPermissions: () => void
   can: (moduleName: string, action: PermissionAction) => boolean
+  hasFeature: (featureKey: string) => boolean
 }
 
 const actionMap: Record<PermissionAction, keyof ModulePermission> = {
@@ -27,14 +30,15 @@ const actionMap: Record<PermissionAction, keyof ModulePermission> = {
 
 export const usePermissionStore = create<PermissionState>((set, get) => ({
   permissions: [],
+  features: [],
   roleName: null,
 
-  setPermissions: (permissions, roleName = null) => {
-    set({ permissions, roleName })
+  setPermissions: (permissions, roleName = null, features = []) => {
+    set({ permissions, roleName, features: parseFeaturesResponse(features) })
   },
 
   clearPermissions: () => {
-    set({ permissions: [], roleName: null })
+    set({ permissions: [], features: [], roleName: null })
   },
 
   can: (moduleName, action) => {
@@ -51,6 +55,21 @@ export const usePermissionStore = create<PermissionState>((set, get) => ({
 
     const key = actionMap[action]
     return Boolean(modulePermission[key])
+  },
+
+  hasFeature: (featureKey) => {
+    const { permissions, roleName } = get()
+    if (canBypassPermissionsSession(roleName, authStorage.getUser())) {
+      return true
+    }
+
+    if (!featureKey) return false
+
+    const moduleName = FEATURE_MODULE_MAP[featureKey]
+    if (!moduleName) return false
+
+    const modulePermission = findModulePermission(permissions, moduleName)
+    return Boolean(modulePermission?.canView)
   },
 }))
 

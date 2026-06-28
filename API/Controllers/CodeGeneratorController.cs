@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using POSSystem.API.Authorization;
 using POSSystem.API.Extensions;
+using POSSystem.Application.Auth.Interfaces;
 using POSSystem.Application.CodeSequence.DTOs;
 using POSSystem.Application.CodeSequence.Interfaces;
 using POSSystem.Application.Common.Constants;
@@ -15,9 +17,15 @@ namespace POSSystem.API.Controllers;
 public class CodeGeneratorController : ControllerBase
 {
     private readonly ICodeGeneratorService _codeGenerator;
+    private readonly IFeaturePermissionService _featurePermission;
 
-    public CodeGeneratorController(ICodeGeneratorService codeGenerator)
-        => _codeGenerator = codeGenerator;
+    public CodeGeneratorController(
+        ICodeGeneratorService codeGenerator,
+        IFeaturePermissionService featurePermission)
+    {
+        _codeGenerator = codeGenerator;
+        _featurePermission = featurePermission;
+    }
 
     /// <summary>Preview the next code without consuming the sequence.</summary>
     [HttpGet("preview")]
@@ -36,6 +44,9 @@ public class CodeGeneratorController : ControllerBase
     [HttpPost("barcode")]
     public async Task<IActionResult> GenerateBarcode([FromQuery] int? branchId, [FromQuery] int? businessId)
     {
+        if (!await _featurePermission.IsEnabledAsync(PermissionFeatureKeys.BarcodeEnable))
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Barcode management is not enabled for your role." });
+
         var resolvedBusinessId = this.ResolveBusinessId(businessId);
         var resolvedBranchId = this.ResolveEffectiveBranchId(branchId);
 

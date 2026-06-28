@@ -4,6 +4,8 @@ import Badge from '../../components/Badge';
 import MenuIcon, { type MenuIconKey } from '../../components/MenuIcon';
 import { useBranchWriteAccess } from '../../hooks/useBranchWriteAccess';
 import { usePermission } from '../../hooks/usePermission';
+import { useHasFeature } from '../../hooks/useFeature';
+import { FEATURE_KEYS } from '../../types/featurePermissions';
 import { getApiErrorMessage } from '../../services/api';
 import { hasBranchContext } from '../../types/permissions';
 import {
@@ -208,6 +210,7 @@ export default function AdminDashboardPage() {
   const permRoles     = usePermission('Roles');
   const permPurchase  = usePermission('Purchase');
   const permExpenses  = usePermission('Expenses');
+  const stockFeatureEnabled = useHasFeature(FEATURE_KEYS.STOCK);
 
   const [data, setData] = useState<DashboardOverviewDto | null>(null);
   const [loading, setLoading] = useState(true);
@@ -319,13 +322,17 @@ export default function AdminDashboardPage() {
             />
             <KpiCard label="Gross Profit" value={fmt(kpis.grossProfit)} iconKey="cashflow" accent="text-emerald-600" />
             <KpiCard label="Net Profit" value={fmt(kpis.netProfit)} iconKey="expenses" accent="text-indigo-700" />
-            <KpiCard label="Stock Value" value={fmt(kpis.stockValue)} iconKey="stock" />
-            <KpiCard
-              label="Stock Alerts"
-              value={`${kpis.lowStockCount} low / ${kpis.outOfStockCount} out`}
-              iconKey="alert"
-              accent={kpis.outOfStockCount > 0 ? 'text-red-600' : 'text-amber-600'}
-            />
+            {stockFeatureEnabled && (
+              <>
+                <KpiCard label="Stock Value" value={fmt(kpis.stockValue)} iconKey="stock" />
+                <KpiCard
+                  label="Stock Alerts"
+                  value={`${kpis.lowStockCount} low / ${kpis.outOfStockCount} out`}
+                  iconKey="alert"
+                  accent={kpis.outOfStockCount > 0 ? 'text-red-600' : 'text-amber-600'}
+                />
+              </>
+            )}
           </div>
         ) : null}
       </div>
@@ -407,6 +414,7 @@ export default function AdminDashboardPage() {
 
       {/* Stock + Charts products/categories */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        {stockFeatureEnabled && (
         <SectionCard title="Stock Overview">
           {data?.stock ? (
             <div className="space-y-4">
@@ -462,6 +470,7 @@ export default function AdminDashboardPage() {
             </div>
           ) : null}
         </SectionCard>
+        )}
 
         <SectionCard title="Top Products">
           <HorizontalBarList

@@ -54,7 +54,7 @@ function App() {
                             path={item.path}
                             element={
                               item.module ? (
-                                <ProtectedRoute module={item.module}>
+                                <ProtectedRoute module={item.module} feature={item.feature}>
                                   <item.component />
                                 </ProtectedRoute>
                               ) : (

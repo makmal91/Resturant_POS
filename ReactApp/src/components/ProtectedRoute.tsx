@@ -7,16 +7,19 @@ interface ProtectedRouteProps {
   children: React.ReactNode
   requireBranch?: boolean
   module?: string
+  feature?: string
 }
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   children,
   requireBranch = true,
   module,
+  feature,
 }) => {
   const { isAuthenticated, isHydrated, selectedBranchId } = useAuth()
   const location = useLocation()
   const canViewModule = usePermissionStore((state) => !module || state.can(module, 'view'))
+  const hasFeatureAccess = usePermissionStore((state) => !feature || state.hasFeature(feature))
 
   if (!isHydrated) {
     return (
@@ -36,7 +39,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     return <Navigate to="/select-branch" replace state={{ from: location.pathname }} />
   }
 
-  if (!canViewModule) {
+  if (!canViewModule || !hasFeatureAccess) {
     return <Navigate to="/" replace />
   }
 

@@ -30,4 +30,11 @@ public class LoginResponseDto
     public AuthUserDto User { get; set; } = new();
     public IReadOnlyList<AuthBranchDto> Branches { get; set; } = Array.Empty<AuthBranchDto>();
     public IReadOnlyList<Users.DTOs.RolePermissionDto> Permissions { get; set; } = Array.Empty<Users.DTOs.RolePermissionDto>();
+    public IReadOnlyList<string> Features { get; set; } = Array.Empty<string>();
+}
+
+public class AuthPermissionsResponseDto
+{
+    public IReadOnlyList<Users.DTOs.RolePermissionDto> Permissions { get; set; } = Array.Empty<Users.DTOs.RolePermissionDto>();
+    public IReadOnlyList<string> Features { get; set; } = Array.Empty<string>();
 }

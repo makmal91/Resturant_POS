@@ -43,7 +43,11 @@ public class NavigationMenuService : INavigationMenuService
         string roleName)
     {
         if (RoleNames.CanBypassPermissions(roleName))
-            return modules.Select(MapSidebarItem).ToList();
+            return modules
+                .Select(MapSidebarItem)
+                .Where(item => item != null)
+                .Cast<SidebarMenuItemDto>()
+                .ToList();
 
         var (viewableModuleIds, viewableNames) = BuildViewableSets(permissions ?? []);
 
@@ -144,6 +148,9 @@ public class NavigationMenuService : INavigationMenuService
         if (!HasModuleViewAccess(module, viewableModuleIds, viewableNames))
             return null;
 
+        if (string.IsNullOrWhiteSpace(module.Route))
+            return null;
+
         return new SidebarMenuItemDto
         {
             Id = module.Id,
@@ -156,17 +163,46 @@ public class NavigationMenuService : INavigationMenuService
         };
     }
 
-    private static SidebarMenuItemDto MapSidebarItem(Modules.DTOs.ModuleListItemDto module) =>
-        new()
+    private static SidebarMenuItemDto? MapSidebarItem(Modules.DTOs.ModuleListItemDto module)
+    {
+        var isGroup = string.IsNullOrWhiteSpace(module.ModuleKey);
+        var children = module.Children
+            .Select(MapSidebarItem)
+            .Where(child => child != null)
+            .Cast<SidebarMenuItemDto>()
+            .ToList();
+
+        if (isGroup)
+        {
+            if (children.Count == 0)
+                return null;
+
+            return new SidebarMenuItemDto
+            {
+                Id = module.Id,
+                Name = module.ModuleName,
+                Route = null,
+                Icon = module.Icon,
+                ModuleName = null,
+                DisplayOrder = module.DisplayOrder,
+                Children = children
+            };
+        }
+
+        if (string.IsNullOrWhiteSpace(module.Route))
+            return null;
+
+        return new SidebarMenuItemDto
         {
             Id = module.Id,
             Name = module.ModuleName,
             Route = module.Route,
             Icon = module.Icon,
-            ModuleName = string.IsNullOrWhiteSpace(module.ModuleKey) ? null : module.ModuleKey,
+            ModuleName = module.ModuleKey,
             DisplayOrder = module.DisplayOrder,
-            Children = module.Children.Select(MapSidebarItem).ToList()
+            Children = children
         };
+    }
 
     private static IReadOnlyList<NavigationMenuDto> FlattenTree(IReadOnlyList<SidebarMenuItemDto> tree)
     {

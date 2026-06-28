@@ -8,6 +8,8 @@ import React, {
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useMenuStore } from '../stores/useMenuStore'
+import { hasFeature } from '../hooks/useFeature'
+import { MODULE_FEATURE_MAP } from '../types/featurePermissions'
 import { sidebarService, type SidebarTreeItem } from '../services/menuService'
 import { APP_NAME } from '../constants/appBranding'
 import MenuIcon from './MenuIcon'
@@ -297,9 +299,31 @@ const Sidebar: React.FC = () => {
     closeTimerRef.current = setTimeout(() => setActiveSubmenu(null), 120)
   }, [])
 
+  const filteredSidebarTree = useMemo(() => {
+    const filterItems = (items: SidebarTreeItem[]): SidebarTreeItem[] =>
+      items
+        .map((item) => {
+          const children = item.children?.length ? filterItems(item.children) : []
+          const featureKey = item.moduleName ? MODULE_FEATURE_MAP[item.moduleName] : undefined
+          const featureAllowed = !featureKey || hasFeature(featureKey)
+
+          if (item.children?.length) {
+            if (children.length === 0) return null
+            return { ...item, children }
+          }
+
+          if (!item.route) return null
+
+          return featureAllowed ? item : null
+        })
+        .filter((item): item is SidebarTreeItem => item !== null)
+
+    return filterItems(sidebarTree)
+  }, [sidebarTree])
+
   const activeSubmenuItem = useMemo(
-    () => activeSubmenu ? sidebarTree.find((i) => i.id === activeSubmenu.itemId) ?? null : null,
-    [activeSubmenu, sidebarTree]
+    () => activeSubmenu ? filteredSidebarTree.find((i) => i.id === activeSubmenu.itemId) ?? null : null,
+    [activeSubmenu, filteredSidebarTree]
   )
 
   const userDisplayName = user?.fullName || user?.username || 'User'
@@ -364,7 +388,7 @@ const Sidebar: React.FC = () => {
           {/* EXPANDED */}
           {!collapsed && !isLoading && (
             <ul className="space-y-0.5 pb-2">
-              {sidebarTree.map((item) => (
+              {filteredSidebarTree.map((item) => (
                 <AccordionGroup key={item.id} item={item} currentPath={location.pathname} />
               ))}
             </ul>
@@ -373,7 +397,7 @@ const Sidebar: React.FC = () => {
           {/* COLLAPSED — icons only */}
           {collapsed && !isLoading && (
             <ul className="space-y-0.5 px-2">
-              {sidebarTree.map((item) => {
+              {filteredSidebarTree.map((item) => {
                 const isActive =
                   item.children.some((c) => c.route === location.pathname) ||
                   item.route === location.pathname

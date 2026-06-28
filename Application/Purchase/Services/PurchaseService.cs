@@ -1,3 +1,4 @@
+using POSSystem.Application.Auth.Interfaces;
 using POSSystem.Application.Common.Constants;
 using POSSystem.Application.Common.DTOs;
 using POSSystem.Application.Common.Helpers;
@@ -23,6 +24,7 @@ public class PurchaseService : IPurchaseService
     private readonly IPartyLedgerService _partyLedgerService;
     private readonly IInvoicePaymentService _invoicePaymentService;
     private readonly ICodeGeneratorService _codeGenerator;
+    private readonly IFeaturePermissionService _featurePermission;
 
     public PurchaseService(
         IPurchaseRepository purchaseRepository,
@@ -31,7 +33,8 @@ public class PurchaseService : IPurchaseService
         ILowStockAlertService lowStockAlertService,
         IPartyLedgerService partyLedgerService,
         IInvoicePaymentService invoicePaymentService,
-        ICodeGeneratorService codeGenerator)
+        ICodeGeneratorService codeGenerator,
+        IFeaturePermissionService featurePermission)
     {
         _purchaseRepository = purchaseRepository;
         _productRepository = productRepository;
@@ -40,6 +43,7 @@ public class PurchaseService : IPurchaseService
         _partyLedgerService = partyLedgerService;
         _invoicePaymentService = invoicePaymentService;
         _codeGenerator = codeGenerator;
+        _featurePermission = featurePermission;
     }
 
     public async Task<PagedResultDto<PurchaseDto>> GetPurchasesPagedAsync(
@@ -111,7 +115,7 @@ public class PurchaseService : IPurchaseService
             throw new InvalidOperationException($"Invoice number '{dto.InvoiceNo}' already exists.");
 
         // If purchase is already Posted, reverse existing stock ledger entries first
-        if (entity.Status == PurchaseStatus.Posted)
+        if (entity.Status == PurchaseStatus.Posted && await _featurePermission.IsStockEnabledAsync())
         {
             var originalEntries = await _stockLedgerRepository.GetByReferenceAsync(
                 id, dto.BusinessId, dto.BranchId, StockLedgerType.PurchaseEntry);
@@ -149,7 +153,7 @@ public class PurchaseService : IPurchaseService
         await BuildItemsAsync(entity, dto.Items, dto.BusinessId, dto.BranchId);
 
         // If was Posted, re-apply new stock entries and keep Posted status
-        if (entity.Status == PurchaseStatus.Posted)
+        if (entity.Status == PurchaseStatus.Posted && await _featurePermission.IsStockEnabledAsync())
         {
             var activeItems = entity.Items.Where(i => !i.IsDeleted).ToList();
             foreach (var item in activeItems)
@@ -161,9 +165,10 @@ public class PurchaseService : IPurchaseService
         }
 
         await _purchaseRepository.SaveChangesAsync();
-        await _stockLedgerRepository.SaveChangesAsync();
+        if (entity.Status == PurchaseStatus.Posted && await _featurePermission.IsStockEnabledAsync())
+            await _stockLedgerRepository.SaveChangesAsync();
 
-        if (entity.Status == PurchaseStatus.Posted)
+        if (entity.Status == PurchaseStatus.Posted && await _featurePermission.IsStockEnabledAsync())
         {
             await _lowStockAlertService.EvaluateAfterStockChangeAsync(
                 dto.BusinessId,
@@ -191,20 +196,34 @@ public class PurchaseService : IPurchaseService
 
         var activeItems = entity.Items.Where(i => !i.IsDeleted).ToList();
 
-        foreach (var item in activeItems)
+        if (await _featurePermission.IsStockEnabledAsync())
         {
-            item.BaseQuantity = UnitConversionHelper.ToBaseQuantity(item.Quantity, item.ConversionFactor);
+            foreach (var item in activeItems)
+            {
+                item.BaseQuantity = UnitConversionHelper.ToBaseQuantity(item.Quantity, item.ConversionFactor);
 
-            await _stockLedgerRepository.AddAsync(CreatePurchaseStockLedgerEntry(
-                item, entity.WarehouseId, entity.Id, entity.InvoiceNo, entity.PurchaseDate,
-                dto.BusinessId, dto.BranchId));
+                await _stockLedgerRepository.AddAsync(CreatePurchaseStockLedgerEntry(
+                    item, entity.WarehouseId, entity.Id, entity.InvoiceNo, entity.PurchaseDate,
+                    dto.BusinessId, dto.BranchId));
+            }
+
+            await _stockLedgerRepository.SaveChangesAsync();
+
+            await _lowStockAlertService.EvaluateAfterStockChangeAsync(
+                dto.BusinessId,
+                dto.BranchId,
+                activeItems.Select(i => new StockChangeItem(i.ProductId, i.VariantId, entity.WarehouseId)));
+        }
+        else
+        {
+            foreach (var item in activeItems)
+                item.BaseQuantity = item.Quantity;
         }
 
         entity.TotalAmount = activeItems.Sum(i => i.TotalCost);
         entity.Status = PurchaseStatus.Posted;
 
         await _purchaseRepository.SaveChangesAsync();
-        await _stockLedgerRepository.SaveChangesAsync();
 
         if (entity.IsCreditPurchase)
         {
@@ -212,11 +231,6 @@ public class PurchaseService : IPurchaseService
                 dto.BusinessId, dto.BranchId, entity.SupplierId,
                 entity.Id, entity.InvoiceNo, entity.TotalAmount, entity.PurchaseDate);
         }
-
-        await _lowStockAlertService.EvaluateAfterStockChangeAsync(
-            dto.BusinessId,
-            dto.BranchId,
-            activeItems.Select(i => new StockChangeItem(i.ProductId, i.VariantId, entity.WarehouseId)));
 
         var posted = await _purchaseRepository.GetByIdWithItemsAsync(id, dto.BusinessId, dto.BranchId);
         return await MapDetailDtoAsync(posted!, dto.BusinessId, dto.BranchId);
@@ -253,6 +267,8 @@ public class PurchaseService : IPurchaseService
     private async Task BuildItemsAsync(
         Domain.Purchase purchase, List<CreatePurchaseItemDto> dtoItems, int businessId, int branchId)
     {
+        var unitEnabled = await _featurePermission.IsUnitEnabledAsync();
+        var variantEnabled = await _featurePermission.IsVariantEnabledAsync();
         var productCache = new Dictionary<int, Domain.Product>();
         decimal total = 0;
 
@@ -265,17 +281,28 @@ public class PurchaseService : IPurchaseService
                 productCache[i.ProductId] = product;
             }
 
-            var unit = product.Units.FirstOrDefault(u => u.Id == i.UnitId && !u.IsDeleted)
-                ?? throw new InvalidOperationException(
-                    $"Unit {i.UnitId} is not valid for product '{product.ProductName}'. No conversion mapping exists.");
+            var unit = unitEnabled
+                ? product.Units.FirstOrDefault(u => u.Id == i.UnitId && !u.IsDeleted)
+                    ?? throw new InvalidOperationException(
+                        $"Unit {i.UnitId} is not valid for product '{product.ProductName}'. No conversion mapping exists.")
+                : product.Units.FirstOrDefault(u => u.IsBaseUnit && !u.IsDeleted)
+                    ?? product.Units.FirstOrDefault(u => !u.IsDeleted)
+                    ?? throw new InvalidOperationException(
+                        $"Product '{product.ProductName}' has no base unit configured.");
 
-            UnitConversionHelper.ValidateConversionFactor(unit.IsBaseUnit, unit.ConversionFactor, unit.UnitName);
+            if (unitEnabled)
+                UnitConversionHelper.ValidateConversionFactor(unit.IsBaseUnit, unit.ConversionFactor, unit.UnitName);
 
-            var (variant, variantId) = ResolveProductVariant(product, i.VariantId);
+            ProductVariant? variant = null;
+            int? variantId = null;
+            if (variantEnabled)
+                (variant, variantId) = ResolveProductVariant(product, i.VariantId);
 
-            var conversionFactor = unit.ConversionFactor;
+            var conversionFactor = unitEnabled ? unit.ConversionFactor : 1m;
             var costPrice = ResolveUnitCostPrice(product, unit, variant);
-            var baseQty = UnitConversionHelper.ToBaseQuantity(i.Quantity, conversionFactor);
+            var baseQty = unitEnabled
+                ? UnitConversionHelper.ToBaseQuantity(i.Quantity, conversionFactor)
+                : i.Quantity;
             var totalCost = i.Quantity * costPrice;
             total += totalCost;
 

@@ -1,3 +1,4 @@
+using POSSystem.Application.Auth.Interfaces;
 using POSSystem.Application.Common.DTOs;
 using POSSystem.Application.Common.Constants;
 using POSSystem.Application.Common.Helpers;
@@ -21,6 +22,7 @@ public class ProductService : IProductService
     private readonly ILowStockAlertService _lowStockAlertService;
     private readonly IUnitRepository _unitRepository;
     private readonly IUnitPricingService _unitPricingService;
+    private readonly IFeaturePermissionService _featurePermission;
 
     public ProductService(
         IProductRepository repository,
@@ -29,7 +31,8 @@ public class ProductService : IProductService
         IWarehouseRepository warehouseRepository,
         ILowStockAlertService lowStockAlertService,
         IUnitRepository unitRepository,
-        IUnitPricingService unitPricingService)
+        IUnitPricingService unitPricingService,
+        IFeaturePermissionService featurePermission)
     {
         _repository = repository;
         _codeGenerator = codeGenerator;
@@ -38,6 +41,7 @@ public class ProductService : IProductService
         _lowStockAlertService = lowStockAlertService;
         _unitRepository = unitRepository;
         _unitPricingService = unitPricingService;
+        _featurePermission = featurePermission;
     }
 
     public async Task<PagedResultDto<ProductListDto>> SearchProductsAsync(ProductSearchRequestDto request)
@@ -61,6 +65,7 @@ public class ProductService : IProductService
 
     public async Task<ProductDetailDto> CreateProductAsync(CreateProductDto dto)
     {
+        await ApplyFeatureGatesAsync(dto);
         await ValidateProductAsync(dto);
         var productCode = await ResolveProductCodeAsync(dto.ProductCode, dto.BusinessId, dto.BranchId);
 
@@ -91,10 +96,21 @@ public class ProductService : IProductService
             OpeningStockVariantWise = dto.OpeningStockVariantWise && dto.IsVariantEnabled
         };
 
-        await ReplaceUnitsAsync(product, dto.Units, dto.BusinessId, dto.BranchId);
-        ReplaceVariants(product, dto.IsVariantEnabled ? dto.Variants : new List<ProductVariantWriteDto>(), dto.BusinessId, dto.BranchId);
-        await ReplaceBarcodesAsync(product, dto.Barcodes, dto.BusinessId, dto.BranchId);
-        await EnsurePrimaryBarcodeAsync(product, dto.BusinessId, dto.BranchId);
+        if (await _featurePermission.IsUnitEnabledAsync())
+            await ReplaceUnitsAsync(product, dto.Units, dto.BusinessId, dto.BranchId);
+        else
+            await EnsureDefaultBaseUnitOnProductAsync(product, dto.BusinessId, dto.BranchId);
+
+        if (await _featurePermission.IsVariantEnabledAsync())
+            ReplaceVariants(product, dto.IsVariantEnabled ? dto.Variants : new List<ProductVariantWriteDto>(), dto.BusinessId, dto.BranchId);
+        else
+            product.IsVariantEnabled = false;
+
+        if (await _featurePermission.IsBarcodeEnabledAsync())
+        {
+            await ReplaceBarcodesAsync(product, dto.Barcodes, dto.BusinessId, dto.BranchId);
+            await EnsurePrimaryBarcodeAsync(product, dto.BusinessId, dto.BranchId);
+        }
 
         if (product.OpeningStockVariantWise)
             product.OpeningStock = ResolveVariantOpeningTotal(dto);
@@ -104,7 +120,8 @@ public class ProductService : IProductService
         SyncBaseUnitId(product);
         await _repository.SaveChangesAsync();
 
-        await ApplyOpeningStockAsync(product, dto);
+        if (await _featurePermission.IsStockEnabledAsync())
+            await ApplyOpeningStockAsync(product, dto);
 
         var created = await _repository.GetByIdAsync(product.Id, dto.BusinessId, dto.BranchId);
         return await MapDetailDto(created ?? product);
@@ -112,6 +129,7 @@ public class ProductService : IProductService
 
     public async Task<ProductDetailDto> UpdateProductAsync(int id, UpdateProductDto dto)
     {
+        await ApplyFeatureGatesAsync(dto);
         await ValidateProductAsync(dto);
         var product = await _repository.GetByIdAsync(id, dto.BusinessId, dto.BranchId)
             ?? throw new InvalidOperationException("Product not found.");
@@ -142,9 +160,17 @@ public class ProductService : IProductService
         product.AllowNegativeStock = dto.AllowNegativeStock;
         product.EnableLowStockAlert = dto.EnableLowStockAlert;
         product.LowStockAlertLevel = dto.EnableLowStockAlert ? dto.LowStockAlertLevel : null;
-        await ReplaceUnitsAsync(product, dto.Units, dto.BusinessId, dto.BranchId);
-        ReplaceVariants(product, dto.IsVariantEnabled ? dto.Variants : new List<ProductVariantWriteDto>(), dto.BusinessId, dto.BranchId);
-        await ReplaceBarcodesAsync(product, dto.Barcodes, dto.BusinessId, dto.BranchId);
+
+        if (await _featurePermission.IsUnitEnabledAsync())
+            await ReplaceUnitsAsync(product, dto.Units, dto.BusinessId, dto.BranchId);
+
+        if (await _featurePermission.IsVariantEnabledAsync())
+            ReplaceVariants(product, dto.IsVariantEnabled ? dto.Variants : new List<ProductVariantWriteDto>(), dto.BusinessId, dto.BranchId);
+        else
+            product.IsVariantEnabled = false;
+
+        if (await _featurePermission.IsBarcodeEnabledAsync())
+            await ReplaceBarcodesAsync(product, dto.Barcodes, dto.BusinessId, dto.BranchId);
 
         SyncBaseUnitId(product);
         await _repository.SaveChangesAsync();
@@ -153,6 +179,9 @@ public class ProductService : IProductService
 
     public async Task<ProductDetailDto> ReplaceUnitsAsync(int id, int businessId, int branchId, List<ProductUnitWriteDto> units)
     {
+        if (!await _featurePermission.IsUnitEnabledAsync())
+            throw new InvalidOperationException("Unit management is not enabled for your role.");
+
         var product = await GetProductOrThrowAsync(id, businessId, branchId);
         ValidateUnits(units);
         await ReplaceUnitsAsync(product, units, businessId, branchId);
@@ -163,6 +192,9 @@ public class ProductService : IProductService
 
     public async Task<ProductDetailDto> ReplaceVariantsAsync(int id, int businessId, int branchId, List<ProductVariantWriteDto> variants)
     {
+        if (!await _featurePermission.IsVariantEnabledAsync())
+            throw new InvalidOperationException("Variant management is not enabled for your role.");
+
         var product = await GetProductOrThrowAsync(id, businessId, branchId);
         ReplaceVariants(product, variants, businessId, branchId);
         product.IsVariantEnabled = variants.Count > 0;
@@ -172,6 +204,9 @@ public class ProductService : IProductService
 
     public async Task<ProductDetailDto> ReplaceBarcodesAsync(int id, int businessId, int branchId, List<ProductBarcodeWriteDto> barcodes)
     {
+        if (!await _featurePermission.IsBarcodeEnabledAsync())
+            throw new InvalidOperationException("Barcode management is not enabled for your role.");
+
         var product = await GetProductOrThrowAsync(id, businessId, branchId);
         await ReplaceBarcodesAsync(product, barcodes, businessId, branchId);
         await _repository.SaveChangesAsync();
@@ -216,6 +251,9 @@ public class ProductService : IProductService
 
     public async Task RemoveBarcodeAsync(int id, int barcodeId, int businessId, int branchId)
     {
+        if (!await _featurePermission.IsBarcodeEnabledAsync())
+            throw new InvalidOperationException("Barcode management is not enabled for your role.");
+
         var product = await GetProductOrThrowAsync(id, businessId, branchId);
         var barcode = product.Barcodes.FirstOrDefault(b => b.Id == barcodeId);
         if (barcode == null)
@@ -272,9 +310,66 @@ public class ProductService : IProductService
             !await _repository.BrandExistsAsync(dto.BrandId.Value, dto.BusinessId, dto.BranchId))
             throw new InvalidOperationException("Brand was not found in the selected branch.");
 
-        ValidateUnits(dto.Units);
-        await ValidateBarcodesAsync(dto.Barcodes);
-        ValidateStockSettings(dto);
+        if (await _featurePermission.IsUnitEnabledAsync())
+            ValidateUnits(dto.Units);
+
+        if (await _featurePermission.IsBarcodeEnabledAsync())
+            await ValidateBarcodesAsync(dto.Barcodes);
+
+        if (await _featurePermission.IsStockEnabledAsync())
+            ValidateStockSettings(dto);
+    }
+
+    private async Task ApplyFeatureGatesAsync(CreateProductDto dto)
+    {
+        if (!await _featurePermission.IsUnitEnabledAsync())
+        {
+            dto.UseAutoUnitPricing = false;
+            dto.Units = new List<ProductUnitWriteDto>();
+        }
+
+        if (!await _featurePermission.IsVariantEnabledAsync())
+        {
+            dto.IsVariantEnabled = false;
+            dto.Variants = new List<ProductVariantWriteDto>();
+            dto.OpeningStockVariantWise = false;
+            dto.OpeningStockByVariant = new List<ProductOpeningStockWriteDto>();
+        }
+
+        if (!await _featurePermission.IsStockEnabledAsync())
+        {
+            dto.OpeningStock = 0;
+            dto.OpeningStockWarehouseId = null;
+            dto.OpeningStockVariantWise = false;
+            dto.OpeningStockByVariant = new List<ProductOpeningStockWriteDto>();
+            dto.AllowNegativeStock = true;
+            dto.EnableLowStockAlert = false;
+            dto.LowStockAlertLevel = null;
+        }
+
+        if (!await _featurePermission.IsBarcodeEnabledAsync())
+            dto.Barcodes = new List<ProductBarcodeWriteDto>();
+    }
+
+    private async Task EnsureDefaultBaseUnitOnProductAsync(ProductEntity product, int businessId, int branchId)
+    {
+        var masterUnits = await _unitRepository.GetAllAsync(businessId, branchId, status: true);
+        var masterUnit = masterUnits.FirstOrDefault(u =>
+            string.Equals(u.Name.Trim(), "Piece", StringComparison.OrdinalIgnoreCase))
+            ?? masterUnits.FirstOrDefault()
+            ?? throw new InvalidOperationException("No measurement units found. Create a base unit in unit master first.");
+
+        product.Units.Clear();
+        product.Units.Add(new ProductUnit
+        {
+            BusinessId = businessId,
+            BranchId = branchId,
+            UnitId = masterUnit.Id,
+            UnitName = masterUnit.Name.Trim(),
+            ConversionFactor = 1,
+            IsBaseUnit = true,
+            IsPriceOverridden = false
+        });
     }
 
     private static void ValidateStockSettings(CreateProductDto dto)

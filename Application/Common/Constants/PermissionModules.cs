@@ -27,6 +27,7 @@ public static class PermissionModules
     public const string PartyLedger = "Party Ledger";
     public const string Dashboard = "Dashboard";
     public const string Variants = "Variants";
+    public const string Barcodes = "Barcodes";
     public const string Sizes = "Sizes";
     public const string Colors = "Colors";
     public const string ExpenseCategories = "Expense Categories";
@@ -55,6 +56,7 @@ public static class PermissionModules
         Sizes,
         Colors,
         Variants,
+        Barcodes,
         ExpenseCategories,
         Countries,
         Cities,

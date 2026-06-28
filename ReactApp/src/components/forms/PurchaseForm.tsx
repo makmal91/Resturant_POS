@@ -5,6 +5,8 @@ import { CODE_MODULES } from '../../services/codeGeneratorService';
 import { safeString } from '../../utils/safeValues';
 import apiClient from '../../services/api';
 import { useFormBranchId } from '../../hooks/useFormBranchId';
+import { useHasFeature } from '../../hooks/useFeature';
+import { FEATURE_KEYS } from '../../types/featurePermissions';
 
 export interface PurchaseItemFormData {
   productId: number;
@@ -202,6 +204,16 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
   const isPosted = initialData?.status === 'Posted';
   const isEditMode = Number(initialData?.id ?? 0) > 0;
   const { branchId, branchError } = useFormBranchId(initialData?.branchId);
+  const variantFeatureEnabled = useHasFeature(FEATURE_KEYS.VARIANT);
+  const unitFeatureEnabled = useHasFeature(FEATURE_KEYS.UNIT);
+
+  const lineItemGridColumns = useMemo(() => {
+    const parts = ['2fr'];
+    if (variantFeatureEnabled) parts.push('1.5fr');
+    if (unitFeatureEnabled) parts.push('1.2fr');
+    parts.push('80px', '80px', '90px', '90px', '72px');
+    return parts.join(' ');
+  }, [variantFeatureEnabled, unitFeatureEnabled]);
 
   const [invoiceNo, setInvoiceNo] = useState(safeString(initialData?.invoiceNo));
   const [invoiceCodeResetKey, setInvoiceCodeResetKey] = useState(0);
@@ -413,7 +425,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     }
 
     // Treat the product as variant-enabled if either the flag is set or variants were actually returned
-    const hasVariants = isVariantEnabledFromDetail || variants.length > 0;
+    const hasVariants = variantFeatureEnabled && (isVariantEnabledFromDetail || variants.length > 0);
     const baseUnit = units.find((u) => u.isBaseUnit) ?? units[0];
     const selectedVariantId = hasVariants && variants.length > 0 ? variants[0].id : null;
     const selectedUnitId = baseUnit?.id ?? 0;
@@ -506,13 +518,15 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     if (branchId <= 0) nextErrors.branchId = branchError ?? 'Branch is required';
 
     const invalidRows = rows.filter((r) => r.productId > 0 && (r.unitId <= 0 || r.quantity <= 0));
-    const missingVariantRows = rows.filter(
-      (r) =>
-        r.productId > 0 &&
-        r.isVariantEnabled &&
-        r.variants.length > 0 &&
-        (r.variantId == null || r.variantId <= 0)
-    );
+    const missingVariantRows = variantFeatureEnabled
+      ? rows.filter(
+          (r) =>
+            r.productId > 0 &&
+            r.isVariantEnabled &&
+            r.variants.length > 0 &&
+            (r.variantId == null || r.variantId <= 0),
+        )
+      : [];
     const emptyRows = rows.filter((r) => r.productId <= 0);
 
     if (rows.every((r) => r.productId <= 0)) {
@@ -705,10 +719,13 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
             {/* Table header — sticky within line items panel */}
-            <div className="shrink-0 grid grid-cols-[2fr_1.5fr_1.2fr_80px_80px_90px_90px_72px] gap-0 border-b border-gray-200 bg-gray-50 px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-gray-500">
+            <div
+              className="shrink-0 grid gap-0 border-b border-gray-200 bg-gray-50 px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-gray-500"
+              style={{ gridTemplateColumns: lineItemGridColumns }}
+            >
               <div>Product</div>
-              <div>Variant</div>
-              <div>Unit</div>
+              {variantFeatureEnabled && <div>Variant</div>}
+              {unitFeatureEnabled && <div>Unit</div>}
               <div className="text-right">Qty</div>
               <div className="text-right">Base Qty</div>
               <div className="text-right">Cost</div>
@@ -721,9 +738,10 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
               {rows.map((row, idx) => (
                 <div
                   key={row.key}
-                  className={`grid grid-cols-[2fr_1.5fr_1.2fr_80px_80px_90px_90px_72px] items-center gap-0 px-3 py-2 transition-colors ${
+                  className={`grid items-center gap-0 px-3 py-2 transition-colors ${
                     row.productId > 0 ? 'bg-white' : 'bg-gray-50/50'
                   }`}
+                  style={{ gridTemplateColumns: lineItemGridColumns }}
                 >
                   {/* Product cell with per-row search */}
                   <div className="pr-2">
@@ -770,7 +788,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                                   <p className="font-medium text-gray-900">{p.productName}</p>
                                   <p className="text-xs text-gray-400">{p.productCode}</p>
                                 </div>
-                                {p.isVariantEnabled && (
+                                {variantFeatureEnabled && p.isVariantEnabled && (
                                   <span className="ml-2 shrink-0 rounded-full bg-purple-100 px-1.5 py-0.5 text-xs font-medium text-purple-700">
                                     Variants
                                   </span>
@@ -816,7 +834,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                     )}
                   </div>
 
-                  {/* Variant */}
+                  {variantFeatureEnabled && (
                   <div className="px-1">
                     {row.isVariantEnabled && row.variants.length > 0 ? (
                       <select
@@ -842,8 +860,9 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                       <span className="text-gray-300">—</span>
                     )}
                   </div>
+                  )}
 
-                  {/* Unit */}
+                  {unitFeatureEnabled && (
                   <div className="px-1">
                     {row.units.length > 1 ? (
                       <select
@@ -862,6 +881,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                       <span className="text-sm text-gray-700">{row.unitName || '—'}</span>
                     )}
                   </div>
+                  )}
 
                   {/* Qty */}
                   <div className="px-1">

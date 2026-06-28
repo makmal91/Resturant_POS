@@ -1,3 +1,4 @@
+using POSSystem.Application.Auth.Interfaces;
 using POSSystem.Application.CashFlow.Interfaces;
 using POSSystem.Application.Common.Constants;
 using POSSystem.Application.Common.DTOs;
@@ -26,6 +27,7 @@ public class SalesService : ISalesService
     private readonly ICodeGeneratorService _codeGenerator;
     private readonly IStockValidationService _stockValidationService;
     private readonly IUnitPricingService _unitPricingService;
+    private readonly IFeaturePermissionService _featurePermission;
 
     public SalesService(
         ISalesRepository salesRepository,
@@ -37,7 +39,8 @@ public class SalesService : ISalesService
         IInvoicePaymentService invoicePaymentService,
         ICodeGeneratorService codeGenerator,
         IStockValidationService stockValidationService,
-        IUnitPricingService unitPricingService)
+        IUnitPricingService unitPricingService,
+        IFeaturePermissionService featurePermission)
     {
         _salesRepository = salesRepository;
         _stockLedgerRepository = stockLedgerRepository;
@@ -49,6 +52,7 @@ public class SalesService : ISalesService
         _codeGenerator = codeGenerator;
         _stockValidationService = stockValidationService;
         _unitPricingService = unitPricingService;
+        _featurePermission = featurePermission;
     }
 
     public async Task<PosProductLookupDto?> GetProductByBarcodeAsync(
@@ -214,38 +218,55 @@ public class SalesService : ISalesService
         ValidateCreditSale(dto.IsCreditSale, dto.CustomerId);
 
         var resolvedItems = await ResolveSaleItemsAsync(dto.Items, dto.PricingType, dto.BusinessId, dto.BranchId);
-        var stockRequirements = await BuildStockRequirementsAsync(dto.BusinessId, dto.BranchId, resolvedItems);
-        await _stockValidationService.ValidateAvailabilityAsync(
-            dto.BusinessId, dto.BranchId, dto.WarehouseId, stockRequirements);
+        var stockEnabled = await _featurePermission.IsStockEnabledAsync();
+
+        if (stockEnabled)
+        {
+            var stockRequirements = await BuildStockRequirementsAsync(dto.BusinessId, dto.BranchId, resolvedItems);
+            await _stockValidationService.ValidateAvailabilityAsync(
+                dto.BusinessId, dto.BranchId, dto.WarehouseId, stockRequirements);
+        }
 
         var invoiceNo = await GenerateInvoiceNoAsync(dto.BranchId);
         var invoice = BuildInvoice(invoiceNo, dto, resolvedItems);
         invoice.Status = SaleInvoiceStatus.Completed;
 
-        await _stockValidationService.ExecuteWithStockLockAsync(async () =>
+        if (stockEnabled)
         {
-            await _stockValidationService.ValidateAvailabilityAsync(
-                dto.BusinessId, dto.BranchId, dto.WarehouseId, stockRequirements);
+            var stockRequirements = await BuildStockRequirementsAsync(dto.BusinessId, dto.BranchId, resolvedItems);
+            await _stockValidationService.ExecuteWithStockLockAsync(async () =>
+            {
+                await _stockValidationService.ValidateAvailabilityAsync(
+                    dto.BusinessId, dto.BranchId, dto.WarehouseId, stockRequirements);
 
+                await _salesRepository.AddAsync(invoice);
+                await _salesRepository.SaveChangesAsync();
+
+                foreach (var item in invoice.Items.Where(i => !i.IsDeleted))
+                {
+                    await _stockLedgerRepository.AddAsync(CreateSaleStockLedgerEntry(
+                        item, invoice.WarehouseId, invoice.Id, invoice.InvoiceNo, invoice.SaleDate,
+                        dto.BusinessId, dto.BranchId));
+                }
+
+                await _stockLedgerRepository.SaveChangesAsync();
+            });
+        }
+        else
+        {
             await _salesRepository.AddAsync(invoice);
             await _salesRepository.SaveChangesAsync();
+        }
 
-            foreach (var item in invoice.Items.Where(i => !i.IsDeleted))
-            {
-                await _stockLedgerRepository.AddAsync(CreateSaleStockLedgerEntry(
-                    item, invoice.WarehouseId, invoice.Id, invoice.InvoiceNo, invoice.SaleDate,
-                    dto.BusinessId, dto.BranchId));
-            }
-
-            await _stockLedgerRepository.SaveChangesAsync();
-        });
-
-        await _lowStockAlertService.EvaluateAfterStockChangeAsync(
-            dto.BusinessId,
-            dto.BranchId,
-            invoice.Items
-                .Where(i => !i.IsDeleted)
-                .Select(i => new StockChangeItem(i.ProductId, i.VariantId, invoice.WarehouseId)));
+        if (stockEnabled)
+        {
+            await _lowStockAlertService.EvaluateAfterStockChangeAsync(
+                dto.BusinessId,
+                dto.BranchId,
+                invoice.Items
+                    .Where(i => !i.IsDeleted)
+                    .Select(i => new StockChangeItem(i.ProductId, i.VariantId, invoice.WarehouseId)));
+        }
 
         if (invoice.IsCreditSale)
         {
@@ -294,9 +315,12 @@ public class SalesService : ISalesService
         };
 
         var resolvedItems = await ResolveSaleItemsAsync(dto.Items, dto.PricingType, dto.BusinessId, dto.BranchId);
-        var stockRequirements = await BuildStockRequirementsAsync(dto.BusinessId, dto.BranchId, resolvedItems);
-        await _stockValidationService.ValidateAvailabilityAsync(
-            dto.BusinessId, dto.BranchId, dto.WarehouseId, stockRequirements);
+        if (await _featurePermission.IsStockEnabledAsync())
+        {
+            var stockRequirements = await BuildStockRequirementsAsync(dto.BusinessId, dto.BranchId, resolvedItems);
+            await _stockValidationService.ValidateAvailabilityAsync(
+                dto.BusinessId, dto.BranchId, dto.WarehouseId, stockRequirements);
+        }
 
         var invoice = BuildInvoice(invoiceNo, createDto, resolvedItems);
         invoice.Status = SaleInvoiceStatus.Held;
@@ -432,6 +456,9 @@ public class SalesService : ISalesService
     private async Task ValidateStockAvailabilityFromResolvedAsync(
         int businessId, int branchId, int warehouseId, List<ResolvedSaleLineItem> items)
     {
+        if (!await _featurePermission.IsStockEnabledAsync())
+            return;
+
         var requirements = await BuildStockRequirementsAsync(businessId, branchId, items);
         await _stockValidationService.ValidateAvailabilityAsync(businessId, branchId, warehouseId, requirements);
     }
@@ -496,6 +523,8 @@ public class SalesService : ISalesService
         int businessId,
         int branchId)
     {
+        var unitEnabled = await _featurePermission.IsUnitEnabledAsync();
+        var variantEnabled = await _featurePermission.IsVariantEnabledAsync();
         var productCache = new Dictionary<int, ProductEntity>();
         var resolved = new List<ResolvedSaleLineItem>();
 
@@ -508,15 +537,24 @@ public class SalesService : ISalesService
                 productCache[i.ProductId] = product;
             }
 
-            var unit = product.Units.FirstOrDefault(u => u.Id == i.UnitId && !u.IsDeleted)
-                ?? throw new InvalidOperationException(
-                    $"Unit {i.UnitId} is not valid for product '{product.ProductName}'. No conversion mapping exists.");
+            var unit = unitEnabled
+                ? product.Units.FirstOrDefault(u => u.Id == i.UnitId && !u.IsDeleted)
+                    ?? throw new InvalidOperationException(
+                        $"Unit {i.UnitId} is not valid for product '{product.ProductName}'. No conversion mapping exists.")
+                : product.Units.FirstOrDefault(u => u.IsBaseUnit && !u.IsDeleted)
+                    ?? product.Units.FirstOrDefault(u => !u.IsDeleted)
+                    ?? throw new InvalidOperationException(
+                        $"Product '{product.ProductName}' has no base unit configured.");
 
-            UnitConversionHelper.ValidateConversionFactor(unit.IsBaseUnit, unit.ConversionFactor, unit.UnitName);
+            if (unitEnabled)
+                UnitConversionHelper.ValidateConversionFactor(unit.IsBaseUnit, unit.ConversionFactor, unit.UnitName);
 
-            var (variant, variantId) = ResolveProductVariant(product, i.VariantId);
+            ProductVariant? variant = null;
+            int? variantId = null;
+            if (variantEnabled)
+                (variant, variantId) = ResolveProductVariant(product, i.VariantId);
 
-            var conversionFactor = unit.ConversionFactor;
+            var conversionFactor = unitEnabled ? unit.ConversionFactor : 1m;
             var unitPrice = _unitPricingService.GetEffectiveSellingPrice(product, unit, variant, pricingType);
 
             resolved.Add(new ResolvedSaleLineItem(
@@ -525,7 +563,9 @@ public class SalesService : ISalesService
                 unit.Id,
                 i.Quantity,
                 conversionFactor,
-                UnitConversionHelper.ToBaseQuantity(i.Quantity, conversionFactor),
+                unitEnabled
+                    ? UnitConversionHelper.ToBaseQuantity(i.Quantity, conversionFactor)
+                    : i.Quantity,
                 unitPrice,
                 i.DiscountPercent,
                 i.DiscountAmount,
@@ -822,42 +862,46 @@ public class SalesService : ISalesService
         var prevCustomerId = invoice.CustomerId;
 
         // Load the original SaleEntry ledger records for this invoice
-        var originalEntries = await _stockLedgerRepository.GetByReferenceAsync(
-            id, dto.BusinessId, dto.BranchId, StockLedgerType.SaleEntry);
-
-        // Create reversal entries — positive qty returns stock to warehouse
-        var reversals = originalEntries.Select(e => new StockLedger
+        var stockEnabled = await _featurePermission.IsStockEnabledAsync();
+        if (stockEnabled)
         {
-            ProductId          = e.ProductId,
-            VariantId          = e.VariantId,
-            WarehouseId        = e.WarehouseId,
-            Type               = StockLedgerType.SaleReversal,
-            ReferenceId        = id,
-            QuantityInBaseUnit = -e.QuantityInBaseUnit,
-            UnitId             = e.UnitId,
-            UnitQuantity       = e.UnitQuantity.HasValue ? -e.UnitQuantity.Value : null,
-            UnitPrice          = e.UnitPrice,
-            TotalAmount        = e.TotalAmount,
-            Date               = DateTime.UtcNow,
-            Remarks            = $"Void of Sale — Invoice: {invoice.InvoiceNo}" +
-                                 (string.IsNullOrWhiteSpace(dto.Reason) ? "" : $" | Reason: {dto.Reason}"),
-            BusinessId         = dto.BusinessId,
-            BranchId           = dto.BranchId
-        }).ToList();
+            var originalEntries = await _stockLedgerRepository.GetByReferenceAsync(
+                id, dto.BusinessId, dto.BranchId, StockLedgerType.SaleEntry);
 
-        await _stockLedgerRepository.AddRangeAsync(reversals);
+            // Create reversal entries — positive qty returns stock to warehouse
+            var reversals = originalEntries.Select(e => new StockLedger
+            {
+                ProductId          = e.ProductId,
+                VariantId          = e.VariantId,
+                WarehouseId        = e.WarehouseId,
+                Type               = StockLedgerType.SaleReversal,
+                ReferenceId        = id,
+                QuantityInBaseUnit = -e.QuantityInBaseUnit,
+                UnitId             = e.UnitId,
+                UnitQuantity       = e.UnitQuantity.HasValue ? -e.UnitQuantity.Value : null,
+                UnitPrice          = e.UnitPrice,
+                TotalAmount        = e.TotalAmount,
+                Date               = DateTime.UtcNow,
+                Remarks            = $"Void of Sale — Invoice: {invoice.InvoiceNo}" +
+                                     (string.IsNullOrWhiteSpace(dto.Reason) ? "" : $" | Reason: {dto.Reason}"),
+                BusinessId         = dto.BusinessId,
+                BranchId           = dto.BranchId
+            }).ToList();
+
+            await _stockLedgerRepository.AddRangeAsync(reversals);
+            await _stockLedgerRepository.SaveChangesAsync();
+
+            await _lowStockAlertService.EvaluateAfterStockChangeAsync(
+                dto.BusinessId,
+                dto.BranchId,
+                reversals.Select(r => new StockChangeItem(r.ProductId, r.VariantId, r.WarehouseId)));
+        }
 
         invoice.Status       = SaleInvoiceStatus.Voided;
         invoice.VoidedAt     = DateTime.UtcNow;
         invoice.VoidedByName = dto.VoidedByName;
 
         await _salesRepository.SaveChangesAsync();
-        await _stockLedgerRepository.SaveChangesAsync();
-
-        await _lowStockAlertService.EvaluateAfterStockChangeAsync(
-            dto.BusinessId,
-            dto.BranchId,
-            reversals.Select(r => new StockChangeItem(r.ProductId, r.VariantId, r.WarehouseId)));
 
         if (prevWasCredit && prevCustomerId.HasValue)
         {
@@ -894,28 +938,32 @@ public class SalesService : ISalesService
         var prevCustomerId = invoice.CustomerId;
 
         // STEP 1: Reverse the existing stock ledger entries
-        var originalEntries = await _stockLedgerRepository.GetByReferenceAsync(
-            id, dto.BusinessId, dto.BranchId, StockLedgerType.SaleEntry);
-
-        var reversals = originalEntries.Select(e => new StockLedger
+        var stockEnabled = await _featurePermission.IsStockEnabledAsync();
+        if (stockEnabled)
         {
-            ProductId          = e.ProductId,
-            VariantId          = e.VariantId,
-            WarehouseId        = e.WarehouseId,
-            Type               = StockLedgerType.SaleReversal,
-            ReferenceId        = id,
-            QuantityInBaseUnit = -e.QuantityInBaseUnit,
-            UnitId             = e.UnitId,
-            UnitQuantity       = e.UnitQuantity.HasValue ? -e.UnitQuantity.Value : null,
-            UnitPrice          = e.UnitPrice,
-            TotalAmount        = e.TotalAmount,
-            Date               = DateTime.UtcNow,
-            Remarks            = $"Correction Reversal — Invoice: {invoice.InvoiceNo}",
-            BusinessId         = dto.BusinessId,
-            BranchId           = dto.BranchId
-        }).ToList();
+            var originalEntries = await _stockLedgerRepository.GetByReferenceAsync(
+                id, dto.BusinessId, dto.BranchId, StockLedgerType.SaleEntry);
 
-        await _stockLedgerRepository.AddRangeAsync(reversals);
+            var reversals = originalEntries.Select(e => new StockLedger
+            {
+                ProductId          = e.ProductId,
+                VariantId          = e.VariantId,
+                WarehouseId        = e.WarehouseId,
+                Type               = StockLedgerType.SaleReversal,
+                ReferenceId        = id,
+                QuantityInBaseUnit = -e.QuantityInBaseUnit,
+                UnitId             = e.UnitId,
+                UnitQuantity       = e.UnitQuantity.HasValue ? -e.UnitQuantity.Value : null,
+                UnitPrice          = e.UnitPrice,
+                TotalAmount        = e.TotalAmount,
+                Date               = DateTime.UtcNow,
+                Remarks            = $"Correction Reversal — Invoice: {invoice.InvoiceNo}",
+                BusinessId         = dto.BusinessId,
+                BranchId           = dto.BranchId
+            }).ToList();
+
+            await _stockLedgerRepository.AddRangeAsync(reversals);
+        }
 
         foreach (var item in invoice.Items)
             item.IsDeleted = true;
@@ -991,23 +1039,26 @@ public class SalesService : ISalesService
 
         await _salesRepository.SaveChangesAsync();
 
-        await ValidateStockAvailabilityAsync(dto.BusinessId, dto.BranchId, dto.WarehouseId, dto.PricingType, dto.Items);
-
-        foreach (var item in invoice.Items.Where(i => !i.IsDeleted))
+        if (stockEnabled)
         {
-            await _stockLedgerRepository.AddAsync(CreateSaleStockLedgerEntry(
-                item, invoice.WarehouseId, invoice.Id, invoice.InvoiceNo, invoice.SaleDate,
-                dto.BusinessId, dto.BranchId, corrected: true));
+            await ValidateStockAvailabilityAsync(dto.BusinessId, dto.BranchId, dto.WarehouseId, dto.PricingType, dto.Items);
+
+            foreach (var item in invoice.Items.Where(i => !i.IsDeleted))
+            {
+                await _stockLedgerRepository.AddAsync(CreateSaleStockLedgerEntry(
+                    item, invoice.WarehouseId, invoice.Id, invoice.InvoiceNo, invoice.SaleDate,
+                    dto.BusinessId, dto.BranchId, corrected: true));
+            }
+
+            await _stockLedgerRepository.SaveChangesAsync();
+
+            await _lowStockAlertService.EvaluateAfterStockChangeAsync(
+                dto.BusinessId,
+                dto.BranchId,
+                invoice.Items
+                    .Where(i => !i.IsDeleted)
+                    .Select(i => new StockChangeItem(i.ProductId, i.VariantId, invoice.WarehouseId)));
         }
-
-        await _stockLedgerRepository.SaveChangesAsync();
-
-        await _lowStockAlertService.EvaluateAfterStockChangeAsync(
-            dto.BusinessId,
-            dto.BranchId,
-            invoice.Items
-                .Where(i => !i.IsDeleted)
-                .Select(i => new StockChangeItem(i.ProductId, i.VariantId, invoice.WarehouseId)));
 
         if (prevWasCredit && prevCustomerId.HasValue)
         {

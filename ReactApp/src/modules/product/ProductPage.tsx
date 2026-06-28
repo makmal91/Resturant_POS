@@ -6,6 +6,9 @@ import apiClient from '../../services/api';
 import { useBranchWriteAccess } from '../../hooks/useBranchWriteAccess';
 import ProductForm from './ProductForm';
 import { ProductDetail, ProductListItem, ProductPayload, productService } from './productService';
+import { useHasFeature } from '../../hooks/useFeature';
+import { FEATURE_KEYS } from '../../types/featurePermissions';
+import FeatureWrapper from '../../components/FeatureWrapper';
 
 const fallbackUnits = [
   { id: 1, name: 'Piece', defaultConversionFactor: 1 },
@@ -39,6 +42,10 @@ const ProductPage: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<boolean | null>(null);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
+  const unitFeatureEnabled = useHasFeature(FEATURE_KEYS.UNIT);
+  const variantFeatureEnabled = useHasFeature(FEATURE_KEYS.VARIANT);
+  const stockFeatureEnabled = useHasFeature(FEATURE_KEYS.STOCK);
+
   const branchId = selectedBranchId && selectedBranchId > 0 ? selectedBranchId : 0;
   const pageSize = 10;
 
@@ -57,12 +64,19 @@ const ProductPage: React.FC = () => {
     }
 
     try {
-      const [categoryResponse, subCategoryResponse, brandResponse, unitResponse] = await Promise.all([
+      const requests: Promise<unknown>[] = [
         apiClient.get('/categories', { params: { branchId, pageSize: 100 }, headers: { 'X-Branch-Id': String(branchId) } }),
         apiClient.get('/subcategories', { params: { branchId, pageSize: 100 }, headers: { 'X-Branch-Id': String(branchId) } }),
         apiClient.get('/brands', { params: { branchId, pageSize: 100 }, headers: { 'X-Branch-Id': String(branchId) } }),
-        apiClient.get('/units', { params: { branchId }, headers: { 'X-Branch-Id': String(branchId) } }).catch(() => null),
-      ]);
+      ];
+
+      if (unitFeatureEnabled) {
+        requests.push(
+          apiClient.get('/units', { params: { branchId }, headers: { 'X-Branch-Id': String(branchId) } }).catch(() => null),
+        );
+      }
+
+      const [categoryResponse, subCategoryResponse, brandResponse, unitResponse] = await Promise.all(requests);
 
       setCategories(
         (Array.isArray(categoryResponse.data?.categories) ? categoryResponse.data.categories : [])
@@ -79,15 +93,18 @@ const ProductPage: React.FC = () => {
           .map((item: any) => ({ id: Number(item.id ?? 0), name: String(item.name ?? '') }))
           .filter((item: { id: number; name: string }) => item.id > 0)
       );
-      const rawUnits = unitResponse?.data
-        ? Array.isArray(unitResponse.data)
-          ? unitResponse.data
-          : Array.isArray(unitResponse.data.units)
-            ? unitResponse.data.units
-            : Array.isArray(unitResponse.data.items)
-              ? unitResponse.data.items
-              : []
-        : [];
+      let rawUnits: unknown[] = [];
+      if (unitFeatureEnabled && unitResponse) {
+        const unitData = (unitResponse as { data?: unknown }).data;
+        if (Array.isArray(unitData)) {
+          rawUnits = unitData;
+        } else if (unitData && typeof unitData === 'object') {
+          const record = unitData as Record<string, unknown>;
+          if (Array.isArray(record.units)) rawUnits = record.units;
+          else if (Array.isArray(record.items)) rawUnits = record.items;
+        }
+      }
+
       const normalizedUnits = rawUnits
         .map((item: any) => ({
           id: Number(item.id ?? item.Id ?? 0),
@@ -97,12 +114,12 @@ const ProductPage: React.FC = () => {
             ?? item.conversionFactor ?? item.ConversionFactor ?? 1),
         }))
         .filter((item: { id: number; name: string }) => item.id > 0 && item.name);
-      setUnits(normalizedUnits.length > 0 ? normalizedUnits : fallbackUnits);
+      setUnits(unitFeatureEnabled && normalizedUnits.length > 0 ? normalizedUnits : fallbackUnits);
     } catch (error) {
       showNotification('error', getApiErrorMessage(error, 'Failed to load product master data.'));
       setUnits(fallbackUnits);
     }
-  }, [branchId, showNotification]);
+  }, [branchId, showNotification, unitFeatureEnabled]);
 
   const loadProducts = useCallback(async () => {
     if (branchId <= 0) {
@@ -349,7 +366,10 @@ const SlideOver: React.FC<{ title: string; onClose: () => void; children: React.
   </>
 );
 
-const ProductDetailView: React.FC<{ product: ProductDetail }> = ({ product }) => (
+const ProductDetailView: React.FC<{ product: ProductDetail }> = ({ product }) => {
+  const variantFeatureEnabled = useHasFeature(FEATURE_KEYS.VARIANT);
+
+  return (
   <div className="h-full space-y-6 overflow-y-auto px-6 py-5">
     <section>
       <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">Basic Info</h3>
@@ -369,10 +389,13 @@ const ProductDetailView: React.FC<{ product: ProductDetail }> = ({ product }) =>
       <Info label="Selling Price" value={product.sellingPrice.toFixed(2)} />
       <Info label="Wholesale Price" value={product.wholesalePrice.toFixed(2)} />
       <Info label="Discount" value={product.isDiscountAllowed ? `${product.discountType} ${product.discountValue}` : 'Not allowed'} />
-      <Info label="Variants" value={product.isVariantEnabled ? 'Enabled' : 'Disabled'} />
+      {variantFeatureEnabled && (
+        <Info label="Variants" value={product.isVariantEnabled ? 'Enabled' : 'Disabled'} />
+      )}
       <Info label="Status" value={product.status ? 'Active' : 'Inactive'} />
     </section>
 
+    <FeatureWrapper feature={FEATURE_KEYS.STOCK}>
     <section>
       <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">Stock Settings</h3>
       <div className="grid grid-cols-1 gap-3 text-sm md:grid-cols-3">
@@ -407,10 +430,17 @@ const ProductDetailView: React.FC<{ product: ProductDetail }> = ({ product }) =>
         </div>
       )}
     </section>
+    </FeatureWrapper>
 
-    <DetailList title="Units" rows={product.units.map((unit) => `${unit.unitName} | factor ${unit.conversionFactor}${unit.isBaseUnit ? ' | Base' : ''}`)} />
-    <DetailList title="Variants" rows={product.variants.map((variant) => `${variant.variantName}${variant.size ? ` | ${variant.size}` : ''}${variant.color ? ` | ${variant.color}` : ''} | +${variant.additionalPrice}`)} />
-    <DetailList title="Barcodes" rows={product.barcodes.map((barcode) => `${barcode.barcodeValue}${barcode.isPrimary ? ' | Primary' : ''}`)} />
+    <FeatureWrapper feature={FEATURE_KEYS.UNIT}>
+      <DetailList title="Units" rows={product.units.map((unit) => `${unit.unitName} | factor ${unit.conversionFactor}${unit.isBaseUnit ? ' | Base' : ''}`)} />
+    </FeatureWrapper>
+    <FeatureWrapper feature={FEATURE_KEYS.VARIANT}>
+      <DetailList title="Variants" rows={product.variants.map((variant) => `${variant.variantName}${variant.size ? ` | ${variant.size}` : ''}${variant.color ? ` | ${variant.color}` : ''} | +${variant.additionalPrice}`)} />
+    </FeatureWrapper>
+    <FeatureWrapper feature={FEATURE_KEYS.BARCODE}>
+      <DetailList title="Barcodes" rows={product.barcodes.map((barcode) => `${barcode.barcodeValue}${barcode.isPrimary ? ' | Primary' : ''}`)} />
+    </FeatureWrapper>
 
     <section>
       <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">Images</h3>
@@ -432,7 +462,8 @@ const ProductDetailView: React.FC<{ product: ProductDetail }> = ({ product }) =>
       )}
     </section>
   </div>
-);
+  );
+};
 
 const Info: React.FC<{ label: string; value: string }> = ({ label, value }) => (
   <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">

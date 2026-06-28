@@ -108,6 +108,21 @@ public class ModuleRepository : IModuleRepository
             .ToListAsync();
     }
 
+    public async Task<IReadOnlyList<string>> GetEnabledFeatureKeysForRoleAsync(int roleId)
+    {
+        return await _context.RoleFormPermissions
+            .AsNoTracking()
+            .Where(rfp => rfp.RoleId == roleId && !rfp.IsDeleted && rfp.CanView)
+            .Join(
+                _context.ModuleForms.Where(f => !f.IsDeleted && f.IsActive),
+                rfp => rfp.FormId,
+                f => f.Id,
+                (_, f) => f.FormCode)
+            .Where(code => code.EndsWith(".enable"))
+            .Distinct()
+            .ToListAsync();
+    }
+
     public async Task ReplaceFormPermissionsAsync(int roleId, IReadOnlyList<SaveFormPermissionItemDto> formPermissions)
     {
         var deduped = formPermissions

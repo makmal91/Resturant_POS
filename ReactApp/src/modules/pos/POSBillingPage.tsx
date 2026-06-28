@@ -30,6 +30,9 @@ import { UnitSelector, lastUnitStorageKey } from './UnitSelector';
 import { ReceiptPrintModal } from '../../components/receipt';
 import { getApiErrorMessage } from '../../services/api';
 import { useBusinessCurrency } from '../../hooks/useBusinessCurrency';
+import { useHasFeature } from '../../hooks/useFeature';
+import { FEATURE_KEYS } from '../../types/featurePermissions';
+import FeatureWrapper from '../../components/FeatureWrapper';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -263,6 +266,8 @@ const POSBillingPage: React.FC = () => {
   const { user, selectedBranchId } = useAuth();
   const branchId: number = selectedBranchId ?? (user as { branchId?: number })?.branchId ?? 1;
   const businessId: number = (user as { businessId?: number })?.businessId ?? 1;
+  const variantFeatureEnabled = useHasFeature(FEATURE_KEYS.VARIANT);
+  const stockFeatureEnabled = useHasFeature(FEATURE_KEYS.STOCK);
 
   // ── State ──
   const [warehouses, setWarehouses] = useState<WarehouseItem[]>([]);
@@ -402,18 +407,20 @@ const POSBillingPage: React.FC = () => {
       return { success: true };
     }
 
-    const stockErr = checkStockForCartLine(
-      cart,
-      item.productId,
-      item.variantId,
-      item.variantName,
-      item.productName,
-      1,
-      item.conversionFactor,
-      item.stockBase,
-      item.allowNegativeStock,
-      item.baseUnitName,
-    );
+    const stockErr = stockFeatureEnabled
+      ? checkStockForCartLine(
+          cart,
+          item.productId,
+          item.variantId,
+          item.variantName,
+          item.productName,
+          1,
+          item.conversionFactor,
+          item.stockBase,
+          item.allowNegativeStock,
+          item.baseUnitName,
+        )
+      : null;
     if (stockErr) {
       return { success: false, error: stockErr };
     }
@@ -422,7 +429,7 @@ const POSBillingPage: React.FC = () => {
     setBarcodeError('');
     setError('');
     return { success: true };
-  }, [pricingType, cart]);
+  }, [pricingType, cart, stockFeatureEnabled]);
 
   const tryAddFromSearch = useCallback((lookup: PosProductLookup, closeSearch: () => void) => {
     const result = addToCart(lookup);
@@ -519,7 +526,10 @@ const POSBillingPage: React.FC = () => {
 
   const grandTotal = Math.max(0, subTotal - totalItemDiscount - billDiscount + totalTax);
 
-  const cartStockError = useMemo(() => validateCartStock(cart), [cart]);
+  const cartStockError = useMemo(
+    () => (stockFeatureEnabled ? validateCartStock(cart) : null),
+    [cart, stockFeatureEnabled],
+  );
 
   const openPayment = useCallback(() => {
     if (cart.length === 0 || !warehouseId) return;
@@ -574,16 +584,16 @@ const POSBillingPage: React.FC = () => {
   const handlePaymentConfirm = async (method: 'Cash' | 'Card' | 'Mixed' | 'Credit', paid: number, cash: number, card: number) => {
     if (!warehouseId || effectiveBranchId <= 0) return;
 
-    const stockErr = validateCartStock(cart);
+    const stockErr = stockFeatureEnabled ? validateCartStock(cart) : null;
     if (stockErr) {
       setError(stockErr);
       setShowPayment(false);
       return;
     }
 
-    const missingVariant = cart.find(
-      (c) => c.availableVariants.length > 0 && (c.variantId == null || c.variantId <= 0)
-    );
+    const missingVariant = variantFeatureEnabled
+      ? cart.find((c) => c.availableVariants.length > 0 && (c.variantId == null || c.variantId <= 0))
+      : undefined;
     if (missingVariant) {
       setError(`"${missingVariant.productName}" requires a variant selection.`);
       setShowPayment(false);
@@ -1212,6 +1222,7 @@ interface CartRowProps {
 }
 
 const CartRow: React.FC<CartRowProps> = React.memo(({ item, idx, onUpdateQty, onUpdateUnit, onUpdateDiscount, onUpdatePrice, onRemove }) => {
+  const variantFeatureEnabled = useHasFeature(FEATURE_KEYS.VARIANT);
   const { fmt } = useBusinessCurrency();
   const [editingQty, setEditingQty] = useState(false);
   const [editingDisc, setEditingDisc] = useState(false);
@@ -1249,15 +1260,17 @@ const CartRow: React.FC<CartRowProps> = React.memo(({ item, idx, onUpdateQty, on
       <td className="px-4 py-3 text-gray-400 text-xs">{idx + 1}</td>
       <td className="px-4 py-3 min-w-[180px]">
         <p className="font-semibold text-gray-800 text-sm leading-tight">{item.productName}</p>
-        {variantLabel && <p className="text-xs text-purple-600 mt-0.5">{variantLabel}</p>}
+        {variantLabel && variantFeatureEnabled && <p className="text-xs text-purple-600 mt-0.5">{variantLabel}</p>}
         {showSingleUnit && item.unitName && (
           <p className="text-xs text-gray-500 mt-0.5">{item.unitName}</p>
         )}
-        <UnitSelector
-          units={item.availableUnits}
-          selectedUnitId={item.unitId}
-          onSelect={(unitId) => onUpdateUnit(item.cartKey, unitId)}
-        />
+        <FeatureWrapper feature={FEATURE_KEYS.UNIT}>
+          <UnitSelector
+            units={item.availableUnits}
+            selectedUnitId={item.unitId}
+            onSelect={(unitId) => onUpdateUnit(item.cartKey, unitId)}
+          />
+        </FeatureWrapper>
       </td>
 
       <td className="px-4 py-3">

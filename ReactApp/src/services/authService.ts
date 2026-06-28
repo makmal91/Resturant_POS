@@ -2,6 +2,7 @@ import api, { getApiErrorMessage } from './api'
 import type { StoredBranch, StoredUser } from '../utils/storage'
 import { parsePermissionsResponse } from '../stores/usePermissionStore'
 import type { ModulePermission } from '../types/permissions'
+import { parseFeaturesResponse } from '../types/featurePermissions'
 
 export interface LoginRequest {
   username: string
@@ -13,6 +14,7 @@ export interface LoginResponse {
   user: StoredUser
   branches: StoredBranch[]
   permissions: ModulePermission[]
+  features: string[]
 }
 
 const normalizeUser = (value: Record<string, unknown>): StoredUser => ({
@@ -51,22 +53,36 @@ export const authService = {
       const userRaw = (data.user ?? data.User) as Record<string, unknown> | undefined
       const branchesRaw = (data.branches ?? data.Branches) as Record<string, unknown>[] | undefined
       const permissionsRaw = data.permissions ?? data.Permissions
+      const featuresRaw = data.features ?? data.Features
 
       return {
         token: String(data.token ?? data.Token ?? ''),
         user: normalizeUser(userRaw ?? {}),
         branches: Array.isArray(branchesRaw) ? branchesRaw.map(normalizeBranch) : [],
         permissions: parsePermissionsResponse(permissionsRaw),
+        features: parseFeaturesResponse(featuresRaw),
       }
     } catch (error) {
       throw new Error(getApiErrorMessage(error, 'Login failed. Please try again.'))
     }
   },
 
-  async getPermissions(): Promise<ModulePermission[]> {
+  async getPermissions(): Promise<{ permissions: ModulePermission[]; features: string[] }> {
     try {
       const response = await api.get('/auth/permissions')
-      return parsePermissionsResponse(response.data)
+      const data = response.data
+      if (Array.isArray(data)) {
+        return {
+          permissions: parsePermissionsResponse(data),
+          features: [],
+        }
+      }
+
+      const record = (typeof data === 'object' && data !== null ? data : {}) as Record<string, unknown>
+      return {
+        permissions: parsePermissionsResponse(record.permissions ?? record.Permissions),
+        features: parseFeaturesResponse(record.features ?? record.Features),
+      }
     } catch (error) {
       throw new Error(getApiErrorMessage(error, 'Failed to load permissions.'))
     }

@@ -13,19 +13,22 @@ public class AuthService : IAuthService
     private readonly IPasswordHasher _passwordHasher;
     private readonly ITokenService _tokenService;
     private readonly IPermissionService _permissionService;
+    private readonly IFeaturePermissionService _featurePermissionService;
 
     public AuthService(
         IUserRepository userRepository,
         IBranchRepository branchRepository,
         IPasswordHasher passwordHasher,
         ITokenService tokenService,
-        IPermissionService permissionService)
+        IPermissionService permissionService,
+        IFeaturePermissionService featurePermissionService)
     {
         _userRepository = userRepository;
         _branchRepository = branchRepository;
         _passwordHasher = passwordHasher;
         _tokenService = tokenService;
         _permissionService = permissionService;
+        _featurePermissionService = featurePermissionService;
     }
 
     public async Task<LoginResponseDto> LoginAsync(LoginRequestDto request)
@@ -77,6 +80,7 @@ public class AuthService : IAuthService
             branchIds);
 
         var permissions = await _permissionService.GetPermissionsAsync(user.RoleId);
+        var features = await _featurePermissionService.GetEnabledFeaturesForRoleAsync(user.RoleId, user.Role.Name);
 
         return new LoginResponseDto
         {
@@ -93,10 +97,20 @@ public class AuthService : IAuthService
                 IsGlobalAdmin = hasGlobalBranchAccess
             },
             Branches = branches,
-            Permissions = permissions
+            Permissions = permissions,
+            Features = features
         };
     }
 
-    public async Task<IReadOnlyList<Users.DTOs.RolePermissionDto>> GetCurrentUserPermissionsAsync(int roleId) =>
-        await _permissionService.GetPermissionsAsync(roleId);
+    public async Task<AuthPermissionsResponseDto> GetCurrentUserPermissionsAsync(int roleId, string roleName)
+    {
+        var permissions = await _permissionService.GetPermissionsAsync(roleId);
+        var features = await _featurePermissionService.GetEnabledFeaturesForRoleAsync(roleId, roleName);
+
+        return new AuthPermissionsResponseDto
+        {
+            Permissions = permissions,
+            Features = features
+        };
+    }
 }
