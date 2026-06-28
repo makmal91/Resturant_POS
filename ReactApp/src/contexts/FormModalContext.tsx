@@ -17,6 +17,7 @@ export type FormType =
   | 'cashTransaction'
   | 'receivePayment'
   | 'paySupplier'
+  | 'expense'
   | null;
 
 const DEFAULT_BRANCH_FORM_DATA = {
@@ -154,6 +155,18 @@ const DEFAULT_PAY_SUPPLIER_FORM_DATA = {
   supplierId: 0,
 };
 
+const DEFAULT_EXPENSE_FORM_DATA = {
+  expenseCategoryId: 0,
+  categoryName: '',
+  description: '',
+  amount: '',
+  paymentMethod: 'Cash' as const,
+  expenseDate: new Date().toISOString().slice(0, 10),
+  referenceNo: '',
+  notes: '',
+  branchId: 0,
+};
+
 const DEFAULT_PURCHASE_FORM_DATA = {
   invoiceNo: '',
   supplierId: 0,
@@ -237,6 +250,10 @@ const getDefaultFormData = (type: FormType) => {
 
   if (type === 'paySupplier') {
     return DEFAULT_PAY_SUPPLIER_FORM_DATA;
+  }
+
+  if (type === 'expense') {
+    return DEFAULT_EXPENSE_FORM_DATA;
   }
 
   return {};

@@ -24,4 +24,6 @@ export { default as ReceivePaymentForm } from './ReceivePaymentForm';
 export type { ReceivePaymentFormData } from './ReceivePaymentForm';
 export { default as PaySupplierForm } from './PaySupplierForm';
 export type { PaySupplierFormData } from './PaySupplierForm';
+export { default as ExpenseForm } from './ExpenseForm';
+export type { ExpenseFormData } from './ExpenseForm';
 export { default as OrderScreen } from './OrderScreen';

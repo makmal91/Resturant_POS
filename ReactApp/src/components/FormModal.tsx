@@ -1,6 +1,6 @@
 import React, { useMemo, useEffect, useState } from 'react';
 import { useFormModal } from '../contexts/FormModalContext';
-import { BranchForm, BusinessForm, UserForm, MenuForm, InventoryForm, CategoryForm, SubCategoryForm, BrandForm, WarehouseForm, SupplierForm, PurchaseForm, CustomerForm, RoleForm, CashTransactionForm, ReceivePaymentForm, PaySupplierForm, type CashTransactionFormData, type ReceivePaymentFormData, type PaySupplierFormData } from './forms';
+import { BranchForm, BusinessForm, UserForm, MenuForm, InventoryForm, CategoryForm, SubCategoryForm, BrandForm, WarehouseForm, SupplierForm, PurchaseForm, CustomerForm, RoleForm, CashTransactionForm, ReceivePaymentForm, PaySupplierForm, ExpenseForm, type CashTransactionFormData, type ReceivePaymentFormData, type PaySupplierFormData, type ExpenseFormData } from './forms';
 import { BranchService, BusinessService, MenuService, InventoryService } from '../services/apiService';
 import { getApiErrorMessage } from '../services/api';
 import { categoryService } from '../modules/category/categoryService';
@@ -14,6 +14,7 @@ import { userService, RoleListItem } from '../modules/user/userService';
 import { roleService } from '../services/roleService';
 import { cashFlowService } from '../modules/cashflow/cashFlowService';
 import { partyLedgerService } from '../modules/ledger/partyLedgerService';
+import { expenseService } from '../modules/expense/expenseService';
 import { useBranchStore } from '../stores/useBranchStore';
 import { useIsGlobalAdmin, useIsMasterUser } from '../hooks/usePermission';
 import { isProtectedRole, hasBranchContext } from '../types/permissions';
@@ -644,6 +645,58 @@ const FormModal: React.FC = () => {
       closeWithSuccess('Supplier payment recorded successfully.');
     } catch (err: any) {
       setError(getApiErrorMessage(err, 'Failed to record payment.'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleExpenseSubmit = async (data: ExpenseFormData) => {
+    const branchId = Number(data.branchId ?? selectedBranchId ?? 0);
+    if (branchId <= 0) {
+      setError('Please select a branch first.');
+      return;
+    }
+
+    const parsed = parseFloat(data.amount);
+    if (data.expenseCategoryId <= 0) {
+      setError('Category is required.');
+      return;
+    }
+    if (!data.description.trim()) {
+      setError('Description is required.');
+      return;
+    }
+    if (isNaN(parsed) || parsed <= 0) {
+      setError('Amount must be greater than zero.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    const payload = {
+      branchId,
+      expenseCategoryId: data.expenseCategoryId,
+      description: data.description.trim(),
+      amount: parsed,
+      paymentMethod: data.paymentMethod,
+      expenseDate: data.expenseDate,
+      referenceNo: data.referenceNo.trim() || undefined,
+      notes: data.notes.trim() || undefined,
+    };
+
+    try {
+      useBranchStore.getState().setSelectedBranchId(branchId);
+      if (isEditMode) {
+        await expenseService.update(Number(editingData.id), payload);
+        closeWithSuccess('Expense updated successfully.');
+      } else {
+        await expenseService.create(payload);
+        closeWithSuccess('Expense recorded successfully.');
+      }
+    } catch (err: any) {
+      setError(getApiErrorMessage(err, 'Failed to save expense.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -1293,6 +1346,15 @@ const FormModal: React.FC = () => {
             isLoading={isSubmitting || isLedgerMetaLoading}
           />
         );
+      case 'expense':
+        return (
+          <ExpenseForm
+            initialData={editingData}
+            onSubmit={handleExpenseSubmit}
+            isLoading={isSubmitting}
+            submitLabel={isEditMode ? 'Update Expense' : 'Add Expense'}
+          />
+        );
       default:
         return null;
     }
@@ -1314,7 +1376,8 @@ const FormModal: React.FC = () => {
     formType === 'role' ||
     formType === 'cashTransaction' ||
     formType === 'receivePayment' ||
-    formType === 'paySupplier'
+    formType === 'paySupplier' ||
+    formType === 'expense'
       ? 'max-w-4xl'
       : 'max-w-2xl';
 
@@ -1339,6 +1402,8 @@ const FormModal: React.FC = () => {
                     ? 'Receive Payment'
                     : formType === 'paySupplier'
                       ? 'Pay Supplier'
+                      : formType === 'expense'
+                        ? 'Expense'
               : formType
                 ? formType.charAt(0).toUpperCase() + formType.slice(1)
                 : '';
