@@ -239,6 +239,8 @@ public static class PermissionModuleSeeder
         foreach (var group in DefaultModules.Where(m => m.ParentKey == null))
             await EnsureModuleAsync(context, logger, group, null);
 
+        await ConsolidateDuplicateTopLevelModulesAsync(context, logger);
+
         var keyToId = await LoadTopLevelModuleIdsAsync(context);
 
         var skipped = 0;
@@ -289,10 +291,80 @@ public static class PermissionModuleSeeder
         var rows = await context.PermissionModules
             .IgnoreQueryFilters()
             .Where(m => !m.IsDeleted && m.ParentModuleId == null && topLevelNames.Contains(m.ModuleName))
-            .Select(m => new { m.ModuleName, m.Id })
+            .Select(m => new { m.ModuleName, m.Id, m.ModuleKey })
             .ToListAsync();
 
-        return rows.ToDictionary(r => r.ModuleName, r => r.Id, StringComparer.OrdinalIgnoreCase);
+        return rows
+            .GroupBy(r => r.ModuleName, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                g => g.Key,
+                g => g
+                    .OrderBy(r => string.IsNullOrEmpty(r.ModuleKey) ? 0 : 1)
+                    .ThenBy(r => r.Id)
+                    .First()
+                    .Id,
+                StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Legacy seeds may have created duplicate top-level groups (e.g. Reports parent + old Reports module).
+    /// Keeps the empty ModuleKey parent row and soft-deletes duplicates, reparenting children.
+    /// </summary>
+    private static async Task ConsolidateDuplicateTopLevelModulesAsync(POSDbContext context, ILogger logger)
+    {
+        try
+        {
+            var topLevelNames = DefaultModules
+                .Where(m => m.ParentKey == null)
+                .Select(m => m.ModuleName)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            var topLevels = await context.PermissionModules
+                .IgnoreQueryFilters()
+                .Where(m => !m.IsDeleted && m.ParentModuleId == null && topLevelNames.Contains(m.ModuleName))
+                .OrderBy(m => m.Id)
+                .ToListAsync();
+
+            var changed = false;
+            foreach (var group in topLevels.GroupBy(m => m.ModuleName, StringComparer.OrdinalIgnoreCase))
+            {
+                if (group.Count() <= 1)
+                    continue;
+
+                var keep = group
+                    .OrderBy(m => string.IsNullOrEmpty(m.ModuleKey) ? 0 : 1)
+                    .ThenBy(m => m.Id)
+                    .First();
+
+                foreach (var duplicate in group.Where(m => m.Id != keep.Id))
+                {
+                    var children = await context.PermissionModules
+                        .IgnoreQueryFilters()
+                        .Where(m => m.ParentModuleId == duplicate.Id && !m.IsDeleted)
+                        .ToListAsync();
+
+                    foreach (var child in children)
+                        child.ParentModuleId = keep.Id;
+
+                    duplicate.IsDeleted = true;
+                    duplicate.IsActive = false;
+                    duplicate.UpdatedDate = DateTime.UtcNow;
+                    changed = true;
+                }
+
+                logger.LogWarning(
+                    "Consolidated duplicate top-level module '{ModuleName}'; kept Id {KeepId}.",
+                    group.Key,
+                    keep.Id);
+            }
+
+            if (changed)
+                await context.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to consolidate duplicate top-level modules.");
+        }
     }
 
     private static async Task DeactivateLegacyModulesAsync(POSDbContext context, ILogger logger)
