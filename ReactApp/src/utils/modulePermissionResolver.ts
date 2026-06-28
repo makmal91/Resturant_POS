@@ -56,6 +56,7 @@ const MODULE_ALIASES: Record<string, string> = {
   CashFlow: PERMISSION_MODULES.CashFlow,
   'CashFlow.Ledger': PERMISSION_MODULES.CashFlow,
   'CashFlow.Summary': PERMISSION_MODULES.CashFlow,
+  'StockReports.ByUnit': PERMISSION_MODULES.StockReports,
   'CashFlow.Record': PERMISSION_MODULES.CashFlow,
   PartyLedger: PERMISSION_MODULES.PartyLedger,
   'PartyLedger.PaySupplier': PERMISSION_MODULES.PartyLedger,

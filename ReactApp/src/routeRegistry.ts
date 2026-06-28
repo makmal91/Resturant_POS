@@ -88,7 +88,7 @@ export const routeRegistry: RouteDefinition[] = [
   { path: '/reports/supplier-payable', label: 'Supplier Payable', component: SupplierPayableReportPage, module: 'Supplier Payable Report' },
   { path: '/reports/profit-loss', label: 'Profit & Loss', component: ProfitLossReportPage, module: 'Profit & Loss Report' },
   { path: '/reports/stock', label: 'Stock Report', component: StockReportPage, module: 'Stock Reports', feature: 'product.stock.enable' },
-  { path: '/reports/stock-by-unit', label: 'Stock By Unit Report', component: StockByUnitPivotReportPage, module: 'Stock Reports', feature: 'product.stock.enable' },
+  { path: '/reports/stock-by-unit', label: 'Stock By Unit Report', component: StockByUnitPivotReportPage, module: 'StockReports.ByUnit', feature: 'product.stock.enable' },
   { path: '/reports/receivable-aging', label: 'Receivable Aging', component: ReceivableAgingReportPage, module: 'Customer Receivable Aging' },
   { path: '/reports/payable-aging', label: 'Payable Aging', component: PayableAgingReportPage, module: 'Supplier Payable Aging' },
   { path: '/sales-invoices', label: 'Invoice History', component: SaleInvoicesPage, module: 'Sales' },

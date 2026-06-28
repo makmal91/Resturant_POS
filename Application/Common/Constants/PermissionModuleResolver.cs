@@ -10,6 +10,7 @@ public static class PermissionModuleResolver
         ["CashFlow"] = PermissionModules.CashFlow,
         ["CashFlow.Ledger"] = PermissionModules.CashFlow,
         ["CashFlow.Summary"] = PermissionModules.CashFlow,
+        ["StockReports.ByUnit"] = PermissionModules.StockReports,
         ["PartyLedger"] = PermissionModules.PartyLedger,
         ["PartyLedger.PaySupplier"] = PermissionModules.PartyLedger,
         ["PartyLedger.CustomerLedger"] = PermissionModules.PartyLedger,

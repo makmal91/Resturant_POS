@@ -113,6 +113,12 @@ public class NavigationMenuService : INavigationMenuService
             viewableNames.Contains(PermissionModules.CashFlow))
             return true;
 
+        // Stock by unit report shares the main Stock Reports permission.
+        if (!string.IsNullOrWhiteSpace(module.ModuleKey) &&
+            module.ModuleKey.StartsWith("StockReports.", StringComparison.OrdinalIgnoreCase) &&
+            viewableNames.Contains(PermissionModules.StockReports))
+            return true;
+
         return false;
     }
 
