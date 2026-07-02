@@ -28,7 +28,9 @@ public class PartyLedgerController : ControllerBase
         [FromQuery] DateTime? fromDate,
         [FromQuery] DateTime? toDate,
         [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 50)
+        [FromQuery] int pageSize = 50,
+        [FromQuery] bool auditView = false,
+        [FromQuery] bool groupByChain = false)
     {
         if (customerId <= 0)
             return BadRequest(new { message = "CustomerId is required." });
@@ -41,7 +43,9 @@ public class PartyLedgerController : ControllerBase
             FromDate = fromDate,
             ToDate = toDate,
             Page = page,
-            PageSize = pageSize
+            PageSize = pageSize,
+            AuditView = auditView,
+            GroupByChain = groupByChain,
         };
 
         if (filter.BranchId <= 0)
@@ -114,7 +118,9 @@ public class PartyLedgerController : ControllerBase
         [FromQuery] DateTime? fromDate,
         [FromQuery] DateTime? toDate,
         [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 50)
+        [FromQuery] int pageSize = 50,
+        [FromQuery] bool auditView = false,
+        [FromQuery] bool groupByChain = false)
     {
         if (supplierId <= 0)
             return BadRequest(new { message = "SupplierId is required." });
@@ -127,7 +133,9 @@ public class PartyLedgerController : ControllerBase
             FromDate = fromDate,
             ToDate = toDate,
             Page = page,
-            PageSize = pageSize
+            PageSize = pageSize,
+            AuditView = auditView,
+            GroupByChain = groupByChain,
         };
 
         if (filter.BranchId <= 0)

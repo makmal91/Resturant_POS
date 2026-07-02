@@ -42,6 +42,8 @@ export const PERMISSION_MODULES = {
   CustomerOutstandingReport: 'Customer Outstanding Report',
   SupplierPayableReport: 'Supplier Payable Report',
   ProfitLossReport: 'Profit & Loss Report',
+  TrialBalanceReport: 'Trial Balance Report',
+  AccountLedger: 'Account Ledger',
   CustomerReceivableAgingReport: 'Customer Receivable Aging',
   SupplierPayableAgingReport: 'Supplier Payable Aging',
   SystemSettings: 'System Settings',

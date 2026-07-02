@@ -83,6 +83,8 @@ public class DashboardFinancialDto
     public decimal GrossProfit { get; set; }
     public decimal TotalExpenses { get; set; }
     public decimal NetProfit { get; set; }
+    public decimal TotalReceivables { get; set; }
+    public decimal TotalPayables { get; set; }
     public List<DailyCashFlowDto> DailyCashFlow { get; set; } = [];
 }
 

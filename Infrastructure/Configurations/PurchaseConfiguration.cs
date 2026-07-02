@@ -13,6 +13,8 @@ public class PurchaseConfiguration : IEntityTypeConfiguration<Purchase>
 
         builder.Property(p => p.InvoiceNo).IsRequired().HasMaxLength(100);
         builder.Property(p => p.TotalAmount).HasPrecision(18, 2).HasDefaultValue(0);
+        builder.Property(p => p.PaidAmount).HasPrecision(18, 2).HasDefaultValue(0);
+        builder.Property(p => p.SettlementStatus).HasConversion<int>().HasDefaultValue(InvoiceSettlementStatus.Pending);
         builder.Property(p => p.Status).HasDefaultValue(PurchaseStatus.Draft);
         builder.Property(p => p.Notes).HasMaxLength(1000);
         builder.Property(p => p.PurchaseDate).HasDefaultValueSql("GETUTCDATE()");

@@ -189,6 +189,25 @@ public class ProductRepository : IProductRepository
             p => (p.AllowNegativeStock, p.EnableLowStockAlert, p.LowStockAlertLevel));
     }
 
+    public async Task<Dictionary<int, decimal>> GetCostPricesByIdsAsync(int businessId, int branchId, IEnumerable<int> productIds)
+    {
+        var ids = productIds.Distinct().ToList();
+        if (ids.Count == 0)
+            return new Dictionary<int, decimal>();
+
+        var rows = await _context.Products
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(p => ids.Contains(p.Id)
+                        && p.BusinessId == businessId
+                        && p.BranchId == branchId
+                        && !p.IsDeleted)
+            .Select(p => new { p.Id, p.CostPrice })
+            .ToListAsync();
+
+        return rows.ToDictionary(p => p.Id, p => p.CostPrice);
+    }
+
     public async Task AddAsync(ProductEntity product)
     {
         await _context.Products.AddAsync(product);

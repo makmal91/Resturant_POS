@@ -1,30 +1,37 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import DataTable, { type Column } from '../../components/DataTable';
-import { useFormModal } from '../../contexts/FormModalContext';
+import LedgerViewToggle from '../../components/LedgerViewToggle';
 import { useGridExport } from '../../hooks/useGridExport';
 import { getApiErrorMessage } from '../../services/api';
-import { partyLedgerExportColumns } from '../../utils/gridExportColumns';
+import { supplierLedgerExportColumns } from '../../utils/gridExportColumns';
 import { useBranchStore } from '../../stores/useBranchStore';
 import { useBusinessCurrency } from '../../hooks/useBusinessCurrency';
 import { supplierService, type SupplierItem } from '../supplier/supplierService';
-import { LEDGER_TYPE_LABELS, partyLedgerService, type PartyLedgerEntry } from './partyLedgerService';
+import PartyLedgerEntryDescription from './PartyLedgerEntryDescription';
+import {
+  partyLedgerService,
+  type PartyLedgerEntry,
+} from './partyLedgerService';
+
+const LEDGER_PAGE_SIZE_OPTIONS = [25, 50, 100, 250, 500];
 
 const formatDate = (value: string) => {
-  const d = new Date(value);
-  return Number.isNaN(d.getTime())
-    ? '—'
-    : d.toLocaleDateString(undefined, {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
+  const datePart = value.includes('T') ? value.split('T')[0] : value.slice(0, 10);
+  const [year, month, day] = datePart.split('-').map(Number);
+  if (!year || !month || !day) return '—';
+  return new Date(year, month - 1, day).toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
 };
+
+const formatPayableBalance = (value: number, fmt: (amount: number) => string) => (
+  <span className="tabular-nums font-semibold text-gray-800">{fmt(value)}</span>
+);
 
 export default function SupplierLedgerPage() {
   const { fmt } = useBusinessCurrency();
-  const { openForm, isOpen } = useFormModal();
   const { selectedBranchId } = useBranchStore();
   const branchId = selectedBranchId ?? 0;
 
@@ -35,12 +42,32 @@ export default function SupplierLedgerPage() {
   const [rows, setRows] = useState<PartyLedgerEntry[]>([]);
   const [partyName, setPartyName] = useState('');
   const [currentBalance, setCurrentBalance] = useState(0);
+  const [periodClosingBalance, setPeriodClosingBalance] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  const [pageSize, setPageSize] = useState(50);
   const [totalRecords, setTotalRecords] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
+  const [totalDebit, setTotalDebit] = useState(0);
+  const [totalCredit, setTotalCredit] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [expandedRowKeys, setExpandedRowKeys] = useState<Set<string>>(new Set());
+  const [auditView, setAuditView] = useState(false);
+  const [groupByChain, setGroupByChain] = useState(false);
+
+  const toggleRowExpanded = useCallback((rowKey: string) => {
+    setExpandedRowKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(rowKey)) next.delete(rowKey);
+      else next.add(rowKey);
+      return next;
+    });
+  }, []);
+
+  const getRowKey = useCallback(
+    (row: PartyLedgerEntry) => String(row.paymentId ?? row.id),
+    [],
+  );
 
   useEffect(() => {
     if (branchId <= 0) return;
@@ -66,20 +93,26 @@ export default function SupplierLedgerPage() {
         currentPage,
         pageSize,
         fromDate || undefined,
-        toDate || undefined
+        toDate || undefined,
+        { auditView, groupByChain },
       );
+
       setRows(res.data.entries);
       setPartyName(res.data.partyName);
       setCurrentBalance(res.data.currentBalance);
+      setPeriodClosingBalance(res.data.periodClosingBalance);
       setTotalRecords(res.data.totalRecords);
       setTotalPages(res.data.totalPages);
+      setTotalDebit(res.data.totalDebit);
+      setTotalCredit(res.data.totalCredit);
+      setExpandedRowKeys(new Set());
     } catch (err) {
       setRows([]);
       setError(getApiErrorMessage(err, 'Failed to load supplier ledger.'));
     } finally {
       setLoading(false);
     }
-  }, [branchId, supplierId, currentPage, pageSize, fromDate, toDate]);
+  }, [branchId, supplierId, currentPage, pageSize, fromDate, toDate, auditView, groupByChain]);
 
   const fetchExportPage = useCallback(async (pageNumber: number, exportPageSize: number) => {
     const res = await partyLedgerService.getSupplierLedger(
@@ -89,9 +122,10 @@ export default function SupplierLedgerPage() {
       exportPageSize,
       fromDate || undefined,
       toDate || undefined,
+      { auditView, groupByChain },
     );
     return { data: res.data.entries, totalRecords: res.data.totalRecords };
-  }, [branchId, supplierId, fromDate, toDate]);
+  }, [branchId, supplierId, fromDate, toDate, auditView, groupByChain]);
 
   const exportFilename = useMemo(() => {
     const slug = partyName.trim().replace(/\s+/g, '-').toLowerCase() || 'supplier';
@@ -101,7 +135,7 @@ export default function SupplierLedgerPage() {
 
   const { exporting, onExport } = useGridExport(
     exportFilename,
-    partyLedgerExportColumns,
+    supplierLedgerExportColumns,
     fetchExportPage,
     branchId > 0 && supplierId > 0,
   );
@@ -110,15 +144,14 @@ export default function SupplierLedgerPage() {
     void fetchLedger();
   }, [fetchLedger]);
 
-  useEffect(() => {
-    if (!isOpen) {
-      void fetchLedger();
-    }
-  }, [isOpen, fetchLedger]);
+  const handlePageSizeChange = useCallback((size: number) => {
+    setPageSize(size);
+    setCurrentPage(1);
+  }, []);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [supplierId, fromDate, toDate]);
+  }, [supplierId, fromDate, toDate, pageSize]);
 
   const columns = useMemo<Column<PartyLedgerEntry>[]>(
     () => [
@@ -133,15 +166,17 @@ export default function SupplierLedgerPage() {
         header: 'Description',
         sortable: false,
         render: (_: string, row: PartyLedgerEntry) => (
-          <div>
-            <p className="text-gray-800 text-sm">{row.description}</p>
-            <p className="text-xs text-gray-400">{LEDGER_TYPE_LABELS[row.type] ?? row.type}</p>
-          </div>
+          <PartyLedgerEntryDescription
+            row={row}
+            expanded={expandedRowKeys.has(getRowKey(row))}
+            onToggle={() => toggleRowExpanded(getRowKey(row))}
+            fmt={fmt}
+          />
         ),
       },
       {
         key: 'debit',
-        header: 'Debit',
+        header: 'In',
         sortable: false,
         render: (value: number) => (
           <span className="tabular-nums text-green-600">{value > 0 ? fmt(value) : '—'}</span>
@@ -149,7 +184,7 @@ export default function SupplierLedgerPage() {
       },
       {
         key: 'credit',
-        header: 'Credit',
+        header: 'Out',
         sortable: false,
         render: (value: number) => (
           <span className="tabular-nums text-red-600">{value > 0 ? fmt(value) : '—'}</span>
@@ -159,22 +194,36 @@ export default function SupplierLedgerPage() {
         key: 'runningBalance',
         header: 'Running Balance',
         sortable: false,
-        render: (value: number) => <span className="tabular-nums font-semibold text-gray-800">{fmt(value)}</span>,
+        render: (value: number) => formatPayableBalance(value, fmt),
       },
     ],
-    [fmt]
+    [fmt, expandedRowKeys, getRowKey, toggleRowExpanded]
   );
+
+  const footerRow = useMemo(() => {
+    if (totalRecords <= 0) return undefined;
+    return {
+      label: 'Total',
+      values: {
+        description: 'Total',
+        debit: <span className="tabular-nums font-bold text-green-600">{fmt(totalDebit)}</span>,
+        credit: <span className="tabular-nums font-bold text-red-600">{fmt(totalCredit)}</span>,
+        runningBalance: formatPayableBalance(periodClosingBalance, fmt),
+      },
+    };
+  }, [totalRecords, totalDebit, totalCredit, periodClosingBalance, fmt]);
 
   if (branchId <= 0) {
     return <div className="flex items-center justify-center h-64 text-gray-500">Please select a branch first.</div>;
   }
 
   return (
-    <div className="space-y-4 p-4 md:p-6">
+    <div className="flex h-[calc(100dvh-7.5rem)] min-h-[28rem] flex-col gap-4 overflow-hidden p-4 md:p-6">
+      <div className="shrink-0 space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Supplier Ledger</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Payable transactions and running balance</p>
+          <p className="text-sm text-gray-500 mt-0.5">Read-only payable history — use Payables screen to add or edit payments</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {supplierId > 0 && (
@@ -187,13 +236,6 @@ export default function SupplierLedgerPage() {
               {exporting ? 'Exporting…' : 'Export CSV'}
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => openForm('paySupplier', supplierId > 0 ? { supplierId } : undefined)}
-            className="px-4 py-2 bg-orange-600 text-white text-sm font-medium rounded-lg hover:bg-orange-700 transition-colors"
-          >
-            + Pay Supplier
-          </button>
         </div>
       </div>
 
@@ -233,14 +275,31 @@ export default function SupplierLedgerPage() {
           <div className="flex items-end">
             <div className="w-full rounded-lg bg-orange-50 border border-orange-100 px-4 py-2">
               <p className="text-xs text-orange-600">Payable — {partyName}</p>
-              <p className="text-lg font-bold text-orange-900">{fmt(currentBalance)}</p>
+              <div className="text-lg font-bold text-orange-900">
+                {formatPayableBalance(currentBalance, fmt)}
+              </div>
             </div>
           </div>
         )}
       </div>
 
-      {error && <div className="bg-red-50 border border-red-200 text-red-600 rounded-lg px-4 py-3 text-sm">{error}</div>}
+      <LedgerViewToggle
+        auditView={auditView}
+        groupByChain={groupByChain}
+        onAuditViewChange={(value) => {
+          setAuditView(value);
+          setCurrentPage(1);
+        }}
+        onGroupByChainChange={(value) => {
+          setGroupByChain(value);
+          setCurrentPage(1);
+        }}
+      />
 
+      {error && <div className="bg-red-50 border border-red-200 text-red-600 rounded-lg px-4 py-3 text-sm">{error}</div>}
+      </div>
+
+      <div className="min-h-0 flex-1 flex flex-col">
       {!supplierId ? (
         <div className="bg-white rounded-xl border border-gray-200 p-12 text-center text-gray-400">
           Select a supplier to view ledger entries.
@@ -250,15 +309,22 @@ export default function SupplierLedgerPage() {
           columns={columns}
           data={rows}
           loading={loading}
+          searchable={false}
+          serverSide
+          fillHeight
           currentPage={currentPage}
           pageSize={pageSize}
+          pageSizeOptions={LEDGER_PAGE_SIZE_OPTIONS}
           totalRecords={totalRecords}
           totalPages={totalPages}
           onPageChange={setCurrentPage}
-          onPageSizeChange={setPageSize}
+          onPageSizeChange={handlePageSizeChange}
+          footerRow={footerRow}
           emptyMessage="No ledger entries found for this supplier."
         />
       )}
+      </div>
+
     </div>
   );
 }

@@ -76,7 +76,7 @@ public class CashFlowController : ControllerBase
 
     // ─── Transactions ──────────────────────────────────────────────────────────
 
-    /// <summary>Record a manual cash transaction (CashIn / CashOut / BankTransfer).</summary>
+    /// <summary>Record a manual journal voucher (Cash In / Cash Out).</summary>
     [HttpPost("transaction")]
     public async Task<IActionResult> RecordTransaction([FromBody] RecordCashTransactionDto dto)
     {
@@ -95,6 +95,42 @@ public class CashFlowController : ControllerBase
         {
             return BadRequest(new { message = ex.Message });
         }
+    }
+
+    /// <summary>Paginated list of journal vouchers for the active branch.</summary>
+    [HttpGet("journal-vouchers")]
+    public async Task<IActionResult> ListJournalVouchers(
+        [FromQuery] int? branchId,
+        [FromQuery] int? businessId,
+        [FromQuery] DateTime? fromDate,
+        [FromQuery] DateTime? toDate,
+        [FromQuery] CashFlowTransactionType? transactionType,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 25)
+    {
+        var filter = new JournalVoucherListFilterDto
+        {
+            BusinessId = this.ResolveBusinessId(businessId),
+            BranchId = this.ResolveBranchId(branchId),
+            FromDate = fromDate,
+            ToDate = toDate,
+            TransactionType = transactionType,
+            Page = page,
+            PageSize = pageSize,
+        };
+
+        if (filter.BranchId <= 0)
+            return BadRequest(new { message = "BranchId is required." });
+
+        var result = await _cashFlowService.ListJournalVouchersAsync(filter);
+        return Ok(new
+        {
+            vouchers = result.Vouchers,
+            totalRecords = result.TotalRecords,
+            totalPages = result.TotalPages,
+            currentPage = result.CurrentPage,
+            pageSize = result.PageSize,
+        });
     }
 
     /// <summary>
@@ -127,6 +163,7 @@ public class CashFlowController : ControllerBase
         var result = await _cashFlowService.GetLedgerAsync(filter);
         return Ok(new
         {
+            accountName = result.AccountName,
             transactions = result.Transactions,
             totalRecords = result.TotalRecords,
             totalPages   = result.TotalPages,
@@ -135,6 +172,10 @@ public class CashFlowController : ControllerBase
             totalIn      = result.TotalIn,
             totalOut     = result.TotalOut,
             netTotal     = result.NetTotal,
+            periodOpeningBalance = result.PeriodOpeningBalance,
+            totalDebit   = result.TotalDebit,
+            totalCredit  = result.TotalCredit,
+            closingBalance = result.PeriodOpeningBalance + result.NetTotal,
         });
     }
 

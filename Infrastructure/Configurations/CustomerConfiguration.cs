@@ -42,6 +42,14 @@ public class CustomerConfiguration : IEntityTypeConfiguration<Customer>
         builder.HasIndex(c => c.CountryId).HasDatabaseName("idx_customer_countryid");
         builder.HasIndex(c => c.CityId).HasDatabaseName("idx_customer_cityid");
 
+        builder.HasOne(c => c.GlAccount)
+            .WithMany()
+            .HasForeignKey(c => c.AccountId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasIndex(c => c.AccountId)
+            .HasDatabaseName("idx_customer_accountid");
+
         builder.HasMany(c => c.Orders)
             .WithOne(o => o.Customer)
             .HasForeignKey(o => o.CustomerId)

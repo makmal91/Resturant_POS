@@ -34,6 +34,7 @@ public class SaleInvoice : BaseEntity
     public decimal TaxAmount { get; set; }
     public decimal GrandTotal { get; set; }
     public decimal PaidAmount { get; set; }
+    public InvoiceSettlementStatus SettlementStatus { get; set; } = InvoiceSettlementStatus.Pending;
     public decimal ReturnAmount { get; set; }
     public SalePaymentMethod PaymentMethod { get; set; } = SalePaymentMethod.Cash;
     public decimal CardAmount { get; set; }

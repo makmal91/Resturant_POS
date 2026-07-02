@@ -19,6 +19,47 @@ public class InvoicePaymentsController : ControllerBase
         _paymentService = paymentService;
     }
 
+    [HttpGet]
+    public async Task<IActionResult> ListPayments(
+        [FromQuery] int? branchId,
+        [FromQuery] int? businessId,
+        [FromQuery] InvoicePaymentModule? module,
+        [FromQuery] int? customerId,
+        [FromQuery] int? supplierId,
+        [FromQuery] DateTime? fromDate,
+        [FromQuery] DateTime? toDate,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 25,
+        [FromQuery] bool includeReversed = false)
+    {
+        var filter = new PaymentListFilterDto
+        {
+            BusinessId = this.ResolveBusinessId(businessId),
+            BranchId = this.ResolveBranchId(branchId),
+            Module = module,
+            CustomerId = customerId,
+            SupplierId = supplierId,
+            FromDate = fromDate,
+            ToDate = toDate,
+            Page = page,
+            PageSize = pageSize,
+            IncludeReversed = includeReversed,
+        };
+
+        if (filter.BranchId <= 0)
+            return BadRequest(new { message = "BranchId is required." });
+
+        var result = await _paymentService.ListPaymentsAsync(filter);
+        return Ok(new
+        {
+            payments = result.Data,
+            totalRecords = result.TotalRecords,
+            totalPages = result.TotalPages,
+            currentPage = result.CurrentPage,
+            pageSize,
+        });
+    }
+
     [HttpPost("customers")]
     public async Task<IActionResult> RecordCustomerPayment([FromBody] RecordCustomerPaymentDto dto)
     {
@@ -67,11 +108,84 @@ public class InvoicePaymentsController : ControllerBase
         }
     }
 
+    [HttpPut("{paymentId:int}")]
+    public async Task<IActionResult> UpdatePayment(
+        int paymentId,
+        [FromBody] UpdatePaymentDto dto,
+        [FromQuery] int? branchId,
+        [FromQuery] int? businessId)
+    {
+        dto.BusinessId = this.ResolveBusinessId(businessId ?? (dto.BusinessId > 0 ? dto.BusinessId : null));
+        dto.BranchId = this.ResolveBranchId(branchId ?? (dto.BranchId > 0 ? dto.BranchId : null));
+        dto.ModifiedBy = this.ResolveUserId();
+
+        if (dto.BranchId <= 0)
+            return BadRequest(new { message = "BranchId is required." });
+
+        try
+        {
+            var result = await _paymentService.UpdatePaymentAsync(paymentId, dto);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpPost("{paymentId:int}/reverse")]
+    public async Task<IActionResult> ReversePayment(
+        int paymentId,
+        [FromBody] ReversePaymentRequest? request,
+        [FromQuery] int? branchId,
+        [FromQuery] int? businessId)
+    {
+        var biz = this.ResolveBusinessId(businessId);
+        var branch = this.ResolveBranchId(branchId);
+
+        if (branch <= 0)
+            return BadRequest(new { message = "BranchId is required." });
+
+        try
+        {
+            var result = await _paymentService.ReversePaymentAsync(new ReversePaymentDto
+            {
+                PaymentId = paymentId,
+                Reason = request?.Reason,
+                BusinessId = biz,
+                BranchId = branch,
+                ReversedBy = this.ResolveUserId()
+            });
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpGet("{paymentId:int}")]
+    public async Task<IActionResult> GetPayment(
+        int paymentId,
+        [FromQuery] int? branchId,
+        [FromQuery] int? businessId)
+    {
+        var biz = this.ResolveBusinessId(businessId);
+        var branch = this.ResolveBranchId(branchId);
+
+        if (branch <= 0)
+            return BadRequest(new { message = "BranchId is required." });
+
+        var payment = await _paymentService.GetPaymentByIdAsync(paymentId, biz, branch);
+        return payment == null ? NotFound() : Ok(payment);
+    }
+
     [HttpGet("customers/{customerId:int}/outstanding-invoices")]
     public async Task<IActionResult> GetCustomerOutstandingInvoices(
         int customerId,
         [FromQuery] int? branchId,
-        [FromQuery] int? businessId)
+        [FromQuery] int? businessId,
+        [FromQuery] int? excludePaymentId)
     {
         var biz = this.ResolveBusinessId(businessId);
         var branch = this.ResolveBranchId(branchId);
@@ -82,7 +196,7 @@ public class InvoicePaymentsController : ControllerBase
         if (customerId <= 0)
             return BadRequest(new { message = "CustomerId is required." });
 
-        var invoices = await _paymentService.GetOutstandingSaleInvoicesAsync(customerId, biz, branch);
+        var invoices = await _paymentService.GetOutstandingSaleInvoicesAsync(customerId, biz, branch, excludePaymentId);
         return Ok(invoices);
     }
 
@@ -90,7 +204,8 @@ public class InvoicePaymentsController : ControllerBase
     public async Task<IActionResult> GetSupplierOutstandingInvoices(
         int supplierId,
         [FromQuery] int? branchId,
-        [FromQuery] int? businessId)
+        [FromQuery] int? businessId,
+        [FromQuery] int? excludePaymentId)
     {
         var biz = this.ResolveBusinessId(businessId);
         var branch = this.ResolveBranchId(branchId);
@@ -101,7 +216,7 @@ public class InvoicePaymentsController : ControllerBase
         if (supplierId <= 0)
             return BadRequest(new { message = "SupplierId is required." });
 
-        var invoices = await _paymentService.GetOutstandingPurchaseInvoicesAsync(supplierId, biz, branch);
+        var invoices = await _paymentService.GetOutstandingPurchaseInvoicesAsync(supplierId, biz, branch, excludePaymentId);
         return Ok(invoices);
     }
 

@@ -17,6 +17,16 @@ public enum PartyPaymentType
     Online = 3
 }
 
+/// <summary>
+/// Business purpose of a party ledger payment (against invoice, advance, or adjustment).
+/// </summary>
+public enum InvoicePaymentCategory
+{
+    AgainstInvoice = 1,
+    Advance = 2,
+    Adjustment = 3
+}
+
 public class InvoicePayment : BaseEntity
 {
     public InvoicePaymentModule Module { get; set; }
@@ -25,13 +35,20 @@ public class InvoicePayment : BaseEntity
     public int? CustomerId { get; set; }
     public int? SupplierId { get; set; }
     public PartyPaymentType PaymentType { get; set; } = PartyPaymentType.Cash;
+    public InvoicePaymentCategory Category { get; set; } = InvoicePaymentCategory.AgainstInvoice;
     public decimal Amount { get; set; }
     public DateTime PaymentDate { get; set; } = DateTime.UtcNow;
     public string ReferenceNo { get; set; } = string.Empty;
     public string Notes { get; set; } = string.Empty;
+    public bool IsReversed { get; set; }
+    public int? OriginalPaymentId { get; set; }
+    public int? ReversedBy { get; set; }
+    public DateTime? ReversedAt { get; set; }
+    public int? DeletedBy { get; set; }
 
     public virtual SaleInvoice? SaleInvoice { get; set; }
     public virtual Purchase? Purchase { get; set; }
     public virtual Customer? Customer { get; set; }
     public virtual Supplier? Supplier { get; set; }
+    public virtual ICollection<PaymentAllocation> Allocations { get; set; } = new List<PaymentAllocation>();
 }

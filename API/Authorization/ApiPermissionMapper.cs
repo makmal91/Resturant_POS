@@ -40,6 +40,7 @@ public static class ApiPermissionMapper
         ["payments"] = PermissionModules.PartyLedger,
         ["currencies"] = PermissionModules.SystemSettings,
         ["cashflow"] = PermissionModules.CashFlow,
+        ["accounting"] = PermissionModules.AccountLedger,
         ["Dashboard"] = PermissionModules.Dashboard,
     };
 
@@ -128,7 +129,7 @@ public static class ApiPermissionMapper
     /// </summary>
     public static IReadOnlyList<string> GetAlternateModules(string module) =>
         string.Equals(module, PermissionModules.PosBilling, StringComparison.OrdinalIgnoreCase)
-            ? [PermissionModules.Sales, PermissionModules.Customers]
+            ? [PermissionModules.Sales, PermissionModules.Customers, PermissionModules.PartyLedger]
             : Array.Empty<string>();
 
     private static (string Module, string Action)? ResolvePosBillingEndpoint(string path, string method)

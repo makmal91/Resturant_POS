@@ -17,6 +17,7 @@ public class CustomerListDto
     public CustomerType CustomerType { get; set; }
     public bool   Status         { get; set; }
     public decimal CreditLimit   { get; set; }
+    public int?   AccountId      { get; set; }
     public bool   IsWalkIn       { get; set; }
     public DateTime CreatedAt  { get; set; }
 }

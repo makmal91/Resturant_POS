@@ -19,6 +19,7 @@ using POSSystem.Application.Purchase.Interfaces;
 using POSSystem.Application.Stock.Interfaces;
 using POSSystem.Application.Sales.Interfaces;
 using POSSystem.Application.Customer.Interfaces;
+using POSSystem.Application.Accounting.Interfaces;
 using POSSystem.Application.CashFlow.Interfaces;
 using POSSystem.Application.Ledger.Interfaces;
 using POSSystem.Application.Barcode.Interfaces;
@@ -26,6 +27,7 @@ using POSSystem.Application.CodeSequence.Interfaces;
 using POSSystem.Application.Common.Interfaces;
 using POSSystem.Application.License.Interfaces;
 using POSSystem.Application.Payments.Interfaces;
+using POSSystem.Application.Expense.Interfaces;
 using POSSystem.Application.Reports.Interfaces;
 using POSSystem.Application.License.Options;
 using POSSystem.Infrastructure.License;
@@ -76,11 +78,22 @@ public static class ServiceRegistration
         // Register cash flow repository
         services.AddScoped<ICashFlowRepository, CashFlowRepository>();
 
+        // General ledger
+        services.AddScoped<IGlAccountRepository, GlAccountRepository>();
+        services.AddScoped<IAccountingRepository, AccountingRepository>();
+        services.AddScoped<IAccountLedgerRepository, AccountLedgerRepository>();
+        services.AddScoped<ITrialBalanceRepository, TrialBalanceRepository>();
+        services.AddScoped<IGlReportingRepository, GlReportingRepository>();
+        services.AddScoped<GlBackfillService>();
+
         // Party ledger (customer receivable / supplier payable)
         services.AddScoped<IPartyLedgerRepository, PartyLedgerRepository>();
 
         // Invoice payments (sales / purchase)
         services.AddScoped<IInvoicePaymentRepository, InvoicePaymentRepository>();
+
+        // Expenses
+        services.AddScoped<IExpenseRepository, ExpenseRepository>();
 
         // Reports
         services.AddScoped<IReportRepository, ReportRepository>();

@@ -1,30 +1,33 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import DataTable, { type Column } from '../../components/DataTable';
-import { useFormModal } from '../../contexts/FormModalContext';
+import LedgerViewToggle from '../../components/LedgerViewToggle';
 import { useGridExport } from '../../hooks/useGridExport';
 import { getApiErrorMessage } from '../../services/api';
 import { partyLedgerExportColumns } from '../../utils/gridExportColumns';
 import { useBranchStore } from '../../stores/useBranchStore';
 import { useBusinessCurrency } from '../../hooks/useBusinessCurrency';
 import { customerService, type CustomerListItem } from '../customer/customerService';
-import { LEDGER_TYPE_LABELS, partyLedgerService, type PartyLedgerEntry } from './partyLedgerService';
+import PartyLedgerEntryDescription from './PartyLedgerEntryDescription';
+import {
+  partyLedgerService,
+  type PartyLedgerEntry,
+} from './partyLedgerService';
+
+const LEDGER_PAGE_SIZE_OPTIONS = [25, 50, 100, 250, 500];
 
 const formatDate = (value: string) => {
-  const d = new Date(value);
-  return Number.isNaN(d.getTime())
-    ? '—'
-    : d.toLocaleDateString(undefined, {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
+  const datePart = value.includes('T') ? value.split('T')[0] : value.slice(0, 10);
+  const [year, month, day] = datePart.split('-').map(Number);
+  if (!year || !month || !day) return '—';
+  return new Date(year, month - 1, day).toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
 };
 
 export default function CustomerLedgerPage() {
   const { fmt } = useBusinessCurrency();
-  const { openForm, isOpen } = useFormModal();
   const { selectedBranchId } = useBranchStore();
   const branchId = selectedBranchId ?? 0;
 
@@ -36,12 +39,17 @@ export default function CustomerLedgerPage() {
   const [rows, setRows] = useState<PartyLedgerEntry[]>([]);
   const [partyName, setPartyName] = useState('');
   const [currentBalance, setCurrentBalance] = useState(0);
+  const [periodClosingBalance, setPeriodClosingBalance] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  const [pageSize, setPageSize] = useState(50);
   const [totalRecords, setTotalRecords] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
+  const [totalDebit, setTotalDebit] = useState(0);
+  const [totalCredit, setTotalCredit] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [auditView, setAuditView] = useState(false);
+  const [groupByChain, setGroupByChain] = useState(false);
 
   useEffect(() => {
     if (branchId <= 0) {
@@ -59,6 +67,12 @@ export default function CustomerLedgerPage() {
     return () => window.clearTimeout(timer);
   }, [branchId, customerSearch]);
 
+  useEffect(() => {
+    if (branchId <= 0 || customerId > 0) return;
+    const walkIn = customers.find((c) => c.isWalkIn);
+    if (walkIn) setCustomerId(walkIn.id);
+  }, [branchId, customers, customerId]);
+
   const fetchLedger = useCallback(async () => {
     if (branchId <= 0 || customerId <= 0) {
       setRows([]);
@@ -75,20 +89,24 @@ export default function CustomerLedgerPage() {
         currentPage,
         pageSize,
         fromDate || undefined,
-        toDate || undefined
+        toDate || undefined,
+        { auditView, groupByChain },
       );
       setRows(res.data.entries);
       setPartyName(res.data.partyName);
       setCurrentBalance(res.data.currentBalance);
+      setPeriodClosingBalance(res.data.periodClosingBalance);
       setTotalRecords(res.data.totalRecords);
       setTotalPages(res.data.totalPages);
+      setTotalDebit(res.data.totalDebit);
+      setTotalCredit(res.data.totalCredit);
     } catch (err) {
       setRows([]);
       setError(getApiErrorMessage(err, 'Failed to load customer ledger.'));
     } finally {
       setLoading(false);
     }
-  }, [branchId, customerId, currentPage, pageSize, fromDate, toDate]);
+  }, [branchId, customerId, currentPage, pageSize, fromDate, toDate, auditView, groupByChain]);
 
   const fetchExportPage = useCallback(async (pageNumber: number, exportPageSize: number) => {
     const res = await partyLedgerService.getCustomerLedger(
@@ -98,9 +116,10 @@ export default function CustomerLedgerPage() {
       exportPageSize,
       fromDate || undefined,
       toDate || undefined,
+      { auditView, groupByChain },
     );
     return { data: res.data.entries, totalRecords: res.data.totalRecords };
-  }, [branchId, customerId, fromDate, toDate]);
+  }, [branchId, customerId, fromDate, toDate, auditView, groupByChain]);
 
   const exportFilename = useMemo(() => {
     const slug = partyName.trim().replace(/\s+/g, '-').toLowerCase() || 'customer';
@@ -120,14 +139,13 @@ export default function CustomerLedgerPage() {
   }, [fetchLedger]);
 
   useEffect(() => {
-    if (!isOpen) {
-      void fetchLedger();
-    }
-  }, [isOpen, fetchLedger]);
-
-  useEffect(() => {
     setCurrentPage(1);
-  }, [customerId, fromDate, toDate]);
+  }, [customerId, fromDate, toDate, pageSize]);
+
+  const handlePageSizeChange = useCallback((size: number) => {
+    setPageSize(size);
+    setCurrentPage(1);
+  }, []);
 
   const columns = useMemo<Column<PartyLedgerEntry>[]>(
     () => [
@@ -142,26 +160,23 @@ export default function CustomerLedgerPage() {
         header: 'Description',
         sortable: false,
         render: (_: string, row: PartyLedgerEntry) => (
-          <div>
-            <p className="text-gray-800 text-sm">{row.description}</p>
-            <p className="text-xs text-gray-400">{LEDGER_TYPE_LABELS[row.type] ?? row.type}</p>
-          </div>
+          <PartyLedgerEntryDescription row={row} />
         ),
       },
       {
-        key: 'debit',
-        header: 'Debit',
+        key: 'in',
+        header: 'In',
         sortable: false,
-        render: (value: number) => (
-          <span className="tabular-nums text-red-600">{value > 0 ? fmt(value) : '—'}</span>
+        render: (_: unknown, row: PartyLedgerEntry) => (
+          <span className="tabular-nums text-green-600">{row.credit > 0 ? fmt(row.credit) : '—'}</span>
         ),
       },
       {
-        key: 'credit',
-        header: 'Credit',
+        key: 'out',
+        header: 'Out',
         sortable: false,
-        render: (value: number) => (
-          <span className="tabular-nums text-green-600">{value > 0 ? fmt(value) : '—'}</span>
+        render: (_: unknown, row: PartyLedgerEntry) => (
+          <span className="tabular-nums text-red-600">{row.debit > 0 ? fmt(row.debit) : '—'}</span>
         ),
       },
       {
@@ -174,16 +189,30 @@ export default function CustomerLedgerPage() {
     [fmt]
   );
 
+  const footerRow = useMemo(() => {
+    if (totalRecords <= 0) return undefined;
+    return {
+      label: 'Total',
+      values: {
+        description: 'Total',
+        in: <span className="tabular-nums font-bold text-green-600">{fmt(totalCredit)}</span>,
+        out: <span className="tabular-nums font-bold text-red-600">{fmt(totalDebit)}</span>,
+        runningBalance: <span className="tabular-nums font-bold text-blue-800">{fmt(periodClosingBalance)}</span>,
+      },
+    };
+  }, [totalRecords, totalDebit, totalCredit, periodClosingBalance, fmt]);
+
   if (branchId <= 0) {
     return <div className="flex items-center justify-center h-64 text-gray-500">Please select a branch first.</div>;
   }
 
   return (
-    <div className="space-y-4 p-4 md:p-6">
+    <div className="flex h-[calc(100dvh-7.5rem)] min-h-[28rem] flex-col gap-4 overflow-hidden p-4 md:p-6">
+      <div className="shrink-0 space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Customer Ledger</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Receivable transactions and running balance</p>
+          <p className="text-sm text-gray-500 mt-0.5">Read-only receivable history — use Receivables screen to add or edit receipts</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {customerId > 0 && (
@@ -196,13 +225,6 @@ export default function CustomerLedgerPage() {
               {exporting ? 'Exporting…' : 'Export CSV'}
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => openForm('receivePayment', customerId > 0 ? { customerId } : undefined)}
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            + Receive Payment
-          </button>
         </div>
       </div>
 
@@ -260,8 +282,23 @@ export default function CustomerLedgerPage() {
         )}
       </div>
 
-      {error && <div className="bg-red-50 border border-red-200 text-red-600 rounded-lg px-4 py-3 text-sm">{error}</div>}
+      <LedgerViewToggle
+        auditView={auditView}
+        groupByChain={groupByChain}
+        onAuditViewChange={(value) => {
+          setAuditView(value);
+          setCurrentPage(1);
+        }}
+        onGroupByChainChange={(value) => {
+          setGroupByChain(value);
+          setCurrentPage(1);
+        }}
+      />
 
+      {error && <div className="bg-red-50 border border-red-200 text-red-600 rounded-lg px-4 py-3 text-sm">{error}</div>}
+      </div>
+
+      <div className="min-h-0 flex-1 flex flex-col">
       {!customerId ? (
         <div className="bg-white rounded-xl border border-gray-200 p-12 text-center text-gray-400">
           Select a customer to view ledger entries.
@@ -271,15 +308,22 @@ export default function CustomerLedgerPage() {
           columns={columns}
           data={rows}
           loading={loading}
+          searchable={false}
+          serverSide
+          fillHeight
           currentPage={currentPage}
           pageSize={pageSize}
+          pageSizeOptions={LEDGER_PAGE_SIZE_OPTIONS}
           totalRecords={totalRecords}
           totalPages={totalPages}
           onPageChange={setCurrentPage}
-          onPageSizeChange={setPageSize}
+          onPageSizeChange={handlePageSizeChange}
+          footerRow={footerRow}
           emptyMessage="No ledger entries found for this customer."
         />
       )}
+      </div>
+
     </div>
   );
 }

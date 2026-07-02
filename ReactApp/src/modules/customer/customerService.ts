@@ -82,6 +82,22 @@ const mergeWalkInCustomer = (
   return [walkIn, ...others];
 };
 
+const matchesLedgerCustomerSearch = (customer: CustomerListItem, search?: string): boolean => {
+  const term = search?.trim();
+  if (!term) return true;
+
+  const q = term.toLowerCase();
+  if (
+    customer.name.toLowerCase().includes(q) ||
+    customer.customerCode.toLowerCase().includes(q) ||
+    (customer.phone?.includes(term) ?? false)
+  ) {
+    return true;
+  }
+
+  return customer.isWalkIn && q.includes('walk');
+};
+
 export const customerService = {
   getAll: (params: {
     branchId: number;
@@ -122,11 +138,17 @@ export const customerService = {
 
     const payload = listRes.data as { customers?: Record<string, unknown>[] };
     const customers = (payload.customers ?? []).map(normalizeCustomerListItem);
-    const walkIn = walkInRes?.data
+    const walkInFromApi = walkInRes?.data
       ? normalizeCustomerListItem(walkInRes.data as Record<string, unknown>)
       : null;
+    const walkIn = walkInFromApi ?? customers.find((c) => c.isWalkIn) ?? null;
 
-    return mergeWalkInCustomer(customers, walkIn);
+    const filtered = customers.filter((c) => matchesLedgerCustomerSearch(c, search));
+    if (walkIn && matchesLedgerCustomerSearch(walkIn, search)) {
+      return mergeWalkInCustomer(filtered, walkIn);
+    }
+
+    return filtered;
   },
 
   getById: (id: number, branchId: number) =>

@@ -7,6 +7,8 @@ namespace POSSystem.Domain;
 public class CashFlowTransaction : BaseEntity
 {
     public CashFlowTransactionType TransactionType { get; set; }
+    /// <summary>When TransactionType is Reversal, the original transaction type being reversed.</summary>
+    public CashFlowTransactionType? ReversedTransactionType { get; set; }
     public decimal Amount { get; set; }
     public CashFlowPaymentMethod PaymentMethod { get; set; } = CashFlowPaymentMethod.Cash;
 

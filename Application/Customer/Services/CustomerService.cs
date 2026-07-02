@@ -1,3 +1,4 @@
+using POSSystem.Application.Accounting.Interfaces;
 using POSSystem.Application.Branch.Interfaces;
 using POSSystem.Application.Common.Constants;
 using POSSystem.Application.Common.DTOs;
@@ -13,15 +14,18 @@ public class CustomerService : ICustomerService
     private readonly ICustomerRepository _repo;
     private readonly IBranchRepository _branchRepo;
     private readonly ICodeGeneratorService _codeGenerator;
+    private readonly IGlAccountService _glAccountService;
 
     public CustomerService(
         ICustomerRepository repo,
         IBranchRepository branchRepo,
-        ICodeGeneratorService codeGenerator)
+        ICodeGeneratorService codeGenerator,
+        IGlAccountService glAccountService)
     {
         _repo = repo;
         _branchRepo = branchRepo;
         _codeGenerator = codeGenerator;
+        _glAccountService = glAccountService;
     }
 
     public async Task<PagedResultDto<CustomerListDto>> GetCustomersPagedAsync(CustomerFilterDto filter)
@@ -49,7 +53,16 @@ public class CustomerService : ICustomerService
     public async Task<CustomerDetailDto?> GetWalkInCustomerAsync(int businessId, int branchId)
     {
         var c = await _repo.GetWalkInAsync(businessId, branchId);
-        return c == null ? null : await MapDetailAsync(c);
+        if (c == null) return null;
+
+        if (!c.AccountId.HasValue)
+        {
+            c.AccountId = await _glAccountService.CreateCustomerReceivableAccountAsync(
+                c.BusinessId, c.BranchId, c.Name, c.CustomerCode);
+            await _repo.SaveChangesAsync();
+        }
+
+        return await MapDetailAsync(c);
     }
 
     public async Task<List<CustomerListDto>> SearchCustomersAsync(string query, int businessId, int branchId)
@@ -92,6 +105,9 @@ public class CustomerService : ICustomerService
             BranchId      = dto.BranchId
         };
 
+        entity.AccountId = await _glAccountService.CreateCustomerReceivableAccountAsync(
+            dto.BusinessId, dto.BranchId, entity.Name, code);
+
         await _repo.AddAsync(entity);
         await _repo.SaveChangesAsync();
         return await MapDetailAsync(entity);
@@ -122,6 +138,12 @@ public class CustomerService : ICustomerService
         entity.Status        = dto.Status;
         entity.OpeningBalance = dto.OpeningBalance;
         entity.CreditLimit   = dto.CreditLimit;
+
+        if (!entity.AccountId.HasValue)
+        {
+            entity.AccountId = await _glAccountService.CreateCustomerReceivableAccountAsync(
+                entity.BusinessId, entity.BranchId, entity.Name, entity.CustomerCode);
+        }
 
         await _repo.SaveChangesAsync();
         return await MapDetailAsync(entity);
@@ -159,6 +181,9 @@ public class CustomerService : ICustomerService
             BusinessId   = dto.BusinessId,
             BranchId     = dto.BranchId
         };
+
+        entity.AccountId = await _glAccountService.CreateCustomerReceivableAccountAsync(
+            dto.BusinessId, dto.BranchId, entity.Name, code);
 
         await _repo.AddAsync(entity);
         await _repo.SaveChangesAsync();
@@ -217,6 +242,7 @@ public class CustomerService : ICustomerService
         Status       = c.Status,
         CreditLimit  = c.CreditLimit,
         IsWalkIn     = c.IsWalkIn,
+        AccountId    = c.AccountId,
         CreatedAt  = c.CreatedAt
     };
 

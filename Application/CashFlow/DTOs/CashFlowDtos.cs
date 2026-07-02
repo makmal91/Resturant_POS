@@ -14,7 +14,14 @@ public class CashFlowTransactionDto
     public decimal Amount { get; set; }
     public string? ReferenceNo { get; set; }
     public string? Description { get; set; }
+    /// <summary>Contra account name(s) from the same journal entry.</summary>
+    public string AccountName { get; set; } = string.Empty;
     public DateTime TransactionDate { get; set; }
+    public decimal RunningBalance { get; set; }
+    public decimal Debit { get; set; }
+    public decimal Credit { get; set; }
+    public bool IsInflow { get; set; }
+    public decimal DisplayAmount { get; set; }
     public int? CreatedBy { get; set; }
     public DateTime CreatedAt { get; set; }
 }
@@ -68,6 +75,7 @@ public class CashFlowLedgerFilterDto
 
 public class CashFlowLedgerPageDto
 {
+    public string AccountName { get; set; } = string.Empty;
     public IReadOnlyList<CashFlowTransactionDto> Transactions { get; set; } = Array.Empty<CashFlowTransactionDto>();
     public int TotalRecords { get; set; }
     public int TotalPages { get; set; }
@@ -76,6 +84,42 @@ public class CashFlowLedgerPageDto
     public decimal TotalIn { get; set; }
     public decimal TotalOut { get; set; }
     public decimal NetTotal { get; set; }
+    public decimal PeriodOpeningBalance { get; set; }
+    public decimal TotalDebit { get; set; }
+    public decimal TotalCredit { get; set; }
+}
+
+public class JournalVoucherDto
+{
+    public int Id { get; set; }
+    public int BranchId { get; set; }
+    public string VoucherNo { get; set; } = string.Empty;
+    public string TransactionType { get; set; } = string.Empty;
+    public string PaymentMethod { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
+    public string? Description { get; set; }
+    public DateTime VoucherDate { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
+
+public class JournalVoucherListFilterDto
+{
+    public int BusinessId { get; set; }
+    public int BranchId { get; set; }
+    public DateTime? FromDate { get; set; }
+    public DateTime? ToDate { get; set; }
+    public CashFlowTransactionType? TransactionType { get; set; }
+    public int Page { get; set; } = 1;
+    public int PageSize { get; set; } = 25;
+}
+
+public class JournalVoucherListPageDto
+{
+    public IReadOnlyList<JournalVoucherDto> Vouchers { get; set; } = Array.Empty<JournalVoucherDto>();
+    public int TotalRecords { get; set; }
+    public int TotalPages { get; set; }
+    public int CurrentPage { get; set; }
+    public int PageSize { get; set; }
 }
 
 // ─── Response DTOs ────────────────────────────────────────────────────────────

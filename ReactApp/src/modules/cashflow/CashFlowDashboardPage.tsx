@@ -64,7 +64,7 @@ function DiffBadge({ diff }: { diff: number | null }) {
 
 export default function CashFlowDashboardPage() {
   const navigate = useNavigate();
-  const { openForm, isOpen } = useFormModal();
+  const { isOpen } = useFormModal();
   const { selectedBranchId } = useBranchStore();
   const branchId = selectedBranchId ?? 0;
 
@@ -136,12 +136,6 @@ export default function CashFlowDashboardPage() {
               Close Cash Register
             </button>
           )}
-          <button
-            onClick={() => openForm('cashTransaction')}
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            Record Transaction
-          </button>
           <button
             onClick={() => navigate('/cashflow/ledger')}
             className="px-4 py-2 bg-white border border-gray-200 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors"

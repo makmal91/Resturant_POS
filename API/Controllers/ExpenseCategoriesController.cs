@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using POSSystem.API.Extensions;
+using POSSystem.Application.Accounting.Interfaces;
 using POSSystem.Application.Common.Constants;
 using POSSystem.API.Authorization;
 using POSSystem.Domain;
@@ -15,8 +16,13 @@ namespace POSSystem.API.Controllers;
 public class ExpenseCategoriesController : ControllerBase
 {
     private readonly POSDbContext _db;
+    private readonly IGlAccountService _glAccountService;
 
-    public ExpenseCategoriesController(POSDbContext db) => _db = db;
+    public ExpenseCategoriesController(POSDbContext db, IGlAccountService glAccountService)
+    {
+        _db = db;
+        _glAccountService = glAccountService;
+    }
 
     [HttpGet]
     [RequirePermission(PermissionModules.Expenses, PermissionActions.View)]
@@ -85,6 +91,7 @@ public class ExpenseCategoriesController : ControllerBase
 
         _db.ExpenseCategories.Add(category);
         await _db.SaveChangesAsync();
+        await _glAccountService.EnsureExpenseCategoryGlAccountAsync(category.Id, category.Name);
 
         return Ok(new { category.Id, category.Name, category.Description });
     }

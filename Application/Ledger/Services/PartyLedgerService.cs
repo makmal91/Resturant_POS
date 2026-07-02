@@ -1,128 +1,36 @@
+using POSSystem.Application.Accounting.DTOs;
+using POSSystem.Application.Accounting.Interfaces;
+using POSSystem.Application.Accounting.Services;
 using POSSystem.Application.Ledger.DTOs;
 using POSSystem.Application.Ledger.Interfaces;
 using POSSystem.Application.Payments.DTOs;
 using POSSystem.Application.Payments.Interfaces;
 using POSSystem.Domain;
+using CustomerEntity = POSSystem.Domain.Customer;
+using SupplierEntity = POSSystem.Domain.Supplier;
 
 namespace POSSystem.Application.Ledger.Services;
 
+/// <summary>
+/// Customer/supplier ledger views from GL transactions on the party sub-account.
+/// </summary>
 public class PartyLedgerService : IPartyLedgerService
 {
     private readonly IPartyLedgerRepository _repository;
     private readonly IInvoicePaymentService _invoicePaymentService;
+    private readonly IAccountLedgerService _accountLedger;
+    private readonly IGlAccountRepository _glAccounts;
 
     public PartyLedgerService(
         IPartyLedgerRepository repository,
-        IInvoicePaymentService invoicePaymentService)
+        IInvoicePaymentService invoicePaymentService,
+        IAccountLedgerService accountLedger,
+        IGlAccountRepository glAccounts)
     {
         _repository = repository;
         _invoicePaymentService = invoicePaymentService;
-    }
-
-    public async Task RecordCreditSaleAsync(
-        int businessId, int branchId, int customerId, int saleInvoiceId,
-        string invoiceNo, decimal amount, DateTime? transactionDate = null)
-    {
-        if (amount <= 0) return;
-
-        var previousBalance = await _repository.GetCustomerRunningBalanceAsync(customerId, businessId, branchId);
-
-        await _repository.AddCustomerEntryAsync(new CustomerLedgerTransaction
-        {
-            CustomerId = customerId,
-            ReferenceId = saleInvoiceId,
-            Type = CustomerLedgerTransactionType.CreditSale,
-            Debit = amount,
-            Credit = 0,
-            Date = transactionDate ?? DateTime.UtcNow,
-            RunningBalance = previousBalance + amount,
-            Remarks = $"Credit Sale — Invoice: {invoiceNo}",
-            BusinessId = businessId,
-            BranchId = branchId
-        });
-
-        await _repository.SaveChangesAsync();
-    }
-
-    public async Task ReverseCreditSaleAsync(
-        int businessId, int branchId, int customerId, int saleInvoiceId,
-        string invoiceNo, decimal amount, DateTime? transactionDate = null, string? reason = null)
-    {
-        if (amount <= 0) return;
-
-        var previousBalance = await _repository.GetCustomerRunningBalanceAsync(customerId, businessId, branchId);
-        var remarks = $"Void of Credit Sale — Invoice: {invoiceNo}";
-        if (!string.IsNullOrWhiteSpace(reason))
-            remarks += $" | Reason: {reason}";
-
-        await _repository.AddCustomerEntryAsync(new CustomerLedgerTransaction
-        {
-            CustomerId = customerId,
-            ReferenceId = saleInvoiceId,
-            Type = CustomerLedgerTransactionType.Reversal,
-            Debit = 0,
-            Credit = amount,
-            Date = transactionDate ?? DateTime.UtcNow,
-            RunningBalance = previousBalance - amount,
-            Remarks = remarks,
-            BusinessId = businessId,
-            BranchId = branchId
-        });
-
-        await _repository.SaveChangesAsync();
-    }
-
-    public async Task RecordCreditPurchaseAsync(
-        int businessId, int branchId, int supplierId, int purchaseId,
-        string invoiceNo, decimal amount, DateTime? transactionDate = null)
-    {
-        if (amount <= 0) return;
-
-        var previousBalance = await _repository.GetSupplierRunningBalanceAsync(supplierId, businessId, branchId);
-
-        await _repository.AddSupplierEntryAsync(new SupplierLedgerTransaction
-        {
-            SupplierId = supplierId,
-            ReferenceId = purchaseId,
-            Type = SupplierLedgerTransactionType.CreditPurchase,
-            Debit = 0,
-            Credit = amount,
-            Date = transactionDate ?? DateTime.UtcNow,
-            RunningBalance = previousBalance + amount,
-            Remarks = $"Credit Purchase — Invoice: {invoiceNo}",
-            BusinessId = businessId,
-            BranchId = branchId
-        });
-
-        await _repository.SaveChangesAsync();
-    }
-
-    public async Task ReverseCreditPurchaseAsync(
-        int businessId, int branchId, int supplierId, int purchaseId,
-        string invoiceNo, decimal amount, DateTime? transactionDate = null, string? reason = null)
-    {
-        if (amount <= 0) return;
-
-        var previousBalance = await _repository.GetSupplierRunningBalanceAsync(supplierId, businessId, branchId);
-        var remarks = $"Void of Credit Purchase — Invoice: {invoiceNo}";
-        if (!string.IsNullOrWhiteSpace(reason))
-            remarks += $" | Reason: {reason}";
-
-        await _repository.AddSupplierEntryAsync(new SupplierLedgerTransaction
-        {
-            SupplierId = supplierId,
-            ReferenceId = purchaseId,
-            Type = SupplierLedgerTransactionType.Reversal,
-            Debit = amount,
-            Credit = 0,
-            Date = transactionDate ?? DateTime.UtcNow,
-            RunningBalance = previousBalance - amount,
-            Remarks = remarks,
-            BusinessId = businessId,
-            BranchId = branchId
-        });
-
-        await _repository.SaveChangesAsync();
+        _accountLedger = accountLedger;
+        _glAccounts = glAccounts;
     }
 
     public async Task<PartyLedgerEntryDto> ReceiveCustomerPaymentAsync(ReceiveCustomerPaymentDto dto)
@@ -136,6 +44,8 @@ public class PartyLedgerService : IPartyLedgerService
             PaymentDate = dto.PaymentDate,
             ReferenceNo = dto.ReferenceNo,
             Notes = dto.Notes,
+            AutoAllocate = dto.AutoAllocate,
+            Allocations = dto.Allocations,
             BusinessId = dto.BusinessId,
             BranchId = dto.BranchId
         });
@@ -150,10 +60,13 @@ public class PartyLedgerService : IPartyLedgerService
             SupplierId = dto.SupplierId,
             PurchaseId = dto.PurchaseId,
             PaymentType = dto.PaymentType,
+            Category = dto.Category,
             Amount = dto.Amount,
             PaymentDate = dto.PaymentDate,
             ReferenceNo = dto.ReferenceNo,
             Notes = dto.Notes,
+            AutoAllocate = dto.AutoAllocate,
+            Allocations = dto.Allocations,
             BusinessId = dto.BusinessId,
             BranchId = dto.BranchId
         });
@@ -166,7 +79,8 @@ public class PartyLedgerService : IPartyLedgerService
         var customer = await _repository.GetCustomerAsync(customerId, businessId, branchId)
             ?? throw new InvalidOperationException("Customer not found.");
 
-        var balance = await _repository.GetCustomerRunningBalanceAsync(customerId, businessId, branchId);
+        var balance = await ResolveCustomerBalanceAsync(customer, businessId, branchId);
+
         return new PartyBalanceDto
         {
             PartyId = customerId,
@@ -180,7 +94,8 @@ public class PartyLedgerService : IPartyLedgerService
         var supplier = await _repository.GetSupplierAsync(supplierId, businessId, branchId)
             ?? throw new InvalidOperationException("Supplier not found.");
 
-        var balance = await _repository.GetSupplierRunningBalanceAsync(supplierId, businessId, branchId);
+        var balance = await ResolveSupplierBalanceAsync(supplier, businessId, branchId);
+
         return new PartyBalanceDto
         {
             PartyId = supplierId,
@@ -189,11 +104,96 @@ public class PartyLedgerService : IPartyLedgerService
         };
     }
 
-    public Task<PartyLedgerPageDto> GetCustomerLedgerAsync(PartyLedgerFilterDto filter)
-        => _repository.GetCustomerLedgerPagedAsync(filter);
+    public Task<PartyLedgerPageDto> GetCustomerLedgerAsync(PartyLedgerFilterDto filter) =>
+        GetPartyLedgerAsync(filter, isCustomer: true);
 
-    public Task<PartyLedgerPageDto> GetSupplierLedgerAsync(PartyLedgerFilterDto filter)
-        => _repository.GetSupplierLedgerPagedAsync(filter);
+    public Task<PartyLedgerPageDto> GetSupplierLedgerAsync(PartyLedgerFilterDto filter) =>
+        GetPartyLedgerAsync(filter, isCustomer: false);
+
+    private async Task<PartyLedgerPageDto> GetPartyLedgerAsync(PartyLedgerFilterDto filter, bool isCustomer)
+    {
+        int accountId;
+        string partyName;
+        decimal currentBalance;
+
+        if (isCustomer)
+        {
+            var customer = await _repository.GetCustomerAsync(filter.PartyId, filter.BusinessId, filter.BranchId)
+                ?? throw new InvalidOperationException("Customer not found.");
+
+            partyName = customer.Name;
+            accountId = await ResolvePartyAccountIdAsync(
+                customer.AccountId,
+                () => _glAccounts.GetCustomerGlAccountIdAsync(customer.Id, filter.BusinessId, filter.BranchId));
+            currentBalance = await ResolveCustomerBalanceAsync(customer, filter.BusinessId, filter.BranchId);
+        }
+        else
+        {
+            var supplier = await _repository.GetSupplierAsync(filter.PartyId, filter.BusinessId, filter.BranchId)
+                ?? throw new InvalidOperationException("Supplier not found.");
+
+            partyName = supplier.Name;
+            accountId = await ResolvePartyAccountIdAsync(
+                supplier.AccountId,
+                () => _glAccounts.GetSupplierGlAccountIdAsync(supplier.Id, filter.BusinessId, filter.BranchId));
+            currentBalance = await ResolveSupplierBalanceAsync(supplier, filter.BusinessId, filter.BranchId);
+        }
+
+        if (accountId <= 0)
+        {
+            throw new InvalidOperationException(
+                isCustomer ? "Customer GL account is not configured." : "Supplier GL account is not configured.");
+        }
+
+        var ledger = await _accountLedger.GetAccountLedgerAsync(new AccountLedgerFilterDto
+        {
+            AccountId = accountId,
+            BusinessId = filter.BusinessId,
+            BranchId = filter.BranchId,
+            FromDate = filter.FromDate,
+            ToDate = filter.ToDate,
+            Page = filter.Page,
+            PageSize = filter.PageSize,
+            AuditView = filter.AuditView,
+            GroupByChain = filter.GroupByChain,
+        });
+
+        var page = AccountLedgerMapper.ToPartyLedgerPage(ledger, filter.PartyId, partyName, filter.FromDate);
+        page.CurrentBalance = currentBalance;
+        return page;
+    }
+
+    private static async Task<int> ResolvePartyAccountIdAsync(int? linkedAccountId, Func<Task<int?>> lookup)
+    {
+        if (linkedAccountId is > 0)
+            return linkedAccountId.Value;
+
+        return await lookup() ?? 0;
+    }
+
+    private async Task<decimal> ResolveCustomerBalanceAsync(CustomerEntity customer, int businessId, int branchId)
+    {
+        if (customer.AccountId is > 0)
+            return await _accountLedger.GetDisplayBalanceAsync(customer.AccountId.Value, businessId, branchId);
+
+        var accountId = await _glAccounts.GetCustomerGlAccountIdAsync(customer.Id, businessId, branchId);
+        if (accountId is > 0)
+            return await _accountLedger.GetDisplayBalanceAsync(accountId.Value, businessId, branchId);
+
+        return 0m;
+    }
+
+    private async Task<decimal> ResolveSupplierBalanceAsync(SupplierEntity supplier, int businessId, int branchId)
+    {
+        if (supplier.AccountId is > 0)
+            return await _accountLedger.GetDisplayBalanceAsync(supplier.AccountId.Value, businessId, branchId);
+
+        var accountId = await _glAccounts.GetSupplierGlAccountIdAsync(supplier.Id, businessId, branchId);
+        if (accountId is > 0)
+            return await _accountLedger.GetDisplayBalanceAsync(accountId.Value, businessId, branchId);
+
+        return 0m;
+    }
 
     private static PartyLedgerEntryDto MapPaymentToLedgerEntry(InvoicePaymentDto payment, bool isCustomer)
     {
@@ -210,31 +210,8 @@ public class PartyLedgerService : IPartyLedgerService
             Debit = isCustomer ? 0 : payment.Amount,
             Credit = isCustomer ? payment.Amount : 0,
             RunningBalance = 0,
-            ReferenceId = payment.InvoiceId ?? payment.Id
+            ReferenceId = payment.InvoiceId ?? payment.Id,
+            PaymentId = payment.Id,
         };
     }
-
-    private static PartyLedgerEntryDto MapCustomerEntry(CustomerLedgerTransaction entry) => new()
-    {
-        Id = entry.Id,
-        Date = entry.Date,
-        Type = entry.Type.ToString(),
-        Description = entry.Remarks,
-        Debit = entry.Debit,
-        Credit = entry.Credit,
-        RunningBalance = entry.RunningBalance,
-        ReferenceId = entry.ReferenceId
-    };
-
-    private static PartyLedgerEntryDto MapSupplierEntry(SupplierLedgerTransaction entry) => new()
-    {
-        Id = entry.Id,
-        Date = entry.Date,
-        Type = entry.Type.ToString(),
-        Description = entry.Remarks,
-        Debit = entry.Debit,
-        Credit = entry.Credit,
-        RunningBalance = entry.RunningBalance,
-        ReferenceId = entry.ReferenceId
-    };
 }

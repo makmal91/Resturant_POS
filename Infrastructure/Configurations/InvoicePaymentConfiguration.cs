@@ -14,8 +14,13 @@ public class InvoicePaymentConfiguration : IEntityTypeConfiguration<InvoicePayme
         builder.Property(x => x.Amount).HasColumnType("decimal(18,2)");
         builder.Property(x => x.Module).HasConversion<int>();
         builder.Property(x => x.PaymentType).HasConversion<int>();
+        builder.Property(x => x.Category)
+            .HasColumnName("PaymentCategory")
+            .HasMaxLength(20)
+            .HasConversion<string>();
         builder.Property(x => x.ReferenceNo).HasMaxLength(100);
         builder.Property(x => x.Notes).HasMaxLength(500);
+        builder.Property(x => x.IsReversed).HasDefaultValue(false);
 
         builder.HasOne(x => x.SaleInvoice)
             .WithMany(x => x.Payments)

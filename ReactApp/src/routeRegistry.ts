@@ -33,7 +33,12 @@ import CashLedgerPage from './modules/cashflow/CashLedgerPage';
 import CashFlowSummaryPage from './modules/cashflow/CashFlowSummaryPage';
 import CustomerLedgerPage from './modules/ledger/CustomerLedgerPage';
 import SupplierLedgerPage from './modules/ledger/SupplierLedgerPage';
+import AccountLedgerPage from './modules/accounting/AccountLedgerPage';
 import ExpensePage from './modules/expense/ExpensePage';
+import PayablesPage from './modules/finance/PayablesPage';
+import ReceivablesPage from './modules/finance/ReceivablesPage';
+import FinanceExpensesPage from './modules/finance/FinanceExpensesPage';
+import JournalVouchersPage from './modules/finance/JournalVouchersPage';
 import SizePage from './modules/master/SizePage';
 import ColorPage from './modules/master/ColorPage';
 import ExpenseCategoryPage from './modules/master/ExpenseCategoryPage';
@@ -43,6 +48,7 @@ import CustomerOutstandingReportPage from './modules/reports/CustomerOutstanding
 import PayableAgingReportPage from './modules/reports/PayableAgingReportPage';
 import ReceivableAgingReportPage from './modules/reports/ReceivableAgingReportPage';
 import ProfitLossReportPage from './modules/reports/ProfitLossReportPage';
+import TrialBalanceReportPage from './modules/reports/TrialBalanceReportPage';
 import PurchaseReportPage from './modules/reports/PurchaseReportPage';
 import SalesReportPage from './modules/reports/SalesReportPage';
 import ProductWiseSalesReportPage from './modules/reports/ProductWiseSalesReportPage';
@@ -87,18 +93,24 @@ export const routeRegistry: RouteDefinition[] = [
   { path: '/reports/customer-outstanding', label: 'Customer Outstanding', component: CustomerOutstandingReportPage, module: 'Customer Outstanding Report' },
   { path: '/reports/supplier-payable', label: 'Supplier Payable', component: SupplierPayableReportPage, module: 'Supplier Payable Report' },
   { path: '/reports/profit-loss', label: 'Profit & Loss', component: ProfitLossReportPage, module: 'Profit & Loss Report' },
+  { path: '/reports/trial-balance', label: 'Trial Balance', component: TrialBalanceReportPage, module: 'Trial Balance Report' },
   { path: '/reports/stock', label: 'Stock Report', component: StockReportPage, module: 'Stock Reports', feature: 'product.stock.enable' },
   { path: '/reports/stock-by-unit', label: 'Stock By Unit Report', component: StockByUnitPivotReportPage, module: 'StockReports.ByUnit', feature: 'product.stock.enable' },
   { path: '/reports/receivable-aging', label: 'Receivable Aging', component: ReceivableAgingReportPage, module: 'Customer Receivable Aging' },
   { path: '/reports/payable-aging', label: 'Payable Aging', component: PayableAgingReportPage, module: 'Supplier Payable Aging' },
   { path: '/sales-invoices', label: 'Invoice History', component: SaleInvoicesPage, module: 'Sales' },
   { path: '/expenses',          label: 'Expenses',        component: ExpensePage,           module: 'Expenses' },
+  { path: '/finance/payables', label: 'Payables', component: PayablesPage, module: 'Party Ledger' },
+  { path: '/finance/receivables', label: 'Receivables', component: ReceivablesPage, module: 'Party Ledger' },
+  { path: '/finance/expenses', label: 'Expenses', component: FinanceExpensesPage, module: 'Expenses' },
+  { path: '/finance/journal-vouchers', label: 'Journal Vouchers', component: JournalVouchersPage, module: 'Cash Flow' },
   { path: '/expenses/categories', label: 'Expense Categories', component: ExpenseCategoryPage, module: 'Expense Categories' },
   { path: '/cashflow',          label: 'Cash Dashboard',  component: CashFlowDashboardPage, module: 'Cash Flow' },
   { path: '/cashflow/ledger',   label: 'Cash Ledger',     component: CashLedgerPage,        module: 'Cash Flow' },
   { path: '/cashflow/summary',  label: 'Cash Summary',    component: CashFlowSummaryPage,   module: 'Cash Flow' },
   { path: '/ledger/customers', label: 'Customer Ledger', component: CustomerLedgerPage, module: 'Party Ledger' },
   { path: '/ledger/suppliers', label: 'Supplier Ledger', component: SupplierLedgerPage, module: 'Party Ledger' },
+  { path: '/accounting/ledger', label: 'Account Ledger', component: AccountLedgerPage, module: 'Account Ledger' },
   { path: '/settings', label: 'System Settings', component: SettingsPage, module: 'System Settings' },
   { path: '/settings/code-sequences', label: 'Code Sequences', component: CodeSequencePage, module: 'Code Sequences' },
   { path: '/settings/licenses', label: 'System License', component: LicensePage },
@@ -113,8 +125,10 @@ const extraRouteContext: Record<string, { module: string; form: string }> = {
   '/sales-invoices/edit': { module: 'Sales', form: 'EditInvoice' },
   '/cashflow/opening': { module: 'Cash Flow', form: 'OpeningCash' },
   '/cashflow/closing': { module: 'Cash Flow', form: 'ClosingCash' },
-  '/ledger/customers': { module: 'Party Ledger', form: 'ReceivePayment' },
-  '/ledger/suppliers': { module: 'Party Ledger', form: 'PaySupplier' },
+  '/finance/payables': { module: 'Party Ledger', form: 'PaySupplier' },
+  '/finance/receivables': { module: 'Party Ledger', form: 'ReceivePayment' },
+  '/finance/expenses': { module: 'Expenses', form: 'Expense' },
+  '/finance/journal-vouchers': { module: 'Cash Flow', form: 'JournalVoucher' },
 };
 
 export const resolveRouteContext = (

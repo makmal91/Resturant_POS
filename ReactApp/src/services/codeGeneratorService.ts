@@ -9,6 +9,10 @@ export const CODE_MODULES = {
   Supplier: 'Supplier',
   Purchase: 'Purchase',
   SalesInvoice: 'SalesInvoice',
+  CustomerReceipt: 'CustomerReceipt',
+  SupplierPayment: 'SupplierPayment',
+  Expense: 'Expense',
+  JournalVoucher: 'JournalVoucher',
 } as const;
 
 export type CodeModuleName = (typeof CODE_MODULES)[keyof typeof CODE_MODULES];

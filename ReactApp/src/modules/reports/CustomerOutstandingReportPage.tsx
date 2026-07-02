@@ -91,7 +91,7 @@ const CustomerOutstandingReportPage: React.FC = () => {
   return (
     <ReportPageShell
       title="Customer Outstanding Report"
-      description="Customers with opening balance and unpaid invoice amounts."
+      description="Customers with GL receivable balances and open credit invoices."
       showDateFilters={false}
       error={table.error}
       loading={table.loading}

@@ -14,6 +14,11 @@ public class ExpenseCategoryConfiguration : IEntityTypeConfiguration<ExpenseCate
         builder.Property(x => x.Name).IsRequired().HasMaxLength(100);
         builder.Property(x => x.Description).HasMaxLength(500);
 
+        builder.HasOne(x => x.GlAccount)
+            .WithMany()
+            .HasForeignKey(x => x.GlAccountId)
+            .OnDelete(DeleteBehavior.SetNull);
+
         builder.HasOne(x => x.Branch)
             .WithMany()
             .HasForeignKey(x => x.BranchId)

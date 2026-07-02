@@ -17,6 +17,7 @@ public class SaleInvoiceConfiguration : IEntityTypeConfiguration<SaleInvoice>
         builder.Property(x => x.TaxAmount).HasColumnType("decimal(18,2)");
         builder.Property(x => x.GrandTotal).HasColumnType("decimal(18,2)");
         builder.Property(x => x.PaidAmount).HasColumnType("decimal(18,2)");
+        builder.Property(x => x.SettlementStatus).HasConversion<int>().HasDefaultValue(InvoiceSettlementStatus.Pending);
         builder.Property(x => x.ReturnAmount).HasColumnType("decimal(18,2)");
         builder.Property(x => x.CashAmount).HasColumnType("decimal(18,2)");
         builder.Property(x => x.CardAmount).HasColumnType("decimal(18,2)");

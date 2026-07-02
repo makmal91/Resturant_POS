@@ -32,5 +32,13 @@ public class SupplierConfiguration : IEntityTypeConfiguration<Supplier>
             .WithMany()
             .HasForeignKey(s => s.BranchId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(s => s.GlAccount)
+            .WithMany()
+            .HasForeignKey(s => s.AccountId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasIndex(s => s.AccountId)
+            .HasDatabaseName("idx_supplier_accountid");
     }
 }

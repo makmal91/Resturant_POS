@@ -1,3 +1,4 @@
+using POSSystem.Application.Accounting.Interfaces;
 using POSSystem.Application.Common.Constants;
 using POSSystem.Application.Common.DTOs;
 using POSSystem.Application.Common.Interfaces;
@@ -11,11 +12,16 @@ public class SupplierService : ISupplierService
 {
     private readonly ISupplierRepository _repository;
     private readonly ICodeGeneratorService _codeGenerator;
+    private readonly IGlAccountService _glAccountService;
 
-    public SupplierService(ISupplierRepository repository, ICodeGeneratorService codeGenerator)
+    public SupplierService(
+        ISupplierRepository repository,
+        ICodeGeneratorService codeGenerator,
+        IGlAccountService glAccountService)
     {
         _repository = repository;
         _codeGenerator = codeGenerator;
+        _glAccountService = glAccountService;
     }
 
     public async Task<PagedResultDto<SupplierDto>> GetSuppliersPagedAsync(
@@ -71,6 +77,9 @@ public class SupplierService : ISupplierService
             BranchId = dto.BranchId
         };
 
+        entity.AccountId = await _glAccountService.CreateSupplierPayableAccountAsync(
+            dto.BusinessId, dto.BranchId, entity.Name, supplierCode);
+
         await _repository.AddAsync(entity);
         await _repository.SaveChangesAsync();
         return MapDto(entity);
@@ -96,6 +105,12 @@ public class SupplierService : ISupplierService
         entity.Address = dto.Address?.Trim() ?? string.Empty;
         entity.TaxNumber = dto.TaxNumber?.Trim() ?? string.Empty;
         entity.IsActive = dto.IsActive;
+
+        if (!entity.AccountId.HasValue)
+        {
+            entity.AccountId = await _glAccountService.CreateSupplierPayableAccountAsync(
+                entity.BusinessId, entity.BranchId, entity.Name, entity.SupplierCode);
+        }
 
         await _repository.SaveChangesAsync();
         return MapDto(entity);
@@ -134,6 +149,7 @@ public class SupplierService : ISupplierService
         IsActive = s.IsActive,
         BranchId = s.BranchId,
         BranchName = s.Branch?.Name ?? string.Empty,
+        AccountId = s.AccountId,
         CreatedAt = s.CreatedAt,
         ModifiedAt = s.ModifiedAt
     };

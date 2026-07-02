@@ -1,21 +1,32 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FormButton, FormInput, FormSelect, FormTextarea } from './index';
+import CodeFieldWithGenerate from './CodeFieldWithGenerate';
+import { CODE_MODULES } from '../../services/codeGeneratorService';
+import PaymentAllocationGrid, {
+  buildEditAllocationRows,
+  buildInitialAllocationRows,
+  type AllocationMode,
+  type InvoiceAllocationRow,
+} from './PaymentAllocationGrid';
 import { useBusinessCurrency } from '../../hooks/useBusinessCurrency';
 import { useFormBranchId } from '../../hooks/useFormBranchId';
 import {
   partyLedgerService,
   type OutstandingInvoiceOption,
 } from '../../modules/ledger/partyLedgerService';
-import type { PartyPaymentType } from './ReceivePaymentForm';
+import type { PartyPaymentType, PaymentAllocationInput, InvoicePaymentCategory } from './ReceivePaymentForm';
 
 export interface PaySupplierFormData {
   supplierId: string;
-  purchaseId: string;
-  paymentType: PartyPaymentType;
+  paymentMethod: PartyPaymentType;
+  paymentCategory: InvoicePaymentCategory;
   amount: string;
   paymentDate: string;
   referenceNo: string;
   notes: string;
+  allocationMode: AllocationMode;
+  autoAllocate: boolean;
+  allocations: PaymentAllocationInput[];
 }
 
 interface LookupOption {
@@ -23,38 +34,57 @@ interface LookupOption {
   name: string;
 }
 
+interface PaySupplierFormInitialData {
+  id?: number;
+  supplierId?: number;
+  paymentMethod?: PartyPaymentType;
+  paymentCategory?: InvoicePaymentCategory;
+  amount?: string | number;
+  paymentDate?: string;
+  referenceNo?: string;
+  notes?: string;
+  allocationMode?: AllocationMode;
+  allocations?: PaymentAllocationInput[];
+}
+
 interface PaySupplierFormProps {
   suppliers?: LookupOption[];
-  initialData?: { supplierId?: number; purchaseId?: number } | null;
+  initialData?: PaySupplierFormInitialData | null;
   branchId: number;
   onSubmit: (data: PaySupplierFormData) => void;
   isLoading?: boolean;
   submitLabel?: string;
 }
 
-const PAYMENT_TYPE_OPTIONS = [
+const PAYMENT_METHOD_OPTIONS = [
   { label: 'Cash', value: 'Cash' },
   { label: 'Bank', value: 'Bank' },
   { label: 'Online', value: 'Online' },
 ];
 
-const buildDefaultFormData = (
-  supplierId = '',
-  purchaseId = '',
-): PaySupplierFormData => ({
-  supplierId: supplierId ? String(supplierId) : '',
-  purchaseId: purchaseId ? String(purchaseId) : '',
-  paymentType: 'Cash',
-  amount: '',
-  paymentDate: new Date().toISOString().slice(0, 10),
-  referenceNo: '',
-  notes: '',
+const PAYMENT_CATEGORY_OPTIONS = [
+  { label: 'Against Invoice', value: 'AgainstInvoice' },
+  { label: 'Advance', value: 'Advance' },
+  { label: 'Adjustment', value: 'Adjustment' },
+];
+
+const buildFormDataFromInitial = (initial?: PaySupplierFormInitialData | null): PaySupplierFormData => ({
+  supplierId: initial?.supplierId ? String(initial.supplierId) : '',
+  paymentMethod: initial?.paymentMethod ?? 'Cash',
+  paymentCategory: initial?.paymentCategory ?? 'AgainstInvoice',
+  amount: initial?.amount != null && initial.amount !== '' ? String(initial.amount) : '',
+  paymentDate: initial?.paymentDate
+    ? initial.paymentDate.slice(0, 10)
+    : new Date().toISOString().slice(0, 10),
+  referenceNo: initial?.referenceNo ?? '',
+  notes: initial?.notes ?? '',
+  allocationMode: initial?.allocationMode ?? (initial?.id ? 'manual' : 'auto'),
+  autoAllocate: !initial?.id,
+  allocations: initial?.allocations ?? [],
 });
 
-const formatInvoiceLabel = (
-  invoice: OutstandingInvoiceOption,
-  fmt: (value: number) => string,
-) => `${invoice.invoiceNo} — Due ${fmt(invoice.balanceDue)}`;
+const buildDefaultFormData = (supplierId = ''): PaySupplierFormData =>
+  buildFormDataFromInitial(supplierId ? { supplierId: Number(supplierId) } : null);
 
 const PaySupplierForm: React.FC<PaySupplierFormProps> = ({
   suppliers = [],
@@ -68,23 +98,42 @@ const PaySupplierForm: React.FC<PaySupplierFormProps> = ({
   const { symbol, currencyCode, fmt, loading: currencyLoading } = useBusinessCurrency();
 
   const [formData, setFormData] = useState<PaySupplierFormData>(() =>
-    buildDefaultFormData(initialData?.supplierId, initialData?.purchaseId ? String(initialData.purchaseId) : '')
+    buildFormDataFromInitial(initialData),
   );
-  const [errors, setErrors] = useState<Partial<Record<keyof PaySupplierFormData, string>>>({});
+  const isEditMode = Boolean(initialData?.id);
+  const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
   const [balance, setBalance] = useState<number | null>(null);
   const [outstandingInvoices, setOutstandingInvoices] = useState<OutstandingInvoiceOption[]>([]);
+  const [allocationRows, setAllocationRows] = useState<InvoiceAllocationRow[]>([]);
   const [loadingBalance, setLoadingBalance] = useState(false);
   const [loadingInvoices, setLoadingInvoices] = useState(false);
 
   useEffect(() => {
-    setFormData(buildDefaultFormData(initialData?.supplierId, initialData?.purchaseId ? String(initialData.purchaseId) : ''));
+    setFormData(buildFormDataFromInitial(initialData));
     setErrors({});
-  }, [initialData?.supplierId, initialData?.purchaseId]);
+    if (!initialData?.id) setAllocationRows([]);
+  }, [initialData]);
 
-  const selectedInvoice = useMemo(
-    () => outstandingInvoices.find((inv) => String(inv.invoiceId) === formData.purchaseId),
-    [outstandingInvoices, formData.purchaseId],
-  );
+  const loadOutstandingInvoices = useCallback(async (supplierId: number, excludePaymentId?: number) => {
+    if (supplierId <= 0 || branchId <= 0) {
+      setOutstandingInvoices([]);
+      if (!excludePaymentId) setAllocationRows([]);
+      return;
+    }
+    setLoadingInvoices(true);
+    try {
+      const res = await partyLedgerService.getSupplierOutstandingInvoices(
+        branchId,
+        supplierId,
+        excludePaymentId,
+      );
+      setOutstandingInvoices(res.data);
+    } catch {
+      setOutstandingInvoices([]);
+    } finally {
+      setLoadingInvoices(false);
+    }
+  }, [branchId]);
 
   const loadBalance = useCallback(async (supplierId: number) => {
     if (supplierId <= 0 || branchId <= 0) {
@@ -102,38 +151,44 @@ const PaySupplierForm: React.FC<PaySupplierFormProps> = ({
     }
   }, [branchId]);
 
-  const loadOutstandingInvoices = useCallback(async (supplierId: number) => {
-    if (supplierId <= 0 || branchId <= 0) {
-      setOutstandingInvoices([]);
-      return;
-    }
-    setLoadingInvoices(true);
-    try {
-      const res = await partyLedgerService.getSupplierOutstandingInvoices(branchId, supplierId);
-      setOutstandingInvoices(res.data);
-    } catch {
-      setOutstandingInvoices([]);
-    } finally {
-      setLoadingInvoices(false);
-    }
-  }, [branchId]);
-
   useEffect(() => {
     const id = Number(formData.supplierId);
     void loadBalance(id);
-    void loadOutstandingInvoices(id);
-  }, [formData.supplierId, loadBalance, loadOutstandingInvoices]);
+    void loadOutstandingInvoices(id, initialData?.id);
+  }, [formData.supplierId, loadBalance, loadOutstandingInvoices, initialData?.id]);
 
-  const invoiceOptions = useMemo(() => {
-    const base = [{ label: 'Advance payment (no invoice)', value: '' }];
-    return [
-      ...base,
-      ...outstandingInvoices.map((inv) => ({
-        label: formatInvoiceLabel(inv, fmt),
-        value: String(inv.invoiceId),
-      })),
-    ];
-  }, [outstandingInvoices, fmt]);
+  useEffect(() => {
+    if (formData.paymentCategory === 'Advance') {
+      setAllocationRows([]);
+      return;
+    }
+
+    if (isEditMode && initialData?.allocations?.length) {
+      setAllocationRows(buildEditAllocationRows(outstandingInvoices, initialData.allocations));
+      return;
+    }
+
+    setAllocationRows(buildInitialAllocationRows(outstandingInvoices, formData.allocationMode, formData.amount));
+  }, [
+    formData.amount,
+    formData.allocationMode,
+    formData.paymentCategory,
+    outstandingInvoices,
+    isEditMode,
+    initialData?.allocations,
+  ]);
+
+  const showInvoiceAllocation = formData.paymentCategory !== 'Advance';
+
+  const totalApplied = useMemo(
+    () =>
+      allocationRows.reduce((sum, row) => {
+        if (formData.allocationMode === 'manual' && !row.selected) return sum;
+        const val = parseFloat(row.applyAmount);
+        return sum + (isNaN(val) ? 0 : val);
+      }, 0),
+    [allocationRows, formData.allocationMode],
+  );
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>,
@@ -141,24 +196,13 @@ const PaySupplierForm: React.FC<PaySupplierFormProps> = ({
     const { name, value } = e.target;
 
     if (name === 'supplierId') {
+      if (isEditMode) return;
       setFormData((prev) => ({
         ...prev,
         supplierId: value,
-        purchaseId: '',
         amount: '',
       }));
-      setErrors((prev) => ({ ...prev, supplierId: '', purchaseId: '', amount: '' }));
-      return;
-    }
-
-    if (name === 'purchaseId') {
-      const invoice = outstandingInvoices.find((inv) => String(inv.invoiceId) === value);
-      setFormData((prev) => ({
-        ...prev,
-        purchaseId: value,
-        amount: invoice ? String(invoice.balanceDue) : prev.amount,
-      }));
-      setErrors((prev) => ({ ...prev, purchaseId: '', amount: '' }));
+      setErrors((prev) => ({ ...prev, supplierId: '', amount: '' }));
       return;
     }
 
@@ -166,43 +210,78 @@ const PaySupplierForm: React.FC<PaySupplierFormProps> = ({
     setErrors((prev) => ({ ...prev, [name]: '' }));
   };
 
+  const handleModeChange = (mode: AllocationMode) => {
+    setFormData((prev) => ({
+      ...prev,
+      allocationMode: mode,
+      autoAllocate: mode === 'auto',
+    }));
+  };
+
   const validateForm = () => {
-    const nextErrors: Partial<Record<keyof PaySupplierFormData, string>> = {};
+    const nextErrors: Partial<Record<string, string>> = {};
     const supplierId = Number(formData.supplierId);
-    const purchaseId = formData.purchaseId.trim() ? Number(formData.purchaseId) : 0;
     const parsed = parseFloat(formData.amount);
 
     if (!supplierId) nextErrors.supplierId = 'Supplier is required';
-    if (formData.purchaseId.trim() && (!purchaseId || purchaseId <= 0)) {
-      nextErrors.purchaseId = 'Select a valid invoice';
-    }
     if (!formData.amount.trim()) nextErrors.amount = 'Amount is required';
     else if (isNaN(parsed) || parsed <= 0) nextErrors.amount = 'Amount must be greater than zero';
-    else if (selectedInvoice && parsed > selectedInvoice.balanceDue) {
-      nextErrors.amount = `Amount exceeds invoice balance due of ${fmt(selectedInvoice.balanceDue)}`;
+    else if (totalApplied > parsed + 0.005) {
+      nextErrors.amount = 'Total applied amount exceeds payment amount';
+    }
+
+    if (formData.allocationMode === 'manual' && showInvoiceAllocation) {
+      const invalidRow = allocationRows.find((row) => {
+        if (!row.selected) return false;
+        const val = parseFloat(row.applyAmount);
+        return isNaN(val) || val <= 0 || val > row.balanceDue + 0.005;
+      });
+      if (invalidRow) {
+        nextErrors.allocations = `Invalid apply amount for invoice ${invalidRow.invoiceNo}`;
+      }
     }
 
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0 && !branchError;
   };
 
+  const buildAllocations = (): PaymentAllocationInput[] =>
+    allocationRows
+      .filter((row) => {
+        if (formData.allocationMode === 'manual') return row.selected;
+        const val = parseFloat(row.applyAmount);
+        return !isNaN(val) && val > 0;
+      })
+      .map((row) => ({
+        invoiceId: row.invoiceId,
+        appliedAmount: parseFloat(row.applyAmount),
+      }));
+
   const handleReset = () => {
-    setFormData(buildDefaultFormData(initialData?.supplierId, initialData?.purchaseId ? String(initialData.purchaseId) : ''));
+    setFormData(buildDefaultFormData(initialData?.supplierId ? String(initialData.supplierId) : ''));
     setErrors({});
+    setAllocationRows([]);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (validateForm()) onSubmit(formData);
-  };
+    if (!validateForm()) return;
 
-  const isAdvance = !formData.purchaseId.trim();
+    onSubmit({
+      ...formData,
+      autoAllocate: formData.paymentCategory === 'AgainstInvoice' && formData.allocationMode === 'auto',
+      allocations:
+        showInvoiceAllocation && formData.allocationMode === 'manual' ? buildAllocations() : [],
+    });
+  };
 
   return (
     <form onSubmit={handleSubmit} className="flex h-full min-h-0 flex-col">
       <div className="flex-1 overflow-y-auto min-h-0 px-6 py-4">
         <p className="text-sm text-gray-600 mb-6">
-          Record a supplier payment against a purchase invoice or as an advance payment.
+          {isEditMode
+            ? 'Update payment details. The original GL entry will be reversed and re-posted with the new amounts.'
+            : 'Record a supplier payment with automatic FIFO allocation or manual invoice selection.'}
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -221,41 +300,36 @@ const PaySupplierForm: React.FC<PaySupplierFormProps> = ({
             ]}
             required
             error={errors.supplierId}
+            disabled={isEditMode || isLoading}
           />
 
           <FormSelect
-            label="Payment Type"
-            name="paymentType"
-            value={formData.paymentType}
+            label="Payment Category"
+            name="paymentCategory"
+            value={formData.paymentCategory}
             onChange={handleChange}
-            options={PAYMENT_TYPE_OPTIONS}
+            options={PAYMENT_CATEGORY_OPTIONS}
             required
           />
 
-          <div className="md:col-span-2">
-            <FormSelect
-              label="Purchase Invoice"
-              name="purchaseId"
-              value={formData.purchaseId}
-              onChange={handleChange}
-              disabled={!formData.supplierId || loadingInvoices}
-              options={
-                !formData.supplierId
-                  ? [{ label: 'Select a supplier first', value: '' }]
-                  : loadingInvoices
-                    ? [{ label: 'Loading invoices…', value: '' }]
-                    : invoiceOptions
-              }
-              error={errors.purchaseId}
-            />
-          </div>
+          <FormSelect
+            label="Payment Method"
+            name="paymentMethod"
+            value={formData.paymentMethod}
+            onChange={handleChange}
+            options={PAYMENT_METHOD_OPTIONS}
+            required
+          />
 
-          <FormInput
-            label="Reference No"
+          <CodeFieldWithGenerate
+            label="Payment No"
             name="referenceNo"
             value={formData.referenceNo}
-            onChange={handleChange}
-            placeholder="Cheque / transaction reference"
+            onChange={(value) => setFormData((prev) => ({ ...prev, referenceNo: value }))}
+            module={CODE_MODULES.SupplierPayment}
+            branchId={branchId}
+            isEditMode={isEditMode}
+            required
           />
 
           <FormInput
@@ -268,23 +342,16 @@ const PaySupplierForm: React.FC<PaySupplierFormProps> = ({
 
           {formData.supplierId && (
             <div className="md:col-span-2 rounded-lg bg-orange-50 border border-orange-100 px-4 py-3">
-              <p className="text-xs font-medium text-orange-600 uppercase tracking-wide">
-                {isAdvance ? 'Payable Balance' : 'Supplier Balance'}
-              </p>
+              <p className="text-xs font-medium text-orange-600 uppercase tracking-wide">Payable Balance</p>
               <p className="text-xl font-bold text-orange-900 mt-1">
                 {loadingBalance ? 'Loading…' : fmt(balance ?? 0)}
               </p>
-              {selectedInvoice && (
-                <p className="text-sm text-orange-700 mt-1">
-                  Invoice {selectedInvoice.invoiceNo} — balance due: {fmt(selectedInvoice.balanceDue)}
-                </p>
-              )}
             </div>
           )}
 
           <div className="md:col-span-2">
             <label htmlFor="amount" className="block text-sm font-medium text-gray-800 mb-2">
-              Amount ({currencyCode}) <span className="text-red-500 ml-1">*</span>
+              Payment Amount ({currencyCode}) <span className="text-red-500 ml-1">*</span>
             </label>
             <div className="relative">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium">
@@ -299,7 +366,7 @@ const PaySupplierForm: React.FC<PaySupplierFormProps> = ({
                 value={formData.amount}
                 onChange={handleChange}
                 placeholder="0.00"
-                disabled={currencyLoading || isLoading}
+                disabled={currencyLoading || isLoading || !formData.supplierId}
                 className={`w-full pl-10 pr-4 py-3 border rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 transition-colors duration-200 ${
                   errors.amount
                     ? 'border-red-300 focus:ring-red-500 focus:border-red-500'
@@ -307,9 +374,7 @@ const PaySupplierForm: React.FC<PaySupplierFormProps> = ({
                 } ${currencyLoading || isLoading ? 'bg-gray-50 cursor-not-allowed text-gray-500' : 'bg-white'}`}
               />
             </div>
-            {errors.amount && (
-              <p className="mt-1 text-sm text-red-600">{errors.amount}</p>
-            )}
+            {errors.amount && <p className="mt-1 text-sm text-red-600">{errors.amount}</p>}
           </div>
 
           <FormInput
@@ -320,6 +385,24 @@ const PaySupplierForm: React.FC<PaySupplierFormProps> = ({
             onChange={handleChange}
             required
           />
+
+          {formData.supplierId && showInvoiceAllocation && (
+            <PaymentAllocationGrid
+              invoices={outstandingInvoices}
+              mode={formData.allocationMode}
+              paymentAmount={formData.amount}
+              loading={loadingInvoices}
+              fmt={fmt}
+              rows={allocationRows}
+              onRowsChange={setAllocationRows}
+              onModeChange={handleModeChange}
+              accent="orange"
+            />
+          )}
+
+          {errors.allocations && (
+            <p className="md:col-span-2 text-sm text-red-600">{errors.allocations}</p>
+          )}
 
           <div className="md:col-span-2">
             <FormTextarea

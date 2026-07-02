@@ -195,6 +195,14 @@ const ExpensePage: React.FC = () => {
   const columns: Column<ExpenseDto>[] = useMemo(() => {
     const base: Column<ExpenseDto>[] = [
       {
+        key: 'referenceNo',
+        header: 'Expense No',
+        sortable: false,
+        render: (value) => (
+          <span className="font-mono text-sm text-gray-800">{safeString(value) || '—'}</span>
+        ),
+      },
+      {
         key: 'expenseDate',
         header: 'Date',
         sortable: true,
@@ -230,14 +238,6 @@ const ExpensePage: React.FC = () => {
           <Badge variant={METHOD_VARIANT[value as ExpensePaymentMethod] ?? 'secondary'} size="sm" dot>
             {safeString(value)}
           </Badge>
-        ),
-      },
-      {
-        key: 'referenceNo',
-        header: 'Reference',
-        sortable: false,
-        render: (value) => (
-          <span className="font-mono text-xs text-gray-500">{safeString(value) || '—'}</span>
         ),
       },
       {

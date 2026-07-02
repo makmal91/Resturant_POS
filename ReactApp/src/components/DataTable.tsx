@@ -42,6 +42,8 @@ interface DataTableProps<T> {
     label?: string;
     values?: Partial<Record<string, React.ReactNode>>;
   };
+  /** When true, table body scrolls inside the card; header row stays sticky. */
+  fillHeight?: boolean;
 }
 
 function getVisiblePageNumbers(currentPage: number, totalPages: number): number[] {
@@ -81,6 +83,7 @@ function DataTable<T extends Record<string, any>>({
   pageSizeOptions,
   onPageSizeChange,
   footerRow,
+  fillHeight = false,
 }: DataTableProps<T>) {
   const [internalSearchTerm, setInternalSearchTerm] = useState('');
   const [internalCurrentPage, setInternalCurrentPage] = useState(1);
@@ -188,8 +191,12 @@ function DataTable<T extends Record<string, any>>({
 
   if (loading) {
     return (
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="p-8 text-center">
+      <div
+        className={`bg-white rounded-lg shadow-sm border border-gray-200 ${
+          fillHeight ? 'flex h-full min-h-0 flex-col' : ''
+        }`}
+      >
+        <div className={`p-8 text-center ${fillHeight ? 'flex flex-1 items-center justify-center' : ''}`}>
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
           <p className="mt-2 text-gray-600">Loading...</p>
         </div>
@@ -198,9 +205,13 @@ function DataTable<T extends Record<string, any>>({
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+    <div
+      className={`bg-white rounded-lg shadow-sm border border-gray-200 ${
+        fillHeight ? 'flex h-full min-h-0 flex-col overflow-hidden' : ''
+      }`}
+    >
       {searchable && (
-        <div className="p-4 border-b border-gray-200 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="shrink-0 p-4 border-b border-gray-200 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="relative max-w-md w-full">
             <input
               type="text"
@@ -217,7 +228,7 @@ function DataTable<T extends Record<string, any>>({
           </div>
 
           {pageSizeOptions && pageSizeOptions.length > 0 && onPageSizeChange && (
-            <div className="flex items-center gap-2 text-sm text-gray-700">
+            <div className="flex items-center gap-2 text-sm text-gray-700 sm:ml-auto">
               <label htmlFor="page-size-select">Rows per page</label>
               <select
                 id="page-size-select"
@@ -236,9 +247,29 @@ function DataTable<T extends Record<string, any>>({
         </div>
       )}
 
-      <div className="overflow-x-auto">
+      {!searchable && pageSizeOptions && pageSizeOptions.length > 0 && onPageSizeChange && (
+        <div className="shrink-0 px-4 py-3 border-b border-gray-200 flex justify-end">
+          <div className="flex items-center gap-2 text-sm text-gray-700">
+            <label htmlFor="page-size-select">Rows per page</label>
+            <select
+              id="page-size-select"
+              value={pageSize}
+              onChange={(e) => onPageSizeChange(Number(e.target.value))}
+              className="rounded-md border border-gray-300 px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {pageSizeOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
+
+      <div className={fillHeight ? 'min-h-0 flex-1 overflow-auto' : 'overflow-x-auto'}>
         <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+          <thead className={`bg-gray-50 ${fillHeight ? 'sticky top-0 z-10 shadow-sm' : ''}`}>
             <tr>
               {columns.map((column) => (
                 <th
@@ -314,7 +345,7 @@ function DataTable<T extends Record<string, any>>({
               ))
             )}
           </tbody>
-          {footerRow && paginatedData.length > 0 && (
+          {footerRow && (serverSide ? resolvedTotalRecords > 0 : paginatedData.length > 0) && (
             <tfoot>
               <tr className="border-t-2 border-gray-200 bg-gray-50 font-semibold text-gray-800">
                 {columns.map((column, index) => {
@@ -337,7 +368,7 @@ function DataTable<T extends Record<string, any>>({
       </div>
 
       {pagination && (
-        <div className="px-4 py-3 border-t border-gray-200 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="shrink-0 px-4 py-3 border-t border-gray-200 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-sm text-gray-700">
             {resolvedTotalRecords === 0
               ? 'No results found'

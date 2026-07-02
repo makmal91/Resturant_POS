@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using POSSystem.API.Authorization;
 using POSSystem.API.Extensions;
+using POSSystem.Application.Accounting.Interfaces;
 using POSSystem.Application.Auth.Interfaces;
 using POSSystem.Application.Common.Constants;
 using POSSystem.Application.Dashboard.DTOs;
@@ -23,11 +24,16 @@ public class DashboardController : ControllerBase
 
     private readonly POSDbContext _db;
     private readonly IPermissionService _permissionService;
+    private readonly IGlReportingRepository _glReporting;
 
-    public DashboardController(POSDbContext db, IPermissionService permissionService)
+    public DashboardController(
+        POSDbContext db,
+        IPermissionService permissionService,
+        IGlReportingRepository glReporting)
     {
         _db = db;
         _permissionService = permissionService;
+        _glReporting = glReporting;
     }
 
     /// <summary>Personal sales summary for the logged-in user only (cashier / sales person).</summary>
@@ -289,16 +295,6 @@ public class DashboardController : ControllerBase
         if (branch > 0)
             purchaseQuery = purchaseQuery.Where(p => p.BranchId == branch);
 
-        var monthPurchaseQuery = purchaseQuery.Where(p => p.PurchaseDate >= monthStart && p.PurchaseDate < todayEnd);
-
-        var expenseQuery = _db.Expenses.AsNoTracking()
-            .Where(e => e.BusinessId == biz && !e.IsDeleted);
-
-        if (branch > 0)
-            expenseQuery = expenseQuery.Where(e => e.BranchId == branch);
-
-        var monthExpenseQuery = expenseQuery.Where(e => e.ExpenseDate >= monthStart && e.ExpenseDate < todayEnd);
-
         // ─── KPI counts ─────────────────────────────────────────────────────────
 
         var branchCountQuery = _db.Branches.AsNoTracking()
@@ -327,7 +323,27 @@ public class DashboardController : ControllerBase
             .Select(g => new { Total = g.Sum(x => x.GrandTotal), Count = g.Count() })
             .FirstOrDefaultAsync();
 
-        // ─── Profit (monthly) ─────────────────────────────────────────────────────
+        // ─── Profit (monthly) from GL transactions ───────────────────────────────
+
+        var glBranch = branch > 0 ? branch : (int?)null;
+        var periodEnd = todayEnd.AddDays(-1);
+
+        var glMonthlySales = await _glReporting.GetSubtreePeriodNetAsync(
+            glBranch, GlAccountDefaults.Sales, creditNormal: true, monthStart, periodEnd);
+        var glMonthlyCogs = await _glReporting.GetSubtreePeriodNetAsync(
+            glBranch, GlAccountDefaults.CostOfGoodsSold, creditNormal: false, monthStart, periodEnd);
+        var glMonthlyPurchases = await _glReporting.GetTransactionTypeDebitTotalAsync(
+            glBranch, GlTransactionType.Purchase, monthStart, periodEnd);
+        var glMonthlyExpenseTotal = await _glReporting.GetAccountTypeNetAsync(
+            glBranch, AccountType.Expense, monthStart, periodEnd);
+        var glOperatingExpenses = Math.Max(0m, glMonthlyExpenseTotal - glMonthlyCogs);
+        var glGrossProfit = glMonthlySales - glMonthlyCogs;
+        var glNetProfit = glGrossProfit - glOperatingExpenses;
+
+        var glTodaySales = await _glReporting.GetSubtreePeriodNetAsync(
+            glBranch, GlAccountDefaults.Sales, creditNormal: true, todayStart, todayStart);
+
+        // ─── Invoice line items (top products / categories only) ───────────────────
 
         var monthItemQuery = _db.SaleInvoiceItems.AsNoTracking()
             .Include(i => i.Product)
@@ -341,75 +357,62 @@ public class DashboardController : ControllerBase
         if (branch > 0)
             monthItemQuery = monthItemQuery.Where(i => i.BranchId == branch);
 
-        var monthItems = await monthItemQuery
-            .Select(i => new
-            {
-                i.LineTotal,
-                i.BaseQuantity,
-                CostPrice = i.Variant != null && i.Variant.CostPriceOverride.HasValue
-                    ? i.Variant.CostPriceOverride.Value
-                    : i.Product.CostPrice,
-            })
-            .ToListAsync();
-
-        var monthRevenue    = monthItems.Sum(i => i.LineTotal);
-        var monthCogs       = monthItems.Sum(i => i.BaseQuantity * i.CostPrice);
-        var monthGrossProfit = monthRevenue - monthCogs;
-        var monthExpenses   = await monthExpenseQuery.SumAsync(e => (decimal?)e.Amount) ?? 0m;
-        var monthNetProfit  = monthGrossProfit - monthExpenses;
-
         // ─── Stock ────────────────────────────────────────────────────────────────
 
         var stockData = await BuildStockDataAsync(biz, branch);
 
-        // ─── Branch analytics (monthly) ───────────────────────────────────────────
+        // ─── Branch analytics (monthly, from GL) ──────────────────────────────────
 
-        var branchSalesRaw = await monthSalesQuery
+        var branchInvoiceCounts = await monthSalesQuery
             .GroupBy(i => i.BranchId)
             .Select(g => new
             {
                 BranchId     = g.Key,
-                TotalSales   = g.Sum(x => x.GrandTotal),
                 InvoiceCount = g.Count(),
             })
             .ToListAsync();
 
-        var branchIds = branchSalesRaw.Select(b => b.BranchId).ToList();
+        var salesByBranch = await _glReporting.GetSubtreePeriodNetByBranchAsync(
+            GlAccountDefaults.Sales, creditNormal: true, monthStart, periodEnd);
+        var cogsByBranch = await _glReporting.GetSubtreePeriodNetByBranchAsync(
+            GlAccountDefaults.CostOfGoodsSold, creditNormal: false, monthStart, periodEnd);
+        var expenseByBranch = await _glReporting.GetAccountTypeNetByBranchAsync(
+            AccountType.Expense, monthStart, periodEnd);
+
+        var businessBranchIds = await _db.Branches.AsNoTracking()
+            .Where(b => b.BusinessId == biz && !b.IsDeleted)
+            .Select(b => b.Id)
+            .ToListAsync();
+
+        if (branch > 0)
+            businessBranchIds = businessBranchIds.Where(id => id == branch).ToList();
+
+        var branchIds = salesByBranch.Keys
+            .Union(cogsByBranch.Keys)
+            .Union(branchInvoiceCounts.Select(b => b.BranchId))
+            .Intersect(businessBranchIds)
+            .ToList();
+
         var branchNames = await _db.Branches.AsNoTracking()
             .Where(b => branchIds.Contains(b.Id))
             .ToDictionaryAsync(b => b.Id, b => b.Name);
 
-        var branchItemProfits = await monthItemQuery
-            .GroupBy(i => i.BranchId)
-            .Select(g => new
+        var branchAnalytics = branchIds
+            .Select(bid =>
             {
-                BranchId = g.Key,
-                Revenue  = g.Sum(x => x.LineTotal),
-                Cost     = g.Sum(x => x.BaseQuantity * (
-                    x.Variant != null && x.Variant.CostPriceOverride.HasValue
-                        ? x.Variant.CostPriceOverride.Value
-                        : x.Product.CostPrice)),
-            })
-            .ToListAsync();
-
-        var branchExpenses = await monthExpenseQuery
-            .GroupBy(e => e.BranchId)
-            .Select(g => new { BranchId = g.Key, Total = g.Sum(x => x.Amount) })
-            .ToListAsync();
-
-        var branchAnalytics = branchSalesRaw
-            .Select(b =>
-            {
-                var profit = branchItemProfits.FirstOrDefault(p => p.BranchId == b.BranchId);
-                var exp    = branchExpenses.FirstOrDefault(e => e.BranchId == b.BranchId);
-                var gross  = (profit?.Revenue ?? 0m) - (profit?.Cost ?? 0m);
-                var net    = gross - (exp?.Total ?? 0m);
+                var sales = salesByBranch.GetValueOrDefault(bid);
+                var cogs = cogsByBranch.GetValueOrDefault(bid);
+                var expenseTotal = expenseByBranch.GetValueOrDefault(bid);
+                var operating = Math.Max(0m, expenseTotal - cogs);
+                var gross = sales - cogs;
+                var net = gross - operating;
+                var invoiceInfo = branchInvoiceCounts.FirstOrDefault(b => b.BranchId == bid);
                 return new BranchAnalyticsDto
                 {
-                    BranchId     = b.BranchId,
-                    BranchName   = branchNames.GetValueOrDefault(b.BranchId, "Unknown"),
-                    TotalSales   = b.TotalSales,
-                    InvoiceCount = b.InvoiceCount,
+                    BranchId     = bid,
+                    BranchName   = branchNames.GetValueOrDefault(bid, "Unknown"),
+                    TotalSales   = sales,
+                    InvoiceCount = invoiceInfo?.InvoiceCount ?? 0,
                     GrossProfit  = gross,
                     NetProfit    = net,
                 };
@@ -419,34 +422,23 @@ public class DashboardController : ControllerBase
 
         // ─── Financial summary ────────────────────────────────────────────────────
 
-        var totalPurchases = await monthPurchaseQuery.SumAsync(p => (decimal?)p.TotalAmount) ?? 0m;
+        var cashMovements = await _glReporting.GetDailyCashMovementsAsync(
+            branch > 0 ? branch : null,
+            trendStart,
+            todayEnd.AddDays(-1));
 
-        var cashFlowEntries = await _db.CashFlowTransactions.AsNoTracking()
-            .Where(t => t.BusinessId == biz
-                     && t.TransactionDate >= trendStart
-                     && t.TransactionDate < todayEnd)
-            .Where(t => branch <= 0 || t.BranchId == branch)
-            .Select(t => new { t.TransactionDate, t.Amount, t.TransactionType })
-            .ToListAsync();
+        var totalReceivables = await _glReporting.GetPartySubAccountsNetAsync(
+            biz, branch > 0 ? branch : null, AccountType.Asset);
+        var totalPayables = await _glReporting.GetPartySubAccountsNetAsync(
+            biz, branch > 0 ? branch : null, AccountType.Liability);
 
-        var dailyCashFlow = cashFlowEntries
-            .GroupBy(t => t.TransactionDate.Date)
-            .OrderBy(g => g.Key)
-            .Select(g =>
+        var dailyCashFlow = cashMovements
+            .Select(m => new DailyCashFlowDto
             {
-                var cashIn = g.Where(t => t.TransactionType is CashFlowTransactionType.Sale
-                    or CashFlowTransactionType.CashIn
-                    or CashFlowTransactionType.OpeningBalance).Sum(t => t.Amount);
-                var cashOut = g.Where(t => t.TransactionType is CashFlowTransactionType.Expense
-                    or CashFlowTransactionType.CashOut
-                    or CashFlowTransactionType.BankTransfer).Sum(t => t.Amount);
-                return new DailyCashFlowDto
-                {
-                    Date    = g.Key,
-                    CashIn  = cashIn,
-                    CashOut = cashOut,
-                    NetFlow = cashIn - cashOut,
-                };
+                Date    = m.Date,
+                CashIn  = m.CashIn,
+                CashOut = m.CashOut,
+                NetFlow = m.CashIn - m.CashOut,
             })
             .ToList();
 
@@ -655,12 +647,12 @@ public class DashboardController : ControllerBase
             {
                 TotalBranches    = totalBranches,
                 TotalUsers       = totalUsers,
-                TodaySales       = todaySalesAgg?.Total ?? 0m,
+                TodaySales       = glTodaySales,
                 TodayInvoices    = todaySalesAgg?.Count ?? 0,
-                MonthlySales     = monthSalesAgg?.Total ?? 0m,
+                MonthlySales     = glMonthlySales,
                 MonthlyInvoices  = monthSalesAgg?.Count ?? 0,
-                GrossProfit      = monthGrossProfit,
-                NetProfit        = monthNetProfit,
+                GrossProfit      = glGrossProfit,
+                NetProfit        = glNetProfit,
                 StockValue       = stockData.TotalStockValue,
                 LowStockCount    = stockData.LowStockCount,
                 OutOfStockCount  = stockData.OutOfStockCount,
@@ -669,12 +661,14 @@ public class DashboardController : ControllerBase
             Stock           = stockData,
             Financial = new DashboardFinancialDto
             {
-                TotalSales     = monthSalesAgg?.Total ?? 0m,
-                TotalPurchases = totalPurchases,
-                GrossProfit    = monthGrossProfit,
-                TotalExpenses  = monthExpenses,
-                NetProfit      = monthNetProfit,
-                DailyCashFlow  = dailyCashFlow,
+                TotalSales       = glMonthlySales,
+                TotalPurchases   = glMonthlyPurchases,
+                GrossProfit      = glGrossProfit,
+                TotalExpenses    = glOperatingExpenses,
+                NetProfit        = glNetProfit,
+                TotalReceivables = totalReceivables,
+                TotalPayables    = totalPayables,
+                DailyCashFlow    = dailyCashFlow,
             },
             UserActivity = new DashboardUserActivityDto
             {

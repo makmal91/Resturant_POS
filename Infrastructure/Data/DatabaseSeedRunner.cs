@@ -18,6 +18,9 @@ public static class DatabaseSeedRunner
         await UnitMasterDatabaseInitializer.SeedDefaultUnitsAsync(context, logger);
         await VariantMasterDatabaseInitializer.SeedDefaultSizesAndColorsAsync(context, logger);
         await MasterDataDatabaseInitializer.SeedReferenceDataAsync(context, logger);
+        await AccountingDatabaseInitializer.SeedDefaultAccountsAsync(context, logger);
+        await AccountingDatabaseInitializer.BackfillPartyAccountLinksAsync(context, logger);
+        await AccountingDatabaseInitializer.BackfillExpenseCategoryGlLinksAsync(context, logger);
         await CustomerInitializer.SeedWalkInCustomersAsync(context, logger);
         await RolePermissionSeeder.SeedDefaultPermissionsAsync(context, logger);
 

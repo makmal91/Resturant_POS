@@ -40,6 +40,8 @@ using POSSystem.Application.Sales.Interfaces;
 using POSSystem.Application.Sales.Services;
 using POSSystem.Application.Customer.Interfaces;
 using POSSystem.Application.Customer.Services;
+using POSSystem.Application.Accounting.Interfaces;
+using POSSystem.Application.Accounting.Services;
 using POSSystem.Application.CashFlow.Interfaces;
 using POSSystem.Application.CashFlow.Services;
 using POSSystem.Application.Ledger.Interfaces;
@@ -48,6 +50,8 @@ using POSSystem.Application.Payments.Interfaces;
 using POSSystem.Application.Reports.Interfaces;
 using POSSystem.Application.Reports.Services;
 using POSSystem.Application.Payments.Services;
+using POSSystem.Application.Expense.Interfaces;
+using POSSystem.Application.Expense.Services;
 using POSSystem.Application.License.Interfaces;
 using POSSystem.Application.License.Services;
 
@@ -117,11 +121,21 @@ public static class ServiceRegistration
         // Register cash flow service
         services.AddScoped<ICashFlowService, CashFlowService>();
 
+        // General ledger / chart of accounts
+        services.AddScoped<IGlAccountService, GlAccountService>();
+        services.AddScoped<IAccountingService, AccountingService>();
+        services.AddScoped<IAccountingIntegrationService, AccountingIntegrationService>();
+        services.AddScoped<IAccountLedgerService, AccountLedgerService>();
+        services.AddScoped<ITrialBalanceService, TrialBalanceService>();
+
         // Party ledger service
         services.AddScoped<IPartyLedgerService, PartyLedgerService>();
 
         // Invoice payment service
-        services.AddScoped<IInvoicePaymentService, InvoicePaymentService>();
+        services.AddScoped<IInvoicePaymentService, PaymentService>();
+
+        // Expense service
+        services.AddScoped<IExpenseService, ExpenseService>();
 
         // Reports service
         services.AddScoped<IReportService, ReportService>();

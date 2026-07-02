@@ -12,6 +12,8 @@ interface UseReportTableOptions<T> {
   includeDates?: boolean;
   fromDate?: string;
   toDate?: string;
+  customerId?: number;
+  supplierId?: number;
 }
 
 export function useReportTable<T>({
@@ -24,6 +26,8 @@ export function useReportTable<T>({
   includeDates = true,
   fromDate = '',
   toDate = '',
+  customerId,
+  supplierId,
 }: UseReportTableOptions<T>) {
   const [rows, setRows] = useState<T[]>([]);
   const [loading, setLoading] = useState(false);
@@ -54,6 +58,8 @@ export function useReportTable<T>({
         sortColumn,
         sortDirection,
         ...(includeDates ? { fromDate, toDate } : {}),
+        ...(customerId && customerId > 0 ? { customerId } : {}),
+        ...(supplierId && supplierId > 0 ? { supplierId } : {}),
       };
       const res = await fetcher(branchId, params);
       const payload = res.data;
@@ -75,6 +81,8 @@ export function useReportTable<T>({
     includeDates,
     fromDate,
     toDate,
+    customerId,
+    supplierId,
     pageNumber,
     pageSize,
     search,
@@ -89,7 +97,7 @@ export function useReportTable<T>({
 
   useEffect(() => {
     setPageNumber(1);
-  }, [branchId, fromDate, toDate, pageSize]);
+  }, [branchId, fromDate, toDate, pageSize, customerId, supplierId]);
 
   const onSearchChange = (value: string) => {
     setSearch(value);

@@ -25,6 +25,7 @@ public static class PermissionModules
     public const string Expenses = "Expenses";
     public const string CashFlow = "Cash Flow";
     public const string PartyLedger = "Party Ledger";
+    public const string AccountLedger = "Account Ledger";
     public const string Dashboard = "Dashboard";
     public const string Variants = "Variants";
     public const string Barcodes = "Barcodes";
@@ -41,6 +42,7 @@ public static class PermissionModules
     public const string CustomerOutstandingReport = "Customer Outstanding Report";
     public const string SupplierPayableReport = "Supplier Payable Report";
     public const string ProfitLossReport = "Profit & Loss Report";
+    public const string TrialBalanceReport = "Trial Balance Report";
     public const string CustomerReceivableAgingReport = "Customer Receivable Aging";
     public const string SupplierPayableAgingReport = "Supplier Payable Aging";
     public const string SystemSettings = "System Settings";
@@ -79,6 +81,7 @@ public static class PermissionModules
         Expenses,
         CashFlow,
         PartyLedger,
+        AccountLedger,
         Dashboard,
         SalesReports,
         ProductWiseSalesReport,
@@ -87,6 +90,7 @@ public static class PermissionModules
         CustomerOutstandingReport,
         SupplierPayableReport,
         ProfitLossReport,
+        TrialBalanceReport,
         CustomerReceivableAgingReport,
         SupplierPayableAgingReport,
         SystemSettings,

@@ -23,7 +23,9 @@ public class Customer : BaseEntity
     public decimal CreditLimit     { get; set; }
     public int    LoyaltyPoints    { get; set; }
     public bool   IsWalkIn         { get; set; }   // system-protected walk-in customer
+    public int?   AccountId        { get; set; }
 
+    public virtual GlAccount? GlAccount { get; set; }
     public virtual Branch Branch { get; set; } = null!;
     public virtual Country? Country { get; set; }
     public virtual City? City { get; set; }

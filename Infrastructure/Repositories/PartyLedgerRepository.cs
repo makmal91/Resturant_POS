@@ -3,369 +3,253 @@ using POSSystem.Application.Ledger.DTOs;
 using POSSystem.Application.Ledger.Interfaces;
 using POSSystem.Domain;
 using POSSystem.Infrastructure.Data;
+using CustomerEntity = POSSystem.Domain.Customer;
+using SupplierEntity = POSSystem.Domain.Supplier;
 
 namespace POSSystem.Infrastructure.Repositories;
 
+/// <summary>
+/// Party lookup and document-based activity for customer/supplier ledger screens.
+/// </summary>
 public class PartyLedgerRepository : IPartyLedgerRepository
 {
     private readonly POSDbContext _db;
 
     public PartyLedgerRepository(POSDbContext db) => _db = db;
 
-    public Task<CustomerLedgerTransaction> AddCustomerEntryAsync(CustomerLedgerTransaction entry)
-    {
-        _db.CustomerLedgerTransactions.Add(entry);
-        return Task.FromResult(entry);
-    }
-
-    public Task<SupplierLedgerTransaction> AddSupplierEntryAsync(SupplierLedgerTransaction entry)
-    {
-        _db.SupplierLedgerTransactions.Add(entry);
-        return Task.FromResult(entry);
-    }
-
-    public async Task<decimal> GetCustomerRunningBalanceAsync(int customerId, int businessId, int branchId)
-    {
-        var openingBalance = await GetCustomerOpeningBalanceAsync(customerId, businessId, branchId);
-        var entries = await GetCustomerLedgerTotalsAsync(customerId, businessId, branchId);
-        return CalculateBalance(openingBalance, entries);
-    }
-
-    public async Task<decimal> GetSupplierRunningBalanceAsync(int supplierId, int businessId, int branchId)
-    {
-        var entries = await GetSupplierLedgerTotalsAsync(supplierId, businessId, branchId);
-        return CalculateBalance(0m, entries);
-    }
-
-    public Task<List<CustomerLedgerTransaction>> GetCustomerEntriesByReferenceAsync(
-        int referenceId, int businessId, int branchId, CustomerLedgerTransactionType type)
-    {
-        return _db.CustomerLedgerTransactions
-            .AsNoTracking()
-            .Where(t => t.ReferenceId == referenceId
-                        && t.BusinessId == businessId
-                        && t.BranchId == branchId
-                        && t.Type == type)
-            .ToListAsync();
-    }
-
-    public Task<List<SupplierLedgerTransaction>> GetSupplierEntriesByReferenceAsync(
-        int referenceId, int businessId, int branchId, SupplierLedgerTransactionType type)
-    {
-        return _db.SupplierLedgerTransactions
-            .AsNoTracking()
-            .Where(t => t.ReferenceId == referenceId
-                        && t.BusinessId == businessId
-                        && t.BranchId == branchId
-                        && t.Type == type)
-            .ToListAsync();
-    }
-
-    public Task<Customer?> GetCustomerAsync(int customerId, int businessId, int branchId)
-    {
-        return _db.Customers
-            .AsNoTracking()
-            .IgnoreQueryFilters()
+    public Task<CustomerEntity?> GetCustomerAsync(int customerId, int businessId, int branchId) =>
+        _db.Customers.AsNoTracking()
             .FirstOrDefaultAsync(c =>
-                c.Id == customerId &&
-                !c.IsDeleted &&
-                c.BusinessId == businessId &&
-                c.BranchId == branchId);
-    }
+                c.Id == customerId
+                && c.BusinessId == businessId
+                && c.BranchId == branchId
+                && !c.IsDeleted);
 
-    public Task<Supplier?> GetSupplierAsync(int supplierId, int businessId, int branchId)
+    public Task<SupplierEntity?> GetSupplierAsync(int supplierId, int businessId, int branchId) =>
+        _db.Suppliers.AsNoTracking()
+            .FirstOrDefaultAsync(s =>
+                s.Id == supplierId
+                && s.BusinessId == businessId
+                && s.BranchId == branchId
+                && !s.IsDeleted);
+
+    public async Task<List<PartyLedgerSourceDto>> GetSupplierActivityAsync(
+        int supplierId, int businessId, int branchId, bool includeReversals)
     {
-        return _db.Suppliers
-            .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.Id == supplierId && s.BusinessId == businessId && s.BranchId == branchId);
-    }
+        var sources = new List<PartyLedgerSourceDto>();
 
-    public async Task<PartyLedgerPageDto> GetCustomerLedgerPagedAsync(PartyLedgerFilterDto filter)
-    {
-        var customer = await GetCustomerAsync(filter.PartyId, filter.BusinessId, filter.BranchId)
-            ?? throw new InvalidOperationException("Customer not found.");
-
-        var query = _db.CustomerLedgerTransactions
-            .AsNoTracking()
-            .Where(t => t.CustomerId == filter.PartyId
-                        && t.BusinessId == filter.BusinessId
-                        && t.BranchId == filter.BranchId);
-
-        if (filter.FromDate.HasValue)
-            query = query.Where(t => t.Date >= filter.FromDate.Value.Date);
-
-        if (filter.ToDate.HasValue)
-            query = query.Where(t => t.Date < filter.ToDate.Value.Date.AddDays(1));
-
-        var transactions = await query
-            .OrderBy(t => t.Date)
-            .ThenBy(t => t.Id)
+        var purchases = await _db.Purchases.AsNoTracking()
+            .Where(p => p.SupplierId == supplierId
+                        && p.BusinessId == businessId
+                        && p.BranchId == branchId
+                        && !p.IsDeleted
+                        && p.Status == PurchaseStatus.Posted)
+            .OrderBy(p => p.PurchaseDate)
+            .ThenBy(p => p.Id)
+            .Select(p => new { p.Id, p.InvoiceNo, p.PurchaseDate, p.TotalAmount, p.IsCreditPurchase, p.Notes })
             .ToListAsync();
 
-        var openingBalance = await GetCustomerOpeningBalanceAsync(filter.PartyId, filter.BusinessId, filter.BranchId);
-        var entries = BuildCustomerLedgerEntries(SortCustomerTransactions(transactions), openingBalance);
-
-        var totalRecords = entries.Count;
-        var pageSize = filter.PageSize > 0 ? filter.PageSize : 50;
-        var page = filter.Page > 0 ? filter.Page : 1;
-        var totalPages = totalRecords == 0 ? 0 : (int)Math.Ceiling(totalRecords / (double)pageSize);
-
-        var pagedEntries = entries
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .ToList();
-
-        var currentBalance = await GetCustomerRunningBalanceAsync(filter.PartyId, filter.BusinessId, filter.BranchId);
-
-        return new PartyLedgerPageDto
+        foreach (var purchase in purchases)
         {
-            PartyId = filter.PartyId,
-            PartyName = customer.Name,
-            CurrentBalance = currentBalance,
-            Entries = pagedEntries,
-            TotalRecords = totalRecords,
-            TotalPages = totalPages,
-            CurrentPage = page
-        };
-    }
-
-    public async Task<PartyLedgerPageDto> GetSupplierLedgerPagedAsync(PartyLedgerFilterDto filter)
-    {
-        var supplier = await GetSupplierAsync(filter.PartyId, filter.BusinessId, filter.BranchId)
-            ?? throw new InvalidOperationException("Supplier not found.");
-
-        var query = _db.SupplierLedgerTransactions
-            .AsNoTracking()
-            .Where(t => t.SupplierId == filter.PartyId
-                        && t.BusinessId == filter.BusinessId
-                        && t.BranchId == filter.BranchId);
-
-        if (filter.FromDate.HasValue)
-            query = query.Where(t => t.Date >= filter.FromDate.Value.Date);
-
-        if (filter.ToDate.HasValue)
-            query = query.Where(t => t.Date < filter.ToDate.Value.Date.AddDays(1));
-
-        var transactions = await query
-            .OrderBy(t => t.Date)
-            .ThenBy(t => t.Id)
-            .ToListAsync();
-
-        var entries = BuildSupplierLedgerEntries(SortSupplierTransactions(transactions));
-
-        var totalRecords = entries.Count;
-        var pageSize = filter.PageSize > 0 ? filter.PageSize : 50;
-        var page = filter.Page > 0 ? filter.Page : 1;
-        var totalPages = totalRecords == 0 ? 0 : (int)Math.Ceiling(totalRecords / (double)pageSize);
-
-        var pagedEntries = entries
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .ToList();
-
-        var currentBalance = await GetSupplierRunningBalanceAsync(filter.PartyId, filter.BusinessId, filter.BranchId);
-
-        return new PartyLedgerPageDto
-        {
-            PartyId = filter.PartyId,
-            PartyName = supplier.Name,
-            CurrentBalance = currentBalance,
-            Entries = pagedEntries,
-            TotalRecords = totalRecords,
-            TotalPages = totalPages,
-            CurrentPage = page
-        };
-    }
-
-    public Task SaveChangesAsync() => _db.SaveChangesAsync();
-
-    private async Task<decimal> GetCustomerOpeningBalanceAsync(int customerId, int businessId, int branchId)
-    {
-        var hasOpeningEntry = await _db.CustomerLedgerTransactions
-            .AsNoTracking()
-            .AnyAsync(t => t.CustomerId == customerId
-                           && t.BusinessId == businessId
-                           && t.BranchId == branchId
-                           && t.Type == CustomerLedgerTransactionType.OpeningBalance);
-
-        if (hasOpeningEntry)
-            return 0m;
-
-        var openingBalance = await _db.Customers
-            .AsNoTracking()
-            .IgnoreQueryFilters()
-            .Where(c => c.Id == customerId && !c.IsDeleted && c.BusinessId == businessId && c.BranchId == branchId)
-            .Select(c => (decimal?)c.OpeningBalance)
-            .FirstOrDefaultAsync();
-
-        return openingBalance ?? 0m;
-    }
-
-    private async Task<List<LedgerAmountRow>> GetCustomerLedgerTotalsAsync(int customerId, int businessId, int branchId)
-    {
-        var rows = await _db.CustomerLedgerTransactions
-            .AsNoTracking()
-            .Where(t => t.CustomerId == customerId && t.BusinessId == businessId && t.BranchId == branchId)
-            .Select(t => new CustomerLedgerSortRow
+            var isCredit = purchase.IsCreditPurchase;
+            sources.Add(new PartyLedgerSourceDto
             {
-                Id = t.Id,
-                Date = t.Date,
-                Type = t.Type,
-                Debit = t.Debit,
-                Credit = t.Credit
-            })
-            .ToListAsync();
-
-        return SortCustomerAmountRows(rows);
-    }
-
-    private async Task<List<LedgerAmountRow>> GetSupplierLedgerTotalsAsync(int supplierId, int businessId, int branchId)
-    {
-        var rows = await _db.SupplierLedgerTransactions
-            .AsNoTracking()
-            .Where(t => t.SupplierId == supplierId && t.BusinessId == businessId && t.BranchId == branchId)
-            .Select(t => new SupplierLedgerSortRow
-            {
-                Id = t.Id,
-                Date = t.Date,
-                Type = t.Type,
-                Debit = t.Debit,
-                Credit = t.Credit
-            })
-            .ToListAsync();
-
-        return SortSupplierAmountRows(rows);
-    }
-
-    private static List<CustomerLedgerTransaction> SortCustomerTransactions(IReadOnlyList<CustomerLedgerTransaction> transactions)
-    {
-        return transactions
-            .OrderBy(t => GetEffectiveCustomerLedgerDate(t.Date, t.Type))
-            .ThenBy(t => t.Id)
-            .ToList();
-    }
-
-    private static List<SupplierLedgerTransaction> SortSupplierTransactions(IReadOnlyList<SupplierLedgerTransaction> transactions)
-    {
-        return transactions
-            .OrderBy(t => GetEffectiveSupplierLedgerDate(t.Date, t.Type))
-            .ThenBy(t => t.Id)
-            .ToList();
-    }
-
-    private static List<LedgerAmountRow> SortCustomerAmountRows(IReadOnlyList<CustomerLedgerSortRow> rows)
-    {
-        return rows
-            .OrderBy(t => GetEffectiveCustomerLedgerDate(t.Date, t.Type))
-            .ThenBy(t => t.Id)
-            .Select(t => new LedgerAmountRow { Debit = t.Debit, Credit = t.Credit })
-            .ToList();
-    }
-
-    private static List<LedgerAmountRow> SortSupplierAmountRows(IReadOnlyList<SupplierLedgerSortRow> rows)
-    {
-        return rows
-            .OrderBy(t => GetEffectiveSupplierLedgerDate(t.Date, t.Type))
-            .ThenBy(t => t.Id)
-            .Select(t => new LedgerAmountRow { Debit = t.Debit, Credit = t.Credit })
-            .ToList();
-    }
-
-    private static DateTime GetEffectiveCustomerLedgerDate(DateTime date, CustomerLedgerTransactionType type)
-    {
-        if (type == CustomerLedgerTransactionType.PaymentReceived && date.TimeOfDay == TimeSpan.Zero)
-            return date.Date.AddDays(1).AddTicks(-1);
-
-        return date;
-    }
-
-    private static DateTime GetEffectiveSupplierLedgerDate(DateTime date, SupplierLedgerTransactionType type)
-    {
-        if (type == SupplierLedgerTransactionType.PaymentMade && date.TimeOfDay == TimeSpan.Zero)
-            return date.Date.AddDays(1).AddTicks(-1);
-
-        return date;
-    }
-
-    private static decimal CalculateBalance(decimal openingBalance, IReadOnlyList<LedgerAmountRow> entries)
-    {
-        var balance = openingBalance;
-        foreach (var entry in entries)
-            balance += entry.Debit - entry.Credit;
-        return balance;
-    }
-
-    private static List<PartyLedgerEntryDto> BuildCustomerLedgerEntries(
-        IReadOnlyList<CustomerLedgerTransaction> transactions, decimal openingBalance)
-    {
-        var entries = new List<PartyLedgerEntryDto>(transactions.Count);
-        var running = openingBalance;
-
-        foreach (var transaction in transactions)
-        {
-            running += transaction.Debit - transaction.Credit;
-            entries.Add(new PartyLedgerEntryDto
-            {
-                Id = transaction.Id,
-                Date = transaction.Date,
-                Type = transaction.Type.ToString(),
-                Description = transaction.Remarks,
-                Debit = transaction.Debit,
-                Credit = transaction.Credit,
-                RunningBalance = running,
-                ReferenceId = transaction.ReferenceId
+                Id = purchase.Id,
+                Date = purchase.PurchaseDate,
+                Type = isCredit
+                    ? nameof(SupplierLedgerTransactionType.CreditPurchase)
+                    : nameof(SupplierLedgerTransactionType.CashPurchase),
+                Description = BuildPurchaseDescription(purchase.InvoiceNo, purchase.Notes, isCredit),
+                Amount = purchase.TotalAmount,
+                ReferenceId = purchase.Id,
+                AffectsBalance = isCredit,
             });
         }
 
-        return entries;
+        sources.AddRange(await LoadSupplierPaymentsAsync(
+            supplierId, businessId, branchId, includeReversals));
+
+        return sources;
     }
 
-    private static List<PartyLedgerEntryDto> BuildSupplierLedgerEntries(
-        IReadOnlyList<SupplierLedgerTransaction> transactions)
+    public async Task<List<PartyLedgerSourceDto>> GetCustomerActivityAsync(
+        int customerId, int businessId, int branchId, bool includeReversals)
     {
-        var entries = new List<PartyLedgerEntryDto>(transactions.Count);
-        var running = 0m;
+        var sources = new List<PartyLedgerSourceDto>();
 
-        foreach (var transaction in transactions)
+        var sales = await _db.SaleInvoices.AsNoTracking()
+            .Where(s => s.CustomerId == customerId
+                        && s.BusinessId == businessId
+                        && s.BranchId == branchId
+                        && !s.IsDeleted
+                        && s.Status == SaleInvoiceStatus.Completed)
+            .OrderBy(s => s.SaleDate)
+            .ThenBy(s => s.Id)
+            .Select(s => new { s.Id, s.InvoiceNo, s.SaleDate, s.GrandTotal, s.IsCreditSale, s.Notes })
+            .ToListAsync();
+
+        foreach (var sale in sales)
         {
-            running += transaction.Debit - transaction.Credit;
-            entries.Add(new PartyLedgerEntryDto
+            var isCredit = sale.IsCreditSale;
+            sources.Add(new PartyLedgerSourceDto
             {
-                Id = transaction.Id,
-                Date = transaction.Date,
-                Type = transaction.Type.ToString(),
-                Description = transaction.Remarks,
-                Debit = transaction.Debit,
-                Credit = transaction.Credit,
-                RunningBalance = running,
-                ReferenceId = transaction.ReferenceId
+                Id = sale.Id,
+                Date = sale.SaleDate,
+                Type = isCredit
+                    ? nameof(CustomerLedgerTransactionType.CreditSale)
+                    : nameof(CustomerLedgerTransactionType.CashSale),
+                Description = BuildSaleDescription(sale.InvoiceNo, sale.Notes, isCredit),
+                Amount = sale.GrandTotal,
+                ReferenceId = sale.Id,
+                AffectsBalance = isCredit,
             });
         }
 
-        return entries;
+        sources.AddRange(await LoadCustomerPaymentsAsync(
+            customerId, businessId, branchId, includeReversals));
+
+        return sources;
     }
 
-    private sealed class LedgerAmountRow
+    private async Task<List<PartyLedgerSourceDto>> LoadSupplierPaymentsAsync(
+        int supplierId, int businessId, int branchId, bool includeReversals)
     {
-        public decimal Debit { get; init; }
-        public decimal Credit { get; init; }
+        var query = _db.InvoicePayments.AsNoTracking()
+            .Include(p => p.Allocations.Where(a => !a.IsDeleted))
+            .ThenInclude(a => a.Purchase)
+            .Include(p => p.Purchase)
+            .Where(p => p.SupplierId == supplierId
+                        && p.BusinessId == businessId
+                        && p.BranchId == branchId
+                        && p.Module == InvoicePaymentModule.Purchase
+                        && !p.IsDeleted);
+
+        if (!includeReversals)
+            query = query.Where(p => !p.IsReversed);
+
+        var payments = await query
+            .OrderBy(p => p.PaymentDate)
+            .ThenBy(p => p.Id)
+            .ToListAsync();
+
+        return payments.Select(MapSupplierPayment).ToList();
     }
 
-    private sealed class CustomerLedgerSortRow
+    private async Task<List<PartyLedgerSourceDto>> LoadCustomerPaymentsAsync(
+        int customerId, int businessId, int branchId, bool includeReversals)
     {
-        public int Id { get; init; }
-        public DateTime Date { get; init; }
-        public CustomerLedgerTransactionType Type { get; init; }
-        public decimal Debit { get; init; }
-        public decimal Credit { get; init; }
+        var query = _db.InvoicePayments.AsNoTracking()
+            .Include(p => p.Allocations.Where(a => !a.IsDeleted))
+            .ThenInclude(a => a.SaleInvoice)
+            .Include(p => p.SaleInvoice)
+            .Where(p => p.CustomerId == customerId
+                        && p.BusinessId == businessId
+                        && p.BranchId == branchId
+                        && p.Module == InvoicePaymentModule.Sale
+                        && !p.IsDeleted);
+
+        if (!includeReversals)
+            query = query.Where(p => !p.IsReversed);
+
+        var payments = await query
+            .OrderBy(p => p.PaymentDate)
+            .ThenBy(p => p.Id)
+            .ToListAsync();
+
+        return payments.Select(MapCustomerPayment).ToList();
     }
 
-    private sealed class SupplierLedgerSortRow
+    private static PartyLedgerSourceDto MapSupplierPayment(InvoicePayment payment)
     {
-        public int Id { get; init; }
-        public DateTime Date { get; init; }
-        public SupplierLedgerTransactionType Type { get; init; }
-        public decimal Debit { get; init; }
-        public decimal Credit { get; init; }
+        var allocations = payment.Allocations
+            .Where(a => !a.IsDeleted && a.PurchaseId.HasValue)
+            .Select(a => new PartyLedgerInvoiceAllocationDto
+            {
+                InvoiceId = a.PurchaseId!.Value,
+                InvoiceNo = a.Purchase?.InvoiceNo ?? string.Empty,
+                AppliedAmount = a.AppliedAmount,
+            })
+            .ToList();
+
+        return new PartyLedgerSourceDto
+        {
+            Id = payment.Id,
+            Date = payment.PaymentDate,
+            Type = payment.IsReversed
+                ? nameof(SupplierLedgerTransactionType.Reversal)
+                : nameof(SupplierLedgerTransactionType.PaymentMade),
+            Description = BuildPaymentDescription(payment, allocations, isCustomer: false),
+            Amount = payment.Amount,
+            ReferenceId = payment.PurchaseId ?? payment.Id,
+            PaymentId = payment.Id,
+            AffectsBalance = true,
+            IsReversal = payment.IsReversed,
+            HasInvoiceBreakdown = allocations.Count > 0,
+            InvoiceAllocations = allocations,
+        };
+    }
+
+    private static PartyLedgerSourceDto MapCustomerPayment(InvoicePayment payment)
+    {
+        var allocations = payment.Allocations
+            .Where(a => !a.IsDeleted && a.SaleInvoiceId.HasValue)
+            .Select(a => new PartyLedgerInvoiceAllocationDto
+            {
+                InvoiceId = a.SaleInvoiceId!.Value,
+                InvoiceNo = a.SaleInvoice?.InvoiceNo ?? string.Empty,
+                AppliedAmount = a.AppliedAmount,
+            })
+            .ToList();
+
+        return new PartyLedgerSourceDto
+        {
+            Id = payment.Id,
+            Date = payment.PaymentDate,
+            Type = payment.IsReversed
+                ? nameof(CustomerLedgerTransactionType.Reversal)
+                : nameof(CustomerLedgerTransactionType.PaymentReceived),
+            Description = BuildPaymentDescription(payment, allocations, isCustomer: true),
+            Amount = payment.Amount,
+            ReferenceId = payment.SaleInvoiceId ?? payment.Id,
+            PaymentId = payment.Id,
+            AffectsBalance = true,
+            IsReversal = payment.IsReversed,
+            HasInvoiceBreakdown = allocations.Count > 0,
+            InvoiceAllocations = allocations,
+        };
+    }
+
+    private static string BuildPurchaseDescription(string invoiceNo, string? notes, bool isCredit)
+    {
+        var prefix = isCredit ? "Credit purchase" : "Cash purchase";
+        var text = $"{prefix} — {invoiceNo}";
+        return string.IsNullOrWhiteSpace(notes) ? text : $"{text} | {notes.Trim()}";
+    }
+
+    private static string BuildSaleDescription(string invoiceNo, string? notes, bool isCredit)
+    {
+        var prefix = isCredit ? "Credit sale" : "Cash sale";
+        var text = $"{prefix} — {invoiceNo}";
+        return string.IsNullOrWhiteSpace(notes) ? text : $"{text} | {notes.Trim()}";
+    }
+
+    private static string BuildPaymentDescription(
+        InvoicePayment payment,
+        IReadOnlyList<PartyLedgerInvoiceAllocationDto> allocations,
+        bool isCustomer)
+    {
+        if (!string.IsNullOrWhiteSpace(payment.Notes))
+            return payment.Notes.Trim();
+
+        if (allocations.Count == 1)
+            return $"Invoice: {allocations[0].InvoiceNo}";
+
+        if (payment.PurchaseId.HasValue && payment.Purchase != null)
+            return $"Invoice: {payment.Purchase.InvoiceNo}";
+
+        if (payment.SaleInvoiceId.HasValue && payment.SaleInvoice != null)
+            return $"Invoice: {payment.SaleInvoice.InvoiceNo}";
+
+        return isCustomer ? "Payment received" : "Payment made";
     }
 }

@@ -112,6 +112,7 @@ public static class DatabaseBootstrapper
             ("CashFlow", CashFlowDatabaseInitializer.EnsureSchemaAsync),
             ("PartyLedger", PartyLedgerInitializer.EnsureSchemaAsync),
             ("InvoicePayment", InvoicePaymentInitializer.EnsureSchemaAsync),
+            ("Accounting", AccountingDatabaseInitializer.EnsureSchemaAsync),
             ("MasterData", MasterDataDatabaseInitializer.EnsureSchemaAsync),
         };
 

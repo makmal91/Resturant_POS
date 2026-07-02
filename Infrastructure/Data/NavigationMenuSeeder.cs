@@ -49,15 +49,17 @@ public static class NavigationMenuSeeder
         new("Stock", "/stock", "St", "Stock", "Operations", 5),
         new("Reports", "/reports", "Rp", "Reports", "Operations", 6),
         new("Orders", "/orders", "O", "Orders", "Operations", 7),
-        new("Expenses", "/expenses", "Exp", "Expenses", "Accounts", 1),
+        new("Expenses", "/finance/expenses", "Exp", "Expenses", "Accounts", 1),
         new("Expense Categories", "/expenses/categories", "expensecategories", "Expense Categories", "Accounts", 2),
         new("Cash Dashboard", "/cashflow", "CF", "Cash Flow", "Accounts", 3),
         new("Cash Ledger", "/cashflow/ledger", "CFL", "Cash Flow", "Accounts", 4),
         new("Cash Summary", "/cashflow/summary", "CFS", "Cash Flow", "Accounts", 5),
-        new("Receive Payment", "/ledger/customers", "RP", "Party Ledger", "Accounts", 6),
-        new("Pay Supplier", "/ledger/suppliers", "PS", "Party Ledger", "Accounts", 7),
-        new("Customer Ledger", "/ledger/customers", "CL", "Party Ledger", "Accounts", 8),
-        new("Supplier Ledger", "/ledger/suppliers", "SL", "Party Ledger", "Accounts", 9)
+        new("Journal Vouchers", "/finance/journal-vouchers", "JV", "Cash Flow", "Accounts", 6),
+        new("Receivables", "/finance/receivables", "RCV", "Party Ledger", "Accounts", 7),
+        new("Payables", "/finance/payables", "PAY", "Party Ledger", "Accounts", 8),
+        new("Customer Ledger", "/ledger/customers", "CL", "Party Ledger", "Accounts", 9),
+        new("Supplier Ledger", "/ledger/suppliers", "SL", "Party Ledger", "Accounts", 10),
+        new("Account Ledger", "/accounting/ledger", "AL", "Account Ledger", "Accounts", 11)
     ];
 
     public static async Task SeedDefaultMenusAsync(POSDbContext context, ILogger logger)
@@ -111,8 +113,13 @@ public static class NavigationMenuSeeder
         ("/cashflow", "CF"),
         ("/cashflow/ledger", "CFL"),
         ("/cashflow/summary", "CFS"),
+        ("/finance/journal-vouchers", "JV"),
+        ("/finance/payables", "PAY"),
+        ("/finance/receivables", "RCV"),
+        ("/finance/expenses", "Exp"),
         ("/ledger/customers", "CL"),
         ("/ledger/suppliers", "SL"),
+        ("/accounting/ledger", "AL"),
     ];
 
     private static async Task PatchExistingMenusAsync(POSDbContext context, ILogger logger)
@@ -161,6 +168,63 @@ public static class NavigationMenuSeeder
             """
             UPDATE [Menus] SET [ModuleName] = N'Dashboard'
             WHERE [Route] = N'/' AND ([ModuleName] IS NULL OR [ModuleName] = N'POS Billing');
+            """);
+
+        await ExecuteRawSeedAsync(
+            context,
+            logger,
+            "Migrate finance action menus",
+            """
+            UPDATE [Menus] SET
+                [Route] = N'/finance/receivables',
+                [Name] = N'Receivables',
+                [Icon] = N'RCV',
+                [IsActive] = 1
+            WHERE [Name] = N'Receive Payment';
+
+            UPDATE [Menus] SET
+                [Route] = N'/finance/payables',
+                [Name] = N'Payables',
+                [Icon] = N'PAY',
+                [IsActive] = 1
+            WHERE [Name] = N'Pay Supplier';
+
+            UPDATE [Menus] SET [Route] = N'/finance/expenses'
+            WHERE [Route] = N'/expenses' AND [Name] = N'Expenses';
+
+            IF NOT EXISTS (SELECT 1 FROM [Menus] WHERE [Route] = N'/finance/journal-vouchers')
+            BEGIN
+                INSERT INTO [Menus] ([Name], [Route], [Icon], [ModuleName], [ParentId], [DisplayOrder], [IsActive])
+                SELECT N'Journal Vouchers', N'/finance/journal-vouchers', N'JV', N'Cash Flow', parent.[Id], 6, 1
+                FROM [Menus] AS parent
+                WHERE parent.[Name] = N'Accounts' AND parent.[ParentId] IS NULL AND parent.[Route] IS NULL;
+            END
+            ELSE
+            BEGIN
+                UPDATE [Menus] SET
+                    [Name] = N'Journal Vouchers',
+                    [Icon] = N'JV',
+                    [ModuleName] = N'Cash Flow',
+                    [IsActive] = 1
+                WHERE [Route] = N'/finance/journal-vouchers';
+            END
+
+            IF NOT EXISTS (SELECT 1 FROM [Menus] WHERE [Route] = N'/accounting/ledger')
+            BEGIN
+                INSERT INTO [Menus] ([Name], [Route], [Icon], [ModuleName], [ParentId], [DisplayOrder], [IsActive])
+                SELECT N'Account Ledger', N'/accounting/ledger', N'AL', N'Account Ledger', parent.[Id], 11, 1
+                FROM [Menus] AS parent
+                WHERE parent.[Name] = N'Accounts' AND parent.[ParentId] IS NULL AND parent.[Route] IS NULL;
+            END
+            ELSE
+            BEGIN
+                UPDATE [Menus] SET
+                    [Name] = N'Account Ledger',
+                    [Icon] = N'AL',
+                    [ModuleName] = N'Account Ledger',
+                    [IsActive] = 1
+                WHERE [Route] = N'/accounting/ledger';
+            END
             """);
 
         foreach (var (route, icon) in IconPatches)

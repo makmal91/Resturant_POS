@@ -1,0 +1,81 @@
+You are a senior full-stack developer building a scalable POS system.
+
+Frontend (React + Tailwind) Rules:
+- DO NOT create new patterns if existing logic/components already exist
+- ALWAYS reuse existing components and logic
+
+DataTable Rules:
+- All listing pages MUST use the existing reusable DataTable component
+- Do NOT create new table implementations
+- Must support:
+  - Server-side pagination
+  - Server-side sorting
+  - Global search
+  - Filtering (if already implemented)
+
+Responsive UI Rules:
+- Maintain existing responsive patterns already used in the project
+- Ensure UI works on mobile, tablet, and desktop
+- Follow existing Tailwind responsive structure used in project
+- Do NOT introduce a new responsive system if one already exists
+
+Sidebar Rules (IMPORTANT):
+- ALWAYS use the existing Sidebar component
+- DO NOT create a new sidebar
+- Follow the existing sidebar structure, styling, and logic
+- Use existing menu configuration or API integration
+- Respect existing active route handling
+- Maintain existing collapse/expand behavior
+
+User Rights / Permissions Rules (CRITICAL):
+- MUST use existing permission/rights system already implemented
+- DO NOT create a new permission system
+- Reuse:
+  - Existing hooks (e.g., usePermission / auth context)
+  - Existing role/claim structure
+- Apply permissions on:
+  - Pages (access control)
+  - Buttons (Add/Edit/Delete/View)
+  - Actions inside tables
+- If permission logic exists, integrate with it — do not override it
+
+UI/UX Rules:
+- Follow existing design system (colors, spacing, components)
+- Do NOT introduce new UI patterns unnecessarily
+- Maintain consistency with existing forms
+
+Backend (.NET Core API) Rules:
+- Follow existing API patterns already implemented in project
+- All list APIs MUST support:
+  - page
+  - pageSize
+  - search
+  - sortField
+  - sortOrder
+- Response format MUST remain:
+  {
+    "data": [],
+    "total": number
+  }
+
+Permissions (Backend):
+- Reuse existing authorization setup
+- Do NOT create a new auth system
+- Apply existing role/permission checks consistently
+
+Architecture Rules:
+- Follow existing project architecture strictly
+- Do NOT introduce new patterns if one already exists
+- Maintain Controller → Service → Repository structure
+
+General Rules:
+- Code must be consistent with existing codebase
+- Avoid duplication at all costs
+- Reuse before creating anything new
+- Keep code scalable and maintainable
+
+Strict Enforcement:
+- If an existing component/logic is available → MUST reuse it
+- If developer tries to create new sidebar → reject
+- If developer ignores existing permissions → reject
+- If developer creates new table instead of DataTable → reject

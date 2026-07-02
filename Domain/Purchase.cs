@@ -7,6 +7,8 @@ public class Purchase : BaseEntity
     public int WarehouseId { get; set; }
     public DateTime PurchaseDate { get; set; } = DateTime.UtcNow;
     public decimal TotalAmount { get; set; }
+    public decimal PaidAmount { get; set; }
+    public InvoiceSettlementStatus SettlementStatus { get; set; } = InvoiceSettlementStatus.Pending;
     public PurchaseStatus Status { get; set; } = PurchaseStatus.Draft;
     public string Notes { get; set; } = string.Empty;
     public DateTime? VoidedAt    { get; set; }

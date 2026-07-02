@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using POSSystem.Application.Accounting.Interfaces;
+using POSSystem.Application.Payments.Interfaces;
 using POSSystem.Application.Reports.DTOs;
 using POSSystem.Application.Reports.Interfaces;
 using POSSystem.Domain;
@@ -9,8 +11,18 @@ namespace POSSystem.Infrastructure.Repositories;
 public class ReportRepository : IReportRepository
 {
     private readonly POSDbContext _db;
+    private readonly IInvoicePaymentRepository _invoicePayments;
+    private readonly IGlReportingRepository _glReporting;
 
-    public ReportRepository(POSDbContext db) => _db = db;
+    public ReportRepository(
+        POSDbContext db,
+        IInvoicePaymentRepository invoicePayments,
+        IGlReportingRepository glReporting)
+    {
+        _db = db;
+        _invoicePayments = invoicePayments;
+        _glReporting = glReporting;
+    }
 
     public async Task<ReportPagedResultDto<SalesReportRowDto>> GetSalesReportAsync(ReportFilterDto filter)
     {
@@ -93,74 +105,62 @@ public class ReportRepository : IReportRepository
                 p.Supplier.Name.ToLower().Contains(term));
         }
 
-        var projected = query.Select(p => new PurchaseReportRowDto
+        var purchaseRows = await query
+            .Select(p => new
+            {
+                p.Id,
+                p.InvoiceNo,
+                p.PurchaseDate,
+                p.SupplierId,
+                SupplierName = p.Supplier.Name,
+                p.TotalAmount,
+                Status = p.Status.ToString(),
+                p.IsCreditPurchase,
+                p.BranchId
+            })
+            .ToListAsync();
+
+        var paidTotals = new Dictionary<int, decimal>();
+        foreach (var branchGroup in purchaseRows.GroupBy(p => p.BranchId))
         {
-            Id = p.Id,
-            InvoiceNo = p.InvoiceNo,
-            PurchaseDate = p.PurchaseDate,
-            SupplierId = p.SupplierId,
-            SupplierName = p.Supplier.Name,
-            TotalAmount = p.TotalAmount,
-            PaidAmount = p.Payments.Sum(x => x.Amount),
-            BalanceDue = p.TotalAmount - p.Payments.Sum(x => x.Amount),
-            Status = p.Status.ToString(),
-            IsCreditPurchase = p.IsCreditPurchase
-        });
+            var branchPaid = await _invoicePayments.GetPaidTotalsForPurchasesAsync(
+                branchGroup.Select(p => p.Id), filter.BusinessId, branchGroup.Key);
+            foreach (var item in branchPaid)
+                paidTotals[item.Key] = item.Value;
+        }
 
-        projected = ApplyPurchaseSort(projected, filter.SortColumn, filter.IsDescending());
+        var rows = purchaseRows
+            .Select(p =>
+            {
+                var paid = paidTotals.GetValueOrDefault(p.Id);
+                return new PurchaseReportRowDto
+                {
+                    Id = p.Id,
+                    InvoiceNo = p.InvoiceNo,
+                    PurchaseDate = p.PurchaseDate,
+                    SupplierId = p.SupplierId,
+                    SupplierName = p.SupplierName,
+                    TotalAmount = p.TotalAmount,
+                    PaidAmount = paid,
+                    BalanceDue = p.TotalAmount - paid,
+                    Status = p.Status,
+                    IsCreditPurchase = p.IsCreditPurchase
+                };
+            })
+            .AsQueryable();
 
-        return await PaginateAsync(projected, pageNumber, pageSize);
+        rows = ApplyPurchaseSort(rows, filter.SortColumn, filter.IsDescending());
+
+        return PaginateList(rows.ToList(), pageNumber, pageSize);
     }
 
     public async Task<ReportPagedResultDto<CustomerOutstandingRowDto>> GetCustomerOutstandingReportAsync(ReportFilterDto filter)
     {
         var (pageNumber, pageSize) = filter.Normalize();
 
-        var invoiceQuery = _db.SaleInvoices
-            .AsNoTracking()
-            .Where(i => i.BusinessId == filter.BusinessId
-                     && !i.IsDeleted
-                     && i.Status == SaleInvoiceStatus.Completed
-                     && i.CustomerId != null);
-
-        if (filter.BranchId > 0)
-            invoiceQuery = invoiceQuery.Where(i => i.BranchId == filter.BranchId);
-
-        if (filter.CustomerId is > 0)
-            invoiceQuery = invoiceQuery.Where(i => i.CustomerId == filter.CustomerId);
-
-        var invoiceRows = await invoiceQuery
-            .Select(inv => new
-            {
-                CustomerId = inv.CustomerId!.Value,
-                Balance = inv.GrandTotal - (
-                    _db.InvoicePayments
-                        .AsNoTracking()
-                        .Where(p => p.BusinessId == filter.BusinessId
-                                 && p.Module == InvoicePaymentModule.Sale
-                                 && p.SaleInvoiceId == inv.Id
-                                 && (filter.BranchId <= 0 || p.BranchId == filter.BranchId))
-                        .Sum(p => (decimal?)p.Amount) ?? 0m),
-                inv.SaleDate
-            })
-            .Where(x => x.Balance > 0)
-            .ToListAsync();
-
-        var balanceByCustomer = invoiceRows
-            .GroupBy(x => x.CustomerId)
-            .ToDictionary(
-                g => g.Key,
-                g => new PartyInvoiceBalanceAgg
-                {
-                    PartyId = g.Key,
-                    InvoiceBalance = g.Sum(x => x.Balance),
-                    OutstandingInvoices = g.Count(),
-                    LastDate = g.Max(x => x.SaleDate)
-                });
-
         var customerQuery = _db.Customers
             .AsNoTracking()
-            .Where(c => c.BusinessId == filter.BusinessId && !c.IsDeleted);
+            .Where(c => c.BusinessId == filter.BusinessId && !c.IsDeleted && c.AccountId != null);
 
         if (filter.BranchId > 0)
             customerQuery = customerQuery.Where(c => c.BranchId == filter.BranchId);
@@ -184,15 +184,74 @@ public class ReportRepository : IReportRepository
                 c.CustomerCode,
                 c.Name,
                 c.Phone,
-                c.OpeningBalance
+                c.OpeningBalance,
+                AccountId = c.AccountId!.Value,
+                c.BranchId,
             })
             .ToListAsync();
+
+        if (customers.Count == 0)
+            return PaginateList(new List<CustomerOutstandingRowDto>(), pageNumber, pageSize);
+
+        var accountIds = customers.Select(c => c.AccountId).Distinct().ToList();
+        var branchFilter = filter.BranchId > 0 ? filter.BranchId : (int?)null;
+        var balances = await _glReporting.GetAccountBalancesAsync(accountIds, creditNormal: false, branchFilter);
+        var lastActivity = await _glReporting.GetAccountLastActivityDatesAsync(accountIds, branchFilter);
+
+        var invoiceQuery = _db.SaleInvoices
+            .AsNoTracking()
+            .Where(i => i.BusinessId == filter.BusinessId
+                     && !i.IsDeleted
+                     && i.Status == SaleInvoiceStatus.Completed
+                     && i.IsCreditSale
+                     && i.CustomerId != null);
+
+        if (filter.BranchId > 0)
+            invoiceQuery = invoiceQuery.Where(i => i.BranchId == filter.BranchId);
+
+        var invoiceRows = await invoiceQuery
+            .Select(inv => new { inv.Id, CustomerId = inv.CustomerId!.Value, inv.GrandTotal, inv.SaleDate, inv.BranchId })
+            .ToListAsync();
+
+        var glCharges = await _glReporting.GetPartyDocumentChargesAsync(
+            accountIds, GlTransactionType.Sale, branchFilter);
+
+        var paidTotals = new Dictionary<int, decimal>();
+        foreach (var branchGroup in invoiceRows.GroupBy(x => x.BranchId))
+        {
+            var branchPaid = await _invoicePayments.GetPaidTotalsForSaleInvoicesAsync(
+                branchGroup.Select(x => x.Id), filter.BusinessId, branchGroup.Key);
+            foreach (var item in branchPaid)
+                paidTotals[item.Key] = item.Value;
+        }
+
+        var invoiceStatsByCustomer = invoiceRows
+            .Select(x =>
+            {
+                var charged = glCharges.GetValueOrDefault(x.Id);
+                if (charged <= 0)
+                    charged = x.GrandTotal;
+                var balance = charged - paidTotals.GetValueOrDefault(x.Id);
+                return new { x.CustomerId, Balance = balance, x.SaleDate };
+            })
+            .Where(x => x.Balance > 0.005m)
+            .GroupBy(x => x.CustomerId)
+            .ToDictionary(
+                g => g.Key,
+                g => new PartyInvoiceBalanceAgg
+                {
+                    PartyId = g.Key,
+                    InvoiceBalance = g.Sum(x => x.Balance),
+                    OutstandingInvoices = g.Count(),
+                    LastDate = g.Max(x => x.SaleDate),
+                });
 
         var rows = customers
             .Select(c =>
             {
-                balanceByCustomer.TryGetValue(c.Id, out var agg);
-                var invoiceOutstanding = agg?.InvoiceBalance ?? 0m;
+                var glBalance = balances.GetValueOrDefault(c.AccountId);
+                invoiceStatsByCustomer.TryGetValue(c.Id, out var agg);
+                lastActivity.TryGetValue(c.AccountId, out var lastGlDate);
                 return new CustomerOutstandingRowDto
                 {
                     CustomerId = c.Id,
@@ -201,12 +260,12 @@ public class ReportRepository : IReportRepository
                     Phone = c.Phone,
                     OpeningBalance = c.OpeningBalance,
                     OutstandingInvoices = agg?.OutstandingInvoices ?? 0,
-                    InvoiceOutstanding = invoiceOutstanding,
-                    OutstandingAmount = c.OpeningBalance + invoiceOutstanding,
-                    LastSaleDate = agg?.LastDate
+                    InvoiceOutstanding = agg?.InvoiceBalance ?? 0,
+                    OutstandingAmount = glBalance,
+                    LastSaleDate = lastGlDate != default ? lastGlDate : agg?.LastDate,
                 };
             })
-            .Where(r => r.OutstandingAmount > 0 || r.OpeningBalance > 0)
+            .Where(r => Math.Abs(r.OutstandingAmount) > 0.005m)
             .AsQueryable();
 
         rows = ApplyCustomerOutstandingSort(rows, filter.SortColumn, filter.IsDescending());
@@ -218,50 +277,9 @@ public class ReportRepository : IReportRepository
     {
         var (pageNumber, pageSize) = filter.Normalize();
 
-        var purchaseQuery = _db.Purchases
-            .AsNoTracking()
-            .Where(p => p.BusinessId == filter.BusinessId
-                     && !p.IsDeleted
-                     && p.Status == PurchaseStatus.Posted);
-
-        if (filter.BranchId > 0)
-            purchaseQuery = purchaseQuery.Where(p => p.BranchId == filter.BranchId);
-
-        if (filter.SupplierId is > 0)
-            purchaseQuery = purchaseQuery.Where(p => p.SupplierId == filter.SupplierId);
-
-        var purchaseRows = await purchaseQuery
-            .Select(pur => new
-            {
-                pur.SupplierId,
-                Balance = pur.TotalAmount - (
-                    _db.InvoicePayments
-                        .AsNoTracking()
-                        .Where(p => p.BusinessId == filter.BusinessId
-                                 && p.Module == InvoicePaymentModule.Purchase
-                                 && p.PurchaseId == pur.Id
-                                 && (filter.BranchId <= 0 || p.BranchId == filter.BranchId))
-                        .Sum(p => (decimal?)p.Amount) ?? 0m),
-                pur.PurchaseDate
-            })
-            .Where(x => x.Balance > 0)
-            .ToListAsync();
-
-        var balanceBySupplier = purchaseRows
-            .GroupBy(x => x.SupplierId)
-            .ToDictionary(
-                g => g.Key,
-                g => new PartyInvoiceBalanceAgg
-                {
-                    PartyId = g.Key,
-                    InvoiceBalance = g.Sum(x => x.Balance),
-                    OutstandingInvoices = g.Count(),
-                    LastDate = g.Max(x => x.PurchaseDate)
-                });
-
         var supplierQuery = _db.Suppliers
             .AsNoTracking()
-            .Where(s => s.BusinessId == filter.BusinessId && !s.IsDeleted);
+            .Where(s => s.BusinessId == filter.BusinessId && !s.IsDeleted && s.AccountId != null);
 
         if (filter.BranchId > 0)
             supplierQuery = supplierQuery.Where(s => s.BranchId == filter.BranchId);
@@ -284,27 +302,86 @@ public class ReportRepository : IReportRepository
                 s.Id,
                 s.SupplierCode,
                 s.Name,
-                s.Phone
+                s.Phone,
+                AccountId = s.AccountId!.Value,
+                s.BranchId,
             })
             .ToListAsync();
 
+        if (suppliers.Count == 0)
+            return PaginateList(new List<SupplierPayableRowDto>(), pageNumber, pageSize);
+
+        var accountIds = suppliers.Select(s => s.AccountId).Distinct().ToList();
+        var branchFilter = filter.BranchId > 0 ? filter.BranchId : (int?)null;
+        var balances = await _glReporting.GetAccountBalancesAsync(accountIds, creditNormal: true, branchFilter);
+        var lastActivity = await _glReporting.GetAccountLastActivityDatesAsync(accountIds, branchFilter);
+
+        var purchaseQuery = _db.Purchases
+            .AsNoTracking()
+            .Where(p => p.BusinessId == filter.BusinessId
+                     && !p.IsDeleted
+                     && p.Status == PurchaseStatus.Posted
+                     && p.IsCreditPurchase);
+
+        if (filter.BranchId > 0)
+            purchaseQuery = purchaseQuery.Where(p => p.BranchId == filter.BranchId);
+
+        var purchaseRows = await purchaseQuery
+            .Select(pur => new { pur.Id, pur.SupplierId, pur.TotalAmount, pur.PurchaseDate, pur.BranchId })
+            .ToListAsync();
+
+        var glCharges = await _glReporting.GetPartyDocumentChargesAsync(
+            accountIds, GlTransactionType.Purchase, branchFilter);
+
+        var paidTotals = new Dictionary<int, decimal>();
+        foreach (var branchGroup in purchaseRows.GroupBy(p => p.BranchId))
+        {
+            var branchPaid = await _invoicePayments.GetPaidTotalsForPurchasesAsync(
+                branchGroup.Select(p => p.Id), filter.BusinessId, branchGroup.Key);
+            foreach (var item in branchPaid)
+                paidTotals[item.Key] = item.Value;
+        }
+
+        var invoiceStatsBySupplier = purchaseRows
+            .Select(p =>
+            {
+                var charged = glCharges.GetValueOrDefault(p.Id);
+                if (charged <= 0)
+                    charged = p.TotalAmount;
+                var balance = charged - paidTotals.GetValueOrDefault(p.Id);
+                return new { p.SupplierId, Balance = balance, p.PurchaseDate };
+            })
+            .Where(x => x.Balance > 0.005m)
+            .GroupBy(x => x.SupplierId)
+            .ToDictionary(
+                g => g.Key,
+                g => new PartyInvoiceBalanceAgg
+                {
+                    PartyId = g.Key,
+                    InvoiceBalance = g.Sum(x => x.Balance),
+                    OutstandingInvoices = g.Count(),
+                    LastDate = g.Max(x => x.PurchaseDate),
+                });
+
         var rows = suppliers
-            .Where(s => balanceBySupplier.ContainsKey(s.Id))
             .Select(s =>
             {
-                var agg = balanceBySupplier[s.Id];
+                var glBalance = balances.GetValueOrDefault(s.AccountId);
+                invoiceStatsBySupplier.TryGetValue(s.Id, out var agg);
+                lastActivity.TryGetValue(s.AccountId, out var lastGlDate);
                 return new SupplierPayableRowDto
                 {
                     SupplierId = s.Id,
                     SupplierCode = s.SupplierCode,
                     SupplierName = s.Name,
                     Phone = s.Phone,
-                    OutstandingInvoices = agg.OutstandingInvoices,
-                    InvoicePayable = agg.InvoiceBalance,
-                    PayableAmount = agg.InvoiceBalance,
-                    LastPurchaseDate = agg.LastDate
+                    OutstandingInvoices = agg?.OutstandingInvoices ?? 0,
+                    InvoicePayable = agg?.InvoiceBalance ?? 0,
+                    PayableAmount = glBalance,
+                    LastPurchaseDate = lastGlDate != default ? lastGlDate : agg?.LastDate,
                 };
             })
+            .Where(r => Math.Abs(r.PayableAmount) > 0.005m)
             .AsQueryable();
 
         rows = ApplySupplierPayableSort(rows, filter.SortColumn, filter.IsDescending());
@@ -689,6 +766,7 @@ public class ReportRepository : IReportRepository
             .Where(i => i.BusinessId == filter.BusinessId
                      && !i.IsDeleted
                      && i.Status == SaleInvoiceStatus.Completed
+                     && i.IsCreditSale
                      && i.CustomerId != null);
 
         if (filter.BranchId > 0)
@@ -719,19 +797,46 @@ public class ReportRepository : IReportRepository
                 InvoiceDate = inv.SaleDate,
                 CustomerId = inv.CustomerId!.Value,
                 CustomerName = inv.Customer != null ? inv.Customer.Name : "Unknown",
-                TotalAmount = inv.GrandTotal,
-                PaidAmount = _db.InvoicePayments
-                    .AsNoTracking()
-                    .Where(p => p.BusinessId == filter.BusinessId
-                             && p.Module == InvoicePaymentModule.Sale
-                             && p.SaleInvoiceId == inv.Id
-                             && (filter.BranchId <= 0 || p.BranchId == filter.BranchId))
-                    .Sum(p => (decimal?)p.Amount) ?? 0m
+                DocumentTotal = inv.GrandTotal,
+                inv.BranchId,
+                CustomerAccountId = inv.Customer != null ? inv.Customer.AccountId : null,
             })
             .ToListAsync();
 
+        var accountIds = invoiceRows
+            .Where(r => r.CustomerAccountId.HasValue)
+            .Select(r => r.CustomerAccountId!.Value)
+            .Distinct()
+            .ToList();
+        var branchFilter = filter.BranchId > 0 ? filter.BranchId : (int?)null;
+        var glCharges = await _glReporting.GetPartyDocumentChargesAsync(
+            accountIds, GlTransactionType.Sale, branchFilter, asOfDate);
+
+        var paidTotals = new Dictionary<int, decimal>();
+        foreach (var branchGroup in invoiceRows.GroupBy(x => x.BranchId))
+        {
+            var branchPaid = await _invoicePayments.GetPaidTotalsForSaleInvoicesAsOfAsync(
+                branchGroup.Select(x => x.Id), filter.BusinessId, branchGroup.Key, asOfDate);
+            foreach (var item in branchPaid)
+                paidTotals[item.Key] = item.Value;
+        }
+
         var allRows = invoiceRows
-            .Select(r => BuildReceivableAgingRow(r.Id, r.CustomerId, r.CustomerName, r.InvoiceNo, r.InvoiceDate, r.TotalAmount, r.PaidAmount, asOfDate))
+            .Select(r =>
+            {
+                var total = glCharges.GetValueOrDefault(r.Id);
+                if (total <= 0)
+                    total = r.DocumentTotal;
+                return BuildReceivableAgingRow(
+                    r.Id,
+                    r.CustomerId,
+                    r.CustomerName,
+                    r.InvoiceNo,
+                    r.InvoiceDate,
+                    total,
+                    paidTotals.GetValueOrDefault(r.Id),
+                    asOfDate);
+            })
             .Where(r => r.Outstanding > 0)
             .ToList();
 
@@ -764,7 +869,8 @@ public class ReportRepository : IReportRepository
             .AsNoTracking()
             .Where(p => p.BusinessId == filter.BusinessId
                      && !p.IsDeleted
-                     && p.Status == PurchaseStatus.Posted);
+                     && p.Status == PurchaseStatus.Posted
+                     && p.IsCreditPurchase);
 
         if (filter.BranchId > 0)
             purchaseQuery = purchaseQuery.Where(p => p.BranchId == filter.BranchId);
@@ -794,19 +900,46 @@ public class ReportRepository : IReportRepository
                 InvoiceDate = pur.PurchaseDate,
                 pur.SupplierId,
                 SupplierName = pur.Supplier.Name,
-                TotalAmount = pur.TotalAmount,
-                PaidAmount = _db.InvoicePayments
-                    .AsNoTracking()
-                    .Where(p => p.BusinessId == filter.BusinessId
-                             && p.Module == InvoicePaymentModule.Purchase
-                             && p.PurchaseId == pur.Id
-                             && (filter.BranchId <= 0 || p.BranchId == filter.BranchId))
-                    .Sum(p => (decimal?)p.Amount) ?? 0m
+                DocumentTotal = pur.TotalAmount,
+                pur.BranchId,
+                SupplierAccountId = pur.Supplier.AccountId,
             })
             .ToListAsync();
 
+        var accountIds = purchaseRows
+            .Where(r => r.SupplierAccountId.HasValue)
+            .Select(r => r.SupplierAccountId!.Value)
+            .Distinct()
+            .ToList();
+        var branchFilter = filter.BranchId > 0 ? filter.BranchId : (int?)null;
+        var glCharges = await _glReporting.GetPartyDocumentChargesAsync(
+            accountIds, GlTransactionType.Purchase, branchFilter, asOfDate);
+
+        var paidTotals = new Dictionary<int, decimal>();
+        foreach (var branchGroup in purchaseRows.GroupBy(p => p.BranchId))
+        {
+            var branchPaid = await _invoicePayments.GetPaidTotalsForPurchasesAsOfAsync(
+                branchGroup.Select(p => p.Id), filter.BusinessId, branchGroup.Key, asOfDate);
+            foreach (var item in branchPaid)
+                paidTotals[item.Key] = item.Value;
+        }
+
         var allRows = purchaseRows
-            .Select(r => BuildPayableAgingRow(r.Id, r.SupplierId, r.SupplierName, r.InvoiceNo, r.InvoiceDate, r.TotalAmount, r.PaidAmount, asOfDate))
+            .Select(r =>
+            {
+                var total = glCharges.GetValueOrDefault(r.Id);
+                if (total <= 0)
+                    total = r.DocumentTotal;
+                return BuildPayableAgingRow(
+                    r.Id,
+                    r.SupplierId,
+                    r.SupplierName,
+                    r.InvoiceNo,
+                    r.InvoiceDate,
+                    total,
+                    paidTotals.GetValueOrDefault(r.Id),
+                    asOfDate);
+            })
             .Where(r => r.Outstanding > 0)
             .ToList();
 

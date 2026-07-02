@@ -113,7 +113,7 @@ const ReceivableAgingReportPage: React.FC = () => {
   return (
     <ReportPageShell
       title="Receivable Aging Report"
-      description="Customer outstanding invoices grouped by aging buckets (calculated on server)."
+      description="Open credit sale balances from GL charges minus receipts, grouped by aging buckets."
       fromDate={fromDate}
       toDate={toDate}
       onFromDateChange={(v) => { setFromDate(v); table.setPageNumber(1); }}

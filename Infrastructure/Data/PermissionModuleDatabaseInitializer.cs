@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using POSSystem.Application.Common.Constants;
+using POSSystem.Domain;
 
 namespace POSSystem.Infrastructure.Data;
 
@@ -129,6 +130,240 @@ public static class PermissionModuleDatabaseInitializer
         }
 
         await EnsureModuleKeyIndexAsync(context, logger);
+        await ApplyFinanceActionRoutePatchesAsync(context, logger);
+    }
+
+    /// <summary>
+    /// Runs on every schema patch startup (not only full seed) so dev/prod DBs pick up finance screen routes.
+    /// </summary>
+    internal static async Task ApplyFinanceActionRoutePatchesAsync(POSDbContext context, ILogger logger)
+    {
+        try
+        {
+            await context.Database.ExecuteSqlRawAsync("""
+                UPDATE [Modules] SET
+                    [Route] = N'/finance/receivables',
+                    [ModuleName] = N'Receivables',
+                    [Icon] = N'RCV',
+                    [IsActive] = 1,
+                    [UpdatedDate] = GETUTCDATE()
+                WHERE [ModuleKey] = N'Party Ledger';
+
+                UPDATE [Modules] SET
+                    [Route] = N'/finance/payables',
+                    [ModuleName] = N'Payables',
+                    [Icon] = N'PAY',
+                    [IsActive] = 1,
+                    [UpdatedDate] = GETUTCDATE()
+                WHERE [ModuleKey] = N'PartyLedger.PaySupplier';
+
+                UPDATE [Modules] SET
+                    [Route] = N'/finance/expenses',
+                    [UpdatedDate] = GETUTCDATE()
+                WHERE [ModuleKey] = N'Expenses' AND [Route] = N'/expenses';
+
+                IF NOT EXISTS (SELECT 1 FROM [Modules] WHERE [ModuleKey] = N'CashFlow.JournalVoucher')
+                BEGIN
+                    INSERT INTO [Modules] ([ModuleName], [ModuleKey], [ParentModuleId], [DisplayOrder], [Route], [Icon], [IsActive], [CreatedDate], [IsDeleted])
+                    SELECT N'Journal Vouchers', N'CashFlow.JournalVoucher', p.[Id], 6, N'/finance/journal-vouchers', N'JV', 1, GETUTCDATE(), 0
+                    FROM [Modules] p
+                    WHERE p.[ModuleName] = N'Finance' AND p.[ParentModuleId] IS NULL;
+                END
+
+                UPDATE [Modules] SET
+                    [Route] = N'/finance/journal-vouchers',
+                    [ModuleName] = N'Journal Vouchers',
+                    [Icon] = N'JV',
+                    [IsActive] = 1,
+                    [UpdatedDate] = GETUTCDATE()
+                WHERE [ModuleKey] = N'CashFlow.JournalVoucher';
+
+                IF NOT EXISTS (SELECT 1 FROM [Modules] WHERE [ModuleKey] = N'Account Ledger')
+                BEGIN
+                    INSERT INTO [Modules] ([ModuleName], [ModuleKey], [ParentModuleId], [DisplayOrder], [Route], [Icon], [IsActive], [CreatedDate], [IsDeleted])
+                    SELECT N'Account Ledger', N'Account Ledger', p.[Id], 11, N'/accounting/ledger', N'AL', 1, GETUTCDATE(), 0
+                    FROM [Modules] p
+                    WHERE p.[ModuleName] = N'Finance' AND p.[ParentModuleId] IS NULL;
+                END
+
+                UPDATE [Modules] SET
+                    [Route] = N'/accounting/ledger',
+                    [ModuleName] = N'Account Ledger',
+                    [Icon] = N'AL',
+                    [IsActive] = 1,
+                    [UpdatedDate] = GETUTCDATE()
+                WHERE [ModuleKey] = N'Account Ledger';
+
+                INSERT INTO [RolePermissions] ([RoleId], [ModuleId], [ModuleName], [CanView], [CanCreate], [CanEdit], [CanDelete], [CanExport], [CanUpload], [IsDeleted], [CreatedDate])
+                SELECT r.[Id], m.[Id], N'Account Ledger', 1, 1, 1, 1, 1, 1, 0, GETUTCDATE()
+                FROM [Roles] r
+                CROSS JOIN [Modules] m
+                WHERE m.[ModuleKey] = N'Account Ledger' AND m.[IsDeleted] = 0
+                  AND r.[Name] IN (N'Admin', N'System Admin', N'Manager')
+                  AND r.[IsDeleted] = 0
+                  AND NOT EXISTS (
+                      SELECT 1 FROM [RolePermissions] rp
+                      WHERE rp.[RoleId] = r.[Id]
+                        AND rp.[ModuleName] = N'Account Ledger'
+                        AND rp.[IsDeleted] = 0);
+
+                UPDATE [ModuleForms] SET [FormName] = N'Journal Voucher'
+                WHERE [FormCode] = N'CashFlow_RecordTransaction';
+
+                IF NOT EXISTS (SELECT 1 FROM [Modules] WHERE [ModuleKey] = N'Trial Balance Report')
+                BEGIN
+                    INSERT INTO [Modules] ([ModuleName], [ModuleKey], [ParentModuleId], [DisplayOrder], [Route], [Icon], [IsActive], [CreatedDate], [IsDeleted])
+                    SELECT N'Trial Balance', N'Trial Balance Report', p.[Id], 11, N'/reports/trial-balance', N'TB', 1, GETUTCDATE(), 0
+                    FROM [Modules] p
+                    WHERE p.[ModuleName] = N'Reports' AND p.[ParentModuleId] IS NULL;
+                END
+
+                UPDATE [Modules] SET
+                    [Route] = N'/reports/trial-balance',
+                    [ModuleName] = N'Trial Balance',
+                    [Icon] = N'TB',
+                    [IsActive] = 1,
+                    [UpdatedDate] = GETUTCDATE()
+                WHERE [ModuleKey] = N'Trial Balance Report';
+
+                INSERT INTO [RolePermissions] ([RoleId], [ModuleId], [ModuleName], [CanView], [CanCreate], [CanEdit], [CanDelete], [CanExport], [CanUpload], [IsDeleted], [CreatedDate])
+                SELECT r.[Id], m.[Id], N'Trial Balance Report', 1, 1, 1, 1, 1, 1, 0, GETUTCDATE()
+                FROM [Roles] r
+                CROSS JOIN [Modules] m
+                WHERE m.[ModuleKey] = N'Trial Balance Report' AND m.[IsDeleted] = 0
+                  AND r.[Name] IN (N'Admin', N'System Admin', N'Manager')
+                  AND r.[IsDeleted] = 0
+                  AND NOT EXISTS (
+                      SELECT 1 FROM [RolePermissions] rp
+                      WHERE rp.[RoleId] = r.[Id]
+                        AND rp.[ModuleName] = N'Trial Balance Report'
+                        AND rp.[IsDeleted] = 0);
+                """);
+
+            await EnsureTrialBalanceReportModuleAsync(context, logger);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to apply finance action route patches.");
+        }
+    }
+
+    /// <summary>
+    /// Ensures Trial Balance exists under Reports in Modules (sidebar uses Modules, not Menus).
+    /// </summary>
+    internal static async Task EnsureTrialBalanceReportModuleAsync(POSDbContext context, ILogger logger)
+    {
+        try
+        {
+            var reportsParent = await context.PermissionModules
+                .IgnoreQueryFilters()
+                .Where(m => !m.IsDeleted
+                            && m.ParentModuleId == null
+                            && m.ModuleName == "Reports")
+                .OrderBy(m => string.IsNullOrEmpty(m.ModuleKey) ? 0 : 1)
+                .ThenBy(m => m.Id)
+                .FirstOrDefaultAsync();
+
+            if (reportsParent == null)
+            {
+                logger.LogWarning("Trial Balance sidebar patch skipped: Reports parent module not found.");
+                return;
+            }
+
+            var module = await context.PermissionModules
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(m => m.ModuleKey == PermissionModules.TrialBalanceReport);
+
+            if (module == null)
+            {
+                module = new PermissionModule
+                {
+                    ModuleName = "Trial Balance",
+                    ModuleKey = PermissionModules.TrialBalanceReport,
+                    ParentModuleId = reportsParent.Id,
+                    Route = "/reports/trial-balance",
+                    Icon = "TB",
+                    DisplayOrder = 11,
+                    IsActive = true,
+                    IsDeleted = false,
+                    CreatedDate = DateTime.UtcNow,
+                };
+                await context.PermissionModules.AddAsync(module);
+            }
+            else
+            {
+                module.ModuleName = "Trial Balance";
+                module.ParentModuleId = reportsParent.Id;
+                module.Route = "/reports/trial-balance";
+                module.Icon = "TB";
+                module.DisplayOrder = 11;
+                module.IsActive = true;
+                module.IsDeleted = false;
+                module.UpdatedDate = DateTime.UtcNow;
+            }
+
+            await context.SaveChangesAsync();
+
+            var privilegedRoleNames = new[] { RoleNames.Admin, RoleNames.SystemAdmin, RoleNames.Manager };
+            var privilegedRoleIds = await context.Roles
+                .AsNoTracking()
+                .Where(r => !r.IsDeleted && privilegedRoleNames.Contains(r.Name))
+                .Select(r => r.Id)
+                .ToListAsync();
+
+            var rolesWithProfitLoss = await context.RolePermissions
+                .AsNoTracking()
+                .Where(rp => !rp.IsDeleted && rp.CanView && rp.ModuleName == PermissionModules.ProfitLossReport)
+                .Select(rp => rp.RoleId)
+                .Distinct()
+                .ToListAsync();
+
+            var roleIdsToGrant = privilegedRoleIds
+                .Union(rolesWithProfitLoss)
+                .Distinct()
+                .ToList();
+
+            foreach (var roleId in roleIdsToGrant)
+            {
+                var permission = await context.RolePermissions
+                    .IgnoreQueryFilters()
+                    .FirstOrDefaultAsync(rp =>
+                        rp.RoleId == roleId
+                        && (rp.ModuleId == module.Id || rp.ModuleName == PermissionModules.TrialBalanceReport));
+
+                if (permission == null)
+                {
+                    await context.RolePermissions.AddAsync(new RolePermission
+                    {
+                        RoleId = roleId,
+                        ModuleId = module.Id,
+                        ModuleName = PermissionModules.TrialBalanceReport,
+                        CanView = true,
+                        CanCreate = false,
+                        CanEdit = false,
+                        CanDelete = false,
+                        CanExport = true,
+                        CanUpload = false,
+                        IsDeleted = false,
+                        CreatedDate = DateTime.UtcNow,
+                    });
+                    continue;
+                }
+
+                permission.ModuleId = module.Id;
+                permission.ModuleName = PermissionModules.TrialBalanceReport;
+                permission.CanView = true;
+                permission.CanExport = true;
+                permission.IsDeleted = false;
+                permission.UpdatedDate = DateTime.UtcNow;
+            }
+
+            await context.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to ensure Trial Balance report module for sidebar.");
+        }
     }
 }
 
@@ -200,17 +435,19 @@ public static class PermissionModuleSeeder
         new("Invoices", PermissionModules.Sales, "Sales Management", 4, "/sales-invoices", "I"),
 
         // Finance
-        new("Expenses", PermissionModules.Expenses, "Finance", 1, "/expenses", "Exp"),
+        new("Expenses", PermissionModules.Expenses, "Finance", 1, "/finance/expenses", "Exp"),
         new("Expense Categories", PermissionModules.ExpenseCategories, "Finance", 2, "/expenses/categories", "expensecategories"),
         new("Cash Dashboard", PermissionModules.CashFlow, "Finance", 3, "/cashflow", "CF"),
         new("Cash Ledger", "CashFlow.Ledger", "Finance", 4, "/cashflow/ledger", "CFL"),
         new("Cash Summary", "CashFlow.Summary", "Finance", 5, "/cashflow/summary", "CFS"),
+        new("Journal Vouchers", "CashFlow.JournalVoucher", "Finance", 6, "/finance/journal-vouchers", "JV"),
 
-        // Party Ledger
-        new("Receive Payment", PermissionModules.PartyLedger, "Finance", 6, "/ledger/customers", "RP"),
-        new("Pay Supplier", "PartyLedger.PaySupplier", "Finance", 7, "/ledger/suppliers", "PS"),
-        new("Customer Ledger", "PartyLedger.CustomerLedger", "Finance", 8, "/ledger/customers", "CL"),
-        new("Supplier Ledger", "PartyLedger.SupplierLedger", "Finance", 9, "/ledger/suppliers", "SL"),
+        // Party Ledger — action screens (payments) vs read-only ledgers
+        new("Receivables", PermissionModules.PartyLedger, "Finance", 7, "/finance/receivables", "RCV"),
+        new("Payables", "PartyLedger.PaySupplier", "Finance", 8, "/finance/payables", "PAY"),
+        new("Customer Ledger", "PartyLedger.CustomerLedger", "Finance", 9, "/ledger/customers", "CL"),
+        new("Supplier Ledger", "PartyLedger.SupplierLedger", "Finance", 10, "/ledger/suppliers", "SL"),
+        new("Account Ledger", PermissionModules.AccountLedger, "Finance", 11, "/accounting/ledger", "AL"),
 
         // Reports
         new("Sales Report", PermissionModules.SalesReports, "Reports", 1, "/reports/sales", "SR"),
@@ -219,6 +456,7 @@ public static class PermissionModuleSeeder
         new("Customer Outstanding", PermissionModules.CustomerOutstandingReport, "Reports", 4, "/reports/customer-outstanding", "CO"),
         new("Supplier Payable", PermissionModules.SupplierPayableReport, "Reports", 5, "/reports/supplier-payable", "SP"),
         new("Profit & Loss", PermissionModules.ProfitLossReport, "Reports", 6, "/reports/profit-loss", "PL"),
+        new("Trial Balance", PermissionModules.TrialBalanceReport, "Reports", 11, "/reports/trial-balance", "TB"),
         new("Stock Report", PermissionModules.StockReports, "Reports", 7, "/reports/stock", "StR"),
         new("Stock By Unit Report", "StockReports.ByUnit", "Reports", 10, "/reports/stock-by-unit", "SBU"),
         new("Receivable Aging", PermissionModules.CustomerReceivableAgingReport, "Reports", 8, "/reports/receivable-aging", "RA"),
@@ -269,6 +507,7 @@ public static class PermissionModuleSeeder
 
         await DeactivateLegacyModulesAsync(context, logger);
         await DeactivateOldReportSubMenuItemsAsync(context, logger);
+        await MigrateFinanceActionModuleRoutesAsync(context, logger);
         await DeactivateEmptyMasterDataGroupAsync(context, logger);
         await BackfillRolePermissionModuleIdsAsync(context, logger);
         await ModuleFormSeeder.SeedDefaultFormsAsync(context, logger);
@@ -427,6 +666,11 @@ public static class PermissionModuleSeeder
         {
             logger.LogWarning(ex, "Failed to deactivate legacy standalone Reports module.");
         }
+    }
+
+    private static async Task MigrateFinanceActionModuleRoutesAsync(POSDbContext context, ILogger logger)
+    {
+        await PermissionModuleDatabaseInitializer.ApplyFinanceActionRoutePatchesAsync(context, logger);
     }
 
     private static async Task DeactivateEmptyMasterDataGroupAsync(POSDbContext context, ILogger logger)
@@ -589,7 +833,7 @@ public static class ModuleFormSeeder
 
     private static readonly (string ModuleKey, string FormCode, string FormName, int SortOrder)[] AdditionalForms =
     [
-        ("Cash Flow", "CashFlow_RecordTransaction", "Record Transaction", 2),
+        ("Cash Flow", "CashFlow_JournalVoucher", "Journal Voucher", 2),
         ("Party Ledger", "PartyLedger_ReceivePayment", "Receive Payment", 2),
         ("PartyLedger.PaySupplier", "PartyLedger_PaySupplier", "Pay Supplier", 2),
     ];

@@ -103,6 +103,7 @@ public enum CashFlowTransactionType
     BankTransfer    = 5,
     OpeningBalance  = 6,
     ClosingBalance  = 7,
+    Reversal        = 8,
 }
 
 public enum CashFlowPaymentMethod
@@ -110,4 +111,28 @@ public enum CashFlowPaymentMethod
     Cash    = 1,
     Bank    = 2,
     Wallet  = 3,
+}
+
+/// <summary>Chart of accounts classification (double-entry accounting).</summary>
+public enum AccountType
+{
+    Asset     = 1,
+    Liability = 2,
+    Income    = 3,
+    Expense   = 4,
+    Equity    = 5,
+}
+
+/// <summary>Source document type for a general-ledger journal line.</summary>
+public enum GlTransactionType
+{
+    Manual          = 0,
+    Sale            = 1,
+    Purchase        = 2,
+    Payment         = 3,
+    Receipt         = 4,
+    Expense         = 5,
+    OpeningBalance  = 6,
+    Adjustment      = 7,
+    Reversal        = 8,
 }

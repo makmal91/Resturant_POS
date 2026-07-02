@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { FormButton, FormInput, FormSelect, FormTextarea, SearchableSelect } from './index';
+import CodeFieldWithGenerate from './CodeFieldWithGenerate';
+import { CODE_MODULES } from '../../services/codeGeneratorService';
 import { useBusinessCurrency } from '../../hooks/useBusinessCurrency';
 import { useFormBranchId } from '../../hooks/useFormBranchId';
 import { masterDataService } from '../../services/masterDataService';
@@ -46,6 +48,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
   submitLabel = 'Add Expense',
 }) => {
   const { branchId: resolvedBranchId, branchError } = useFormBranchId(initialData?.branchId);
+  const isEditMode = Boolean(initialData?.id);
   const { symbol, currencyCode, loading: currencyLoading } = useBusinessCurrency();
 
   const safeInitialData = useMemo(() => {
@@ -262,12 +265,15 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
             required
           />
 
-          <FormInput
-            label="Reference No."
+          <CodeFieldWithGenerate
+            label="Expense No"
             name="referenceNo"
             value={formData.referenceNo}
-            onChange={handleChange}
-            placeholder="Optional reference number"
+            onChange={(value) => setFormData((prev) => ({ ...prev, referenceNo: value }))}
+            module={CODE_MODULES.Expense}
+            branchId={resolvedBranchId}
+            isEditMode={isEditMode}
+            required
           />
 
           <div className="md:col-span-2">

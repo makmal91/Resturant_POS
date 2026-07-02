@@ -9,38 +9,7 @@ public static class CashFlowDatabaseInitializer
     {
         var batches = new[]
         {
-            // CashFlowTransactions table
-            """
-            IF OBJECT_ID(N'[dbo].[CashFlowTransactions]', N'U') IS NULL
-            BEGIN
-                CREATE TABLE [dbo].[CashFlowTransactions] (
-                    [Id]              INT            IDENTITY(1,1) NOT NULL,
-                    [BusinessId]      INT            NOT NULL DEFAULT 1,
-                    [BranchId]        INT            NOT NULL DEFAULT 1,
-                    [TransactionType] INT            NOT NULL,
-                    [PaymentMethod]   INT            NOT NULL DEFAULT 1,
-                    [Amount]          DECIMAL(18,2)  NOT NULL DEFAULT 0,
-                    [ReferenceId]     INT            NULL,
-                    [ReferenceNo]     NVARCHAR(100)  NULL,
-                    [Description]     NVARCHAR(500)  NULL,
-                    [TransactionDate] DATETIME2      NOT NULL DEFAULT GETUTCDATE(),
-                    [CreatedDate]     DATETIME2      NOT NULL DEFAULT GETUTCDATE(),
-                    [CreatedById]     INT            NULL,
-                    [UpdatedDate]     DATETIME2      NULL,
-                    [ModifiedById]    INT            NULL,
-                    [IsDeleted]       BIT            NOT NULL DEFAULT 0,
-                    CONSTRAINT [PK_CashFlowTransactions] PRIMARY KEY ([Id]),
-                    CONSTRAINT [FK_CashFlowTransactions_Branches] FOREIGN KEY ([BranchId]) REFERENCES [Branches]([Id])
-                );
-                CREATE INDEX [idx_cashflowtransactions_businessid] ON [CashFlowTransactions]([BusinessId]);
-                CREATE INDEX [idx_cashflowtransactions_branchid]   ON [CashFlowTransactions]([BranchId]);
-                CREATE INDEX [idx_cashflowtransactions_business_branch] ON [CashFlowTransactions]([BusinessId],[BranchId]);
-                CREATE INDEX [idx_cashflowtransactions_date]  ON [CashFlowTransactions]([BusinessId],[BranchId],[TransactionDate]);
-                CREATE INDEX [idx_cashflowtransactions_type]  ON [CashFlowTransactions]([BusinessId],[BranchId],[TransactionType]);
-            END
-            """,
-
-            // CashRegisters table
+            // CashRegisters table (operational; movements are in GL Transactions)
             """
             IF OBJECT_ID(N'[dbo].[CashRegisters]', N'U') IS NULL
             BEGIN
@@ -101,6 +70,37 @@ public static class CashFlowDatabaseInitializer
                 CREATE INDEX [idx_expenses_branchid]   ON [Expenses]([BranchId]);
                 CREATE INDEX [idx_expenses_business_branch] ON [Expenses]([BusinessId],[BranchId]);
                 CREATE INDEX [idx_expenses_date] ON [Expenses]([BusinessId],[BranchId],[ExpenseDate]);
+            END
+            """,
+
+            // Journal vouchers (manual cash in/out with JV document numbers)
+            """
+            IF OBJECT_ID(N'[dbo].[JournalVouchers]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [dbo].[JournalVouchers] (
+                    [Id]              INT           IDENTITY(1,1) NOT NULL,
+                    [BusinessId]      INT           NOT NULL DEFAULT 1,
+                    [BranchId]        INT           NOT NULL DEFAULT 1,
+                    [VoucherNo]       NVARCHAR(50)  NOT NULL,
+                    [TransactionType] INT           NOT NULL,
+                    [PaymentMethod]   INT           NOT NULL DEFAULT 1,
+                    [Amount]          DECIMAL(18,2) NOT NULL DEFAULT 0,
+                    [Description]     NVARCHAR(500) NULL,
+                    [VoucherDate]     DATETIME2     NOT NULL DEFAULT GETUTCDATE(),
+                    [GlGroupId]       UNIQUEIDENTIFIER NOT NULL,
+                    [CreatedDate]     DATETIME2     NOT NULL DEFAULT GETUTCDATE(),
+                    [CreatedById]     INT           NULL,
+                    [UpdatedDate]     DATETIME2     NULL,
+                    [ModifiedById]    INT           NULL,
+                    [IsDeleted]       BIT           NOT NULL DEFAULT 0,
+                    CONSTRAINT [PK_JournalVouchers] PRIMARY KEY ([Id]),
+                    CONSTRAINT [FK_JournalVouchers_Branches] FOREIGN KEY ([BranchId]) REFERENCES [Branches]([Id])
+                );
+                CREATE INDEX [idx_journalvouchers_business_branch] ON [JournalVouchers]([BusinessId],[BranchId]);
+                CREATE INDEX [idx_journalvouchers_date] ON [JournalVouchers]([BusinessId],[BranchId],[VoucherDate]);
+                CREATE UNIQUE INDEX [uq_journalvouchers_voucherno]
+                    ON [JournalVouchers]([BusinessId],[BranchId],[VoucherNo])
+                    WHERE [IsDeleted] = 0;
             END
             """
         };

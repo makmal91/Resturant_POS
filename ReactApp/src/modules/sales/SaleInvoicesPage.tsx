@@ -152,14 +152,33 @@ const SaleInvoicesPage: React.FC = () => {
     setTimeout(() => setNotification(null), 5000);
   }, []);
 
-  // Show success toast when returning from EditInvoicePage
+  // Show success toast when returning from EditInvoicePage; open receipt when linked from party ledger
   useEffect(() => {
-    const state = location.state as { success?: string } | null;
+    const state = location.state as { success?: string; viewInvoiceId?: number; branchId?: number } | null;
     if (state?.success) {
       showNotification('success', state.success);
+    }
+
+    if (state?.viewInvoiceId && state.viewInvoiceId > 0) {
+      const branchId = state.branchId && state.branchId > 0
+        ? state.branchId
+        : resolveEntityBranchId(selectedBranchId);
+
+      if (branchId <= 0) {
+        showNotification('error', 'Cannot load invoice: branch is unknown.');
+      } else {
+        setLoadingDetail(state.viewInvoiceId);
+        void salesService.getById(state.viewInvoiceId, branchId)
+          .then((res) => setReceiptInvoice(res.data))
+          .catch((err) => showNotification('error', getApiErrorMessage(err, 'Failed to load invoice.')))
+          .finally(() => setLoadingDetail(null));
+      }
+    }
+
+    if (state?.success || state?.viewInvoiceId) {
       window.history.replaceState({}, '');
     }
-  }, [location.state, showNotification]);
+  }, [location.state, showNotification, resolveEntityBranchId, selectedBranchId]);
 
   const fetchInvoices = useCallback(async () => {
     if (!hasBranchSelection || selectedBranchId === null) {

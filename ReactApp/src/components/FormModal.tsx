@@ -558,11 +558,10 @@ const FormModal: React.FC = () => {
         parsed,
         data.paymentMethod,
         data.description,
-        data.referenceNo,
       );
-      closeWithSuccess('Transaction recorded successfully.');
+      closeWithSuccess('Journal voucher recorded successfully.');
     } catch (err: any) {
-      setError(getApiErrorMessage(err, 'Failed to record transaction.'));
+      setError(getApiErrorMessage(err, 'Failed to record journal voucher.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -591,17 +590,32 @@ const FormModal: React.FC = () => {
     setSuccessMessage(null);
 
     try {
-      await partyLedgerService.receivePayment({
-        customerId,
-        saleInvoiceId: data.saleInvoiceId.trim() ? Number(data.saleInvoiceId) : undefined,
-        paymentType: data.paymentType,
-        amount: parsed,
-        paymentDate: new Date(data.paymentDate).toISOString(),
-        referenceNo: data.referenceNo.trim() || undefined,
-        notes: data.notes.trim() || undefined,
-        branchId,
-      });
-      closeWithSuccess('Payment received successfully.');
+      if (isEditMode && editingData?.id) {
+        await partyLedgerService.updatePayment(branchId, Number(editingData.id), {
+          paymentType: data.paymentType,
+          amount: parsed,
+          paymentDate: new Date(data.paymentDate).toISOString(),
+          referenceNo: data.referenceNo.trim() || undefined,
+          notes: data.notes.trim() || undefined,
+          autoAllocate: data.autoAllocate,
+          allocations: data.allocations.length > 0 ? data.allocations : undefined,
+          branchId,
+        });
+        closeWithSuccess('Payment updated successfully.');
+      } else {
+        await partyLedgerService.receivePayment({
+          customerId,
+          paymentType: data.paymentType,
+          amount: parsed,
+          paymentDate: new Date(data.paymentDate).toISOString(),
+          referenceNo: data.referenceNo.trim() || undefined,
+          notes: data.notes.trim() || undefined,
+          autoAllocate: data.autoAllocate,
+          allocations: data.allocations.length > 0 ? data.allocations : undefined,
+          branchId,
+        });
+        closeWithSuccess('Payment received successfully.');
+      }
     } catch (err: any) {
       setError(getApiErrorMessage(err, 'Failed to record payment.'));
     } finally {
@@ -632,17 +646,34 @@ const FormModal: React.FC = () => {
     setSuccessMessage(null);
 
     try {
-      await partyLedgerService.paySupplier({
-        supplierId,
-        purchaseId: data.purchaseId.trim() ? Number(data.purchaseId) : undefined,
-        paymentType: data.paymentType,
-        amount: parsed,
-        paymentDate: new Date(data.paymentDate).toISOString(),
-        referenceNo: data.referenceNo.trim() || undefined,
-        notes: data.notes.trim() || undefined,
-        branchId,
-      });
-      closeWithSuccess('Supplier payment recorded successfully.');
+      if (isEditMode && editingData?.id) {
+        await partyLedgerService.updatePayment(branchId, Number(editingData.id), {
+          paymentType: data.paymentMethod,
+          category: data.paymentCategory,
+          amount: parsed,
+          paymentDate: new Date(data.paymentDate).toISOString(),
+          referenceNo: data.referenceNo.trim() || undefined,
+          notes: data.notes.trim() || undefined,
+          autoAllocate: data.autoAllocate,
+          allocations: data.allocations.length > 0 ? data.allocations : undefined,
+          branchId,
+        });
+        closeWithSuccess('Supplier payment updated successfully.');
+      } else {
+        await partyLedgerService.paySupplier({
+          supplierId,
+          paymentType: data.paymentMethod,
+          category: data.paymentCategory,
+          amount: parsed,
+          paymentDate: new Date(data.paymentDate).toISOString(),
+          referenceNo: data.referenceNo.trim() || undefined,
+          notes: data.notes.trim() || undefined,
+          autoAllocate: data.autoAllocate,
+          allocations: data.allocations.length > 0 ? data.allocations : undefined,
+          branchId,
+        });
+        closeWithSuccess('Supplier payment recorded successfully.');
+      }
     } catch (err: any) {
       setError(getApiErrorMessage(err, 'Failed to record payment.'));
     } finally {
@@ -1318,12 +1349,13 @@ const FormModal: React.FC = () => {
             nameReadOnly={isEditMode && isProtectedRole(String(editingData?.name ?? ''))}
           />
         );
-      case 'cashTransaction':
+      case 'journalVoucher':
         return (
           <CashTransactionForm
             initialData={editingData}
             onSubmit={handleCashTransactionSubmit}
             isLoading={isSubmitting}
+            submitLabel="Add Journal Voucher"
           />
         );
       case 'receivePayment':
@@ -1334,6 +1366,7 @@ const FormModal: React.FC = () => {
             branchId={selectedBranchId ?? 0}
             onSubmit={handleReceivePaymentSubmit}
             isLoading={isSubmitting || isLedgerMetaLoading}
+            submitLabel={isEditMode ? 'Update Payment' : 'Receive Payment'}
           />
         );
       case 'paySupplier':
@@ -1344,6 +1377,7 @@ const FormModal: React.FC = () => {
             branchId={selectedBranchId ?? 0}
             onSubmit={handlePaySupplierSubmit}
             isLoading={isSubmitting || isLedgerMetaLoading}
+            submitLabel={isEditMode ? 'Update Payment' : 'Pay Supplier'}
           />
         );
       case 'expense':
@@ -1374,7 +1408,7 @@ const FormModal: React.FC = () => {
     formType === 'customer' ||
     formType === 'user' ||
     formType === 'role' ||
-    formType === 'cashTransaction' ||
+    formType === 'journalVoucher' ||
     formType === 'receivePayment' ||
     formType === 'paySupplier' ||
     formType === 'expense'
@@ -1396,12 +1430,12 @@ const FormModal: React.FC = () => {
               ? 'Customer'
               : formType === 'role'
                 ? 'Role'
-                : formType === 'cashTransaction'
-                  ? 'Record Transaction'
+                : formType === 'journalVoucher'
+                  ? 'Journal Voucher'
                   : formType === 'receivePayment'
-                    ? 'Receive Payment'
+                    ? isEditMode ? 'Edit Payment' : 'Receive Payment'
                     : formType === 'paySupplier'
-                      ? 'Pay Supplier'
+                      ? isEditMode ? 'Edit Supplier Payment' : 'Pay Supplier'
                       : formType === 'expense'
                         ? 'Expense'
               : formType

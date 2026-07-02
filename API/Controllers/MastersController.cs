@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using POSSystem.API.Extensions;
+using POSSystem.Application.Accounting.Interfaces;
 using POSSystem.Domain;
 using POSSystem.Infrastructure.Data;
 
@@ -43,11 +44,13 @@ public class MastersController : ControllerBase
 
     private readonly POSDbContext _db;
     private readonly IMemoryCache _cache;
+    private readonly IGlAccountService _glAccountService;
 
-    public MastersController(POSDbContext db, IMemoryCache cache)
+    public MastersController(POSDbContext db, IMemoryCache cache, IGlAccountService glAccountService)
     {
         _db = db;
         _cache = cache;
+        _glAccountService = glAccountService;
     }
 
     [HttpGet("{type}")]
@@ -563,6 +566,7 @@ public class MastersController : ControllerBase
 
         _db.ExpenseCategories.Add(entity);
         await _db.SaveChangesAsync();
+        await _glAccountService.EnsureExpenseCategoryGlAccountAsync(entity.Id, entity.Name);
         return new MasterManageItemResponse(entity.Id, entity.Name, null, entity.Description, 0, entity.Status, null);
     }
 
@@ -620,6 +624,12 @@ public class MastersController : ControllerBase
         entity.Status = dto.IsActive;
         entity.ModifiedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
+
+        if (entity.GlAccountId is > 0)
+            await _glAccountService.SyncExpenseCategoryGlAccountNameAsync(entity.GlAccountId.Value, entity.Name);
+        else
+            await _glAccountService.EnsureExpenseCategoryGlAccountAsync(entity.Id, entity.Name);
+
         return new MasterManageItemResponse(entity.Id, entity.Name, null, entity.Description, 0, entity.Status, null);
     }
 

@@ -1,9 +1,9 @@
+using POSSystem.Application.Accounting.Interfaces;
 using POSSystem.Application.Auth.Interfaces;
 using POSSystem.Application.Common.Constants;
 using POSSystem.Application.Common.DTOs;
 using POSSystem.Application.Common.Helpers;
 using POSSystem.Application.Common.Interfaces;
-using POSSystem.Application.Ledger.Interfaces;
 using POSSystem.Application.Payments.DTOs;
 using POSSystem.Application.Payments.Interfaces;
 using POSSystem.Application.Product.Interfaces;
@@ -21,29 +21,29 @@ public class PurchaseService : IPurchaseService
     private readonly IProductRepository _productRepository;
     private readonly IStockLedgerRepository _stockLedgerRepository;
     private readonly ILowStockAlertService _lowStockAlertService;
-    private readonly IPartyLedgerService _partyLedgerService;
     private readonly IInvoicePaymentService _invoicePaymentService;
     private readonly ICodeGeneratorService _codeGenerator;
     private readonly IFeaturePermissionService _featurePermission;
+    private readonly IAccountingIntegrationService _accountingIntegration;
 
     public PurchaseService(
         IPurchaseRepository purchaseRepository,
         IProductRepository productRepository,
         IStockLedgerRepository stockLedgerRepository,
         ILowStockAlertService lowStockAlertService,
-        IPartyLedgerService partyLedgerService,
         IInvoicePaymentService invoicePaymentService,
         ICodeGeneratorService codeGenerator,
-        IFeaturePermissionService featurePermission)
+        IFeaturePermissionService featurePermission,
+        IAccountingIntegrationService accountingIntegration)
     {
         _purchaseRepository = purchaseRepository;
         _productRepository = productRepository;
         _stockLedgerRepository = stockLedgerRepository;
         _lowStockAlertService = lowStockAlertService;
-        _partyLedgerService = partyLedgerService;
         _invoicePaymentService = invoicePaymentService;
         _codeGenerator = codeGenerator;
         _featurePermission = featurePermission;
+        _accountingIntegration = accountingIntegration;
     }
 
     public async Task<PagedResultDto<PurchaseDto>> GetPurchasesPagedAsync(
@@ -114,8 +114,15 @@ public class PurchaseService : IPurchaseService
         if (await _purchaseRepository.InvoiceExistsAsync(dto.InvoiceNo, dto.BusinessId, dto.BranchId, id))
             throw new InvalidOperationException($"Invoice number '{dto.InvoiceNo}' already exists.");
 
+        var wasPosted = entity.Status == PurchaseStatus.Posted;
+        var stockEnabled = await _featurePermission.IsStockEnabledAsync();
+
+        if (wasPosted)
+            await _accountingIntegration.ReverseTransactionAsync(
+                id, GlTransactionType.Purchase, $"Edit — {entity.InvoiceNo}");
+
         // If purchase is already Posted, reverse existing stock ledger entries first
-        if (entity.Status == PurchaseStatus.Posted && await _featurePermission.IsStockEnabledAsync())
+        if (wasPosted && stockEnabled)
         {
             var originalEntries = await _stockLedgerRepository.GetByReferenceAsync(
                 id, dto.BusinessId, dto.BranchId, StockLedgerType.PurchaseEntry);
@@ -153,7 +160,7 @@ public class PurchaseService : IPurchaseService
         await BuildItemsAsync(entity, dto.Items, dto.BusinessId, dto.BranchId);
 
         // If was Posted, re-apply new stock entries and keep Posted status
-        if (entity.Status == PurchaseStatus.Posted && await _featurePermission.IsStockEnabledAsync())
+        if (wasPosted && stockEnabled)
         {
             var activeItems = entity.Items.Where(i => !i.IsDeleted).ToList();
             foreach (var item in activeItems)
@@ -165,10 +172,10 @@ public class PurchaseService : IPurchaseService
         }
 
         await _purchaseRepository.SaveChangesAsync();
-        if (entity.Status == PurchaseStatus.Posted && await _featurePermission.IsStockEnabledAsync())
+        if (wasPosted && stockEnabled)
             await _stockLedgerRepository.SaveChangesAsync();
 
-        if (entity.Status == PurchaseStatus.Posted && await _featurePermission.IsStockEnabledAsync())
+        if (wasPosted && stockEnabled)
         {
             await _lowStockAlertService.EvaluateAfterStockChangeAsync(
                 dto.BusinessId,
@@ -179,6 +186,9 @@ public class PurchaseService : IPurchaseService
         }
 
         var updated = await _purchaseRepository.GetByIdWithItemsAsync(id, dto.BusinessId, dto.BranchId);
+        if (wasPosted)
+            await _accountingIntegration.PostPurchaseAsync(updated!, stockEnabled);
+
         return await MapDetailDtoAsync(updated!, dto.BusinessId, dto.BranchId);
     }
 
@@ -195,41 +205,42 @@ public class PurchaseService : IPurchaseService
             throw new InvalidOperationException("Cannot post a purchase with no items.");
 
         var activeItems = entity.Items.Where(i => !i.IsDeleted).ToList();
+        var stockEnabled = await _featurePermission.IsStockEnabledAsync();
 
-        if (await _featurePermission.IsStockEnabledAsync())
+        await _stockLedgerRepository.RunInSerializableTransactionAsync(async () =>
         {
-            foreach (var item in activeItems)
+            if (stockEnabled)
             {
-                item.BaseQuantity = UnitConversionHelper.ToBaseQuantity(item.Quantity, item.ConversionFactor);
+                foreach (var item in activeItems)
+                {
+                    item.BaseQuantity = UnitConversionHelper.ToBaseQuantity(item.Quantity, item.ConversionFactor);
 
-                await _stockLedgerRepository.AddAsync(CreatePurchaseStockLedgerEntry(
-                    item, entity.WarehouseId, entity.Id, entity.InvoiceNo, entity.PurchaseDate,
-                    dto.BusinessId, dto.BranchId));
+                    await _stockLedgerRepository.AddAsync(CreatePurchaseStockLedgerEntry(
+                        item, entity.WarehouseId, entity.Id, entity.InvoiceNo, entity.PurchaseDate,
+                        dto.BusinessId, dto.BranchId));
+                }
+
+                await _stockLedgerRepository.SaveChangesAsync();
+            }
+            else
+            {
+                foreach (var item in activeItems)
+                    item.BaseQuantity = item.Quantity;
             }
 
-            await _stockLedgerRepository.SaveChangesAsync();
+            entity.TotalAmount = activeItems.Sum(i => i.TotalCost);
+            entity.Status = PurchaseStatus.Posted;
+            await _purchaseRepository.SaveChangesAsync();
 
+            await _accountingIntegration.PostPurchaseAsync(entity, stockEnabled);
+        });
+
+        if (stockEnabled)
+        {
             await _lowStockAlertService.EvaluateAfterStockChangeAsync(
                 dto.BusinessId,
                 dto.BranchId,
                 activeItems.Select(i => new StockChangeItem(i.ProductId, i.VariantId, entity.WarehouseId)));
-        }
-        else
-        {
-            foreach (var item in activeItems)
-                item.BaseQuantity = item.Quantity;
-        }
-
-        entity.TotalAmount = activeItems.Sum(i => i.TotalCost);
-        entity.Status = PurchaseStatus.Posted;
-
-        await _purchaseRepository.SaveChangesAsync();
-
-        if (entity.IsCreditPurchase)
-        {
-            await _partyLedgerService.RecordCreditPurchaseAsync(
-                dto.BusinessId, dto.BranchId, entity.SupplierId,
-                entity.Id, entity.InvoiceNo, entity.TotalAmount, entity.PurchaseDate);
         }
 
         var posted = await _purchaseRepository.GetByIdWithItemsAsync(id, dto.BusinessId, dto.BranchId);
@@ -398,6 +409,9 @@ public class PurchaseService : IPurchaseService
             throw new InvalidOperationException(
                 $"Only posted purchases can be voided. Current status: {entity.Status}.");
 
+        await _accountingIntegration.ReverseTransactionAsync(
+            id, GlTransactionType.Purchase, $"Void — {entity.InvoiceNo}");
+
         // Reverse all PurchaseEntry records for this purchase
         var originalEntries = await _stockLedgerRepository.GetByReferenceAsync(
             id, dto.BusinessId, dto.BranchId, StockLedgerType.PurchaseEntry);
@@ -422,13 +436,6 @@ public class PurchaseService : IPurchaseService
         }).ToList();
 
         await _stockLedgerRepository.AddRangeAsync(reversals);
-
-        if (entity.IsCreditPurchase)
-        {
-            await _partyLedgerService.ReverseCreditPurchaseAsync(
-                dto.BusinessId, dto.BranchId, entity.SupplierId,
-                entity.Id, entity.InvoiceNo, entity.TotalAmount, DateTime.UtcNow, dto.Reason);
-        }
 
         entity.Status       = PurchaseStatus.Cancelled;
         entity.VoidedAt     = DateTime.UtcNow;

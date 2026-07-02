@@ -95,3 +95,31 @@ export function CustomerFilter({
     </div>
   );
 }
+
+export function SupplierFilter({
+  suppliers,
+  value,
+  onChange,
+}: {
+  suppliers: Array<{ id: number; name: string; supplierCode?: string }>;
+  value: number;
+  onChange: (supplierId: number) => void;
+}) {
+  return (
+    <div>
+      <label className="mb-1 block text-sm font-medium text-gray-700">Supplier</label>
+      <select
+        value={value || ''}
+        onChange={(e) => onChange(e.target.value === '' ? 0 : Number(e.target.value))}
+        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+      >
+        <option value="">All Suppliers</option>
+        {suppliers.map((s) => (
+          <option key={s.id} value={s.id}>
+            {s.supplierCode ? `${s.supplierCode} — ` : ''}{s.name}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}

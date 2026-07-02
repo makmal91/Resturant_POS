@@ -262,6 +262,82 @@ public static class CodeSequenceDatabaseInitializer
                 GROUP BY b.[Id]
             ) src ON s.[BranchId] = src.[BranchId]
             WHERE s.[ModuleName] = N'SubCategory' AND s.[LastNumber] < src.[MaxNum];
+            """,
+
+            // Sync CustomerReceipt sequences per branch (today)
+            """
+            INSERT INTO [dbo].[CodeSequences] ([ModuleName], [BranchId], [Prefix], [LastNumber], [ResetType], [LastResetDate])
+            SELECT N'CustomerReceipt', b.[Id], N'REC',
+                ISNULL((
+                    SELECT MAX(TRY_CAST(RIGHT(p.[ReferenceNo], 4) AS bigint))
+                    FROM [dbo].[InvoicePayments] p
+                    WHERE p.[BranchId] = b.[Id] AND p.[IsDeleted] = 0 AND p.[Module] = 1
+                      AND p.[ReferenceNo] LIKE N'REC-' + FORMAT(GETUTCDATE(), 'yyyyMMdd') + N'-%'
+                ), 0),
+                1, GETUTCDATE()
+            FROM [dbo].[Branches] b
+            WHERE b.[IsDeleted] = 0
+              AND NOT EXISTS (
+                  SELECT 1 FROM [dbo].[CodeSequences] s
+                  WHERE s.[ModuleName] = N'CustomerReceipt' AND s.[BranchId] = b.[Id]
+              );
+            """,
+
+            // Sync SupplierPayment sequences per branch (today)
+            """
+            INSERT INTO [dbo].[CodeSequences] ([ModuleName], [BranchId], [Prefix], [LastNumber], [ResetType], [LastResetDate])
+            SELECT N'SupplierPayment', b.[Id], N'PAY',
+                ISNULL((
+                    SELECT MAX(TRY_CAST(RIGHT(p.[ReferenceNo], 4) AS bigint))
+                    FROM [dbo].[InvoicePayments] p
+                    WHERE p.[BranchId] = b.[Id] AND p.[IsDeleted] = 0 AND p.[Module] = 2
+                      AND p.[ReferenceNo] LIKE N'PAY-' + FORMAT(GETUTCDATE(), 'yyyyMMdd') + N'-%'
+                ), 0),
+                1, GETUTCDATE()
+            FROM [dbo].[Branches] b
+            WHERE b.[IsDeleted] = 0
+              AND NOT EXISTS (
+                  SELECT 1 FROM [dbo].[CodeSequences] s
+                  WHERE s.[ModuleName] = N'SupplierPayment' AND s.[BranchId] = b.[Id]
+              );
+            """,
+
+            // Sync Expense sequences per branch (today)
+            """
+            INSERT INTO [dbo].[CodeSequences] ([ModuleName], [BranchId], [Prefix], [LastNumber], [ResetType], [LastResetDate])
+            SELECT N'Expense', b.[Id], N'EXP',
+                ISNULL((
+                    SELECT MAX(TRY_CAST(RIGHT(e.[ReferenceNo], 4) AS bigint))
+                    FROM [dbo].[Expenses] e
+                    WHERE e.[BranchId] = b.[Id] AND e.[IsDeleted] = 0
+                      AND e.[ReferenceNo] LIKE N'EXP-' + FORMAT(GETUTCDATE(), 'yyyyMMdd') + N'-%'
+                ), 0),
+                1, GETUTCDATE()
+            FROM [dbo].[Branches] b
+            WHERE b.[IsDeleted] = 0
+              AND NOT EXISTS (
+                  SELECT 1 FROM [dbo].[CodeSequences] s
+                  WHERE s.[ModuleName] = N'Expense' AND s.[BranchId] = b.[Id]
+              );
+            """,
+
+            // Sync JournalVoucher sequences per branch (today)
+            """
+            INSERT INTO [dbo].[CodeSequences] ([ModuleName], [BranchId], [Prefix], [LastNumber], [ResetType], [LastResetDate])
+            SELECT N'JournalVoucher', b.[Id], N'JV',
+                ISNULL((
+                    SELECT MAX(TRY_CAST(RIGHT(j.[VoucherNo], 4) AS bigint))
+                    FROM [dbo].[JournalVouchers] j
+                    WHERE j.[BranchId] = b.[Id] AND j.[IsDeleted] = 0
+                      AND j.[VoucherNo] LIKE N'JV-' + FORMAT(GETUTCDATE(), 'yyyyMMdd') + N'-%'
+                ), 0),
+                1, GETUTCDATE()
+            FROM [dbo].[Branches] b
+            WHERE b.[IsDeleted] = 0
+              AND NOT EXISTS (
+                  SELECT 1 FROM [dbo].[CodeSequences] s
+                  WHERE s.[ModuleName] = N'JournalVoucher' AND s.[BranchId] = b.[Id]
+              );
             """
         };
 

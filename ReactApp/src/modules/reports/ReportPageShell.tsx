@@ -74,14 +74,15 @@ export default function ReportPageShell<T extends Record<string, unknown>>({
   onPrint,
 }: ReportPageShellProps<T>) {
   return (
-    <div className="print-area">
+    <div className="flex h-[calc(100dvh-7.5rem)] min-h-[28rem] flex-col gap-4 overflow-hidden print-area">
+      <div className="shrink-0 space-y-4">
       {error && (
-        <div className="mb-6 rounded-md bg-red-50 p-4 text-red-800">
+        <div className="rounded-md bg-red-50 p-4 text-red-800">
           <span className="font-medium">{error}</span>
         </div>
       )}
 
-      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="mb-2 text-3xl font-bold text-gray-900">{title}</h1>
           <p className="text-gray-600">{description}</p>
@@ -118,7 +119,7 @@ export default function ReportPageShell<T extends Record<string, unknown>>({
         </div>
       </div>
 
-      <div className="mb-6 grid grid-cols-1 gap-4 rounded-xl border border-gray-100 bg-white p-5 shadow-sm print:hidden sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 rounded-xl border border-gray-100 bg-white p-5 shadow-sm print:hidden sm:grid-cols-2 lg:grid-cols-4">
         {showDateFilters && (
           <>
             <div>
@@ -145,7 +146,9 @@ export default function ReportPageShell<T extends Record<string, unknown>>({
       </div>
 
       {summary}
+      </div>
 
+      <div className="min-h-0 flex-1 flex flex-col">
       <DataTable
         data={rows}
         columns={columns}
@@ -158,6 +161,7 @@ export default function ReportPageShell<T extends Record<string, unknown>>({
         onPageSizeChange={onPageSizeChange}
         emptyMessage={emptyMessage}
         serverSide
+        fillHeight
         totalRecords={totalRecords}
         totalPages={totalPages}
         currentPage={pageNumber}
@@ -169,6 +173,7 @@ export default function ReportPageShell<T extends Record<string, unknown>>({
         onSortChange={onSortChange}
         footerRow={footerRow}
       />
+      </div>
     </div>
   );
 }

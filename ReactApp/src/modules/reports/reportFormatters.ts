@@ -9,10 +9,14 @@ export const fmtQty = (n: number) => {
 
 export const formatDate = (value: string) => {
   if (!value) return '—';
-  const d = new Date(value);
-  return Number.isNaN(d.getTime())
-    ? '—'
-    : d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  const datePart = value.includes('T') ? value.split('T')[0] : value.slice(0, 10);
+  const [year, month, day] = datePart.split('-').map(Number);
+  if (!year || !month || !day) return '—';
+  return new Date(year, month - 1, day).toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
 };
 
 export const monthStart = () => {

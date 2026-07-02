@@ -64,24 +64,26 @@ public class POSDbContext : DbContext
     public DbSet<SaleInvoice> SaleInvoices { get; set; } = null!;
     public DbSet<SaleInvoiceItem> SaleInvoiceItems { get; set; } = null!;
 
-    // Cash Flow module
-    public DbSet<CashFlowTransaction> CashFlowTransactions { get; set; } = null!;
+    // Cash register (operational; movements are in GL Transactions)
     public DbSet<CashRegister> CashRegisters { get; set; } = null!;
 
-    // Party ledger (customer receivable / supplier payable)
-    public DbSet<CustomerLedgerTransaction> CustomerLedgerTransactions { get; set; } = null!;
-    public DbSet<SupplierLedgerTransaction> SupplierLedgerTransactions { get; set; } = null!;
     public DbSet<InvoicePayment> InvoicePayments { get; set; } = null!;
+    public DbSet<PaymentAllocation> PaymentAllocations { get; set; } = null!;
 
     // Expenses module
     public DbSet<Expense> Expenses { get; set; } = null!;
     public DbSet<ExpenseCategory> ExpenseCategories { get; set; } = null!;
+    public DbSet<JournalVoucher> JournalVouchers { get; set; } = null!;
 
     // Code generation
     public DbSet<CodeSequence> CodeSequences { get; set; } = null!;
 
     // Exception logging
     public DbSet<ExceptionLog> ExceptionLogs { get; set; } = null!;
+
+    // Double-entry general ledger (single source of truth for financial movements)
+    public DbSet<GlAccount> GlAccounts { get; set; } = null!;
+    public DbSet<GlTransaction> GlTransactions { get; set; } = null!;
     #endregion
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -132,15 +134,16 @@ public class POSDbContext : DbContext
         modelBuilder.ApplyConfiguration(new StockLedgerConfiguration());
         modelBuilder.ApplyConfiguration(new SaleInvoiceConfiguration());
         modelBuilder.ApplyConfiguration(new SaleInvoiceItemConfiguration());
-        modelBuilder.ApplyConfiguration(new CashFlowTransactionConfiguration());
         modelBuilder.ApplyConfiguration(new CashRegisterConfiguration());
-        modelBuilder.ApplyConfiguration(new CustomerLedgerTransactionConfiguration());
-        modelBuilder.ApplyConfiguration(new SupplierLedgerTransactionConfiguration());
         modelBuilder.ApplyConfiguration(new InvoicePaymentConfiguration());
+        modelBuilder.ApplyConfiguration(new PaymentAllocationConfiguration());
         modelBuilder.ApplyConfiguration(new ExpenseCategoryConfiguration());
         modelBuilder.ApplyConfiguration(new ExpenseConfiguration());
+        modelBuilder.ApplyConfiguration(new JournalVoucherConfiguration());
         modelBuilder.ApplyConfiguration(new CodeSequenceConfiguration());
         modelBuilder.ApplyConfiguration(new ExceptionLogConfiguration());
+        modelBuilder.ApplyConfiguration(new GlAccountConfiguration());
+        modelBuilder.ApplyConfiguration(new GlTransactionConfiguration());
 
         // Configure BaseEntity default values
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())

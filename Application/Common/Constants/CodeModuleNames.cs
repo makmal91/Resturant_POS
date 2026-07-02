@@ -10,4 +10,8 @@ public static class CodeModuleNames
     public const string Supplier = "Supplier";
     public const string Purchase = "Purchase";
     public const string SalesInvoice = "SalesInvoice";
+    public const string CustomerReceipt = "CustomerReceipt";
+    public const string SupplierPayment = "SupplierPayment";
+    public const string Expense = "Expense";
+    public const string JournalVoucher = "JournalVoucher";
 }

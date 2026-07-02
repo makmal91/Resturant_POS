@@ -29,6 +29,24 @@ public static class NavigationMenuDatabaseInitializer
         try
         {
             await context.Database.ExecuteSqlRawAsync(createTableSql);
+            await context.Database.ExecuteSqlRawAsync("""
+                UPDATE [Menus] SET
+                    [Route] = N'/finance/receivables',
+                    [Name] = N'Receivables',
+                    [Icon] = N'RCV',
+                    [IsActive] = 1
+                WHERE [Name] = N'Receive Payment';
+
+                UPDATE [Menus] SET
+                    [Route] = N'/finance/payables',
+                    [Name] = N'Payables',
+                    [Icon] = N'PAY',
+                    [IsActive] = 1
+                WHERE [Name] = N'Pay Supplier';
+
+                UPDATE [Menus] SET [Route] = N'/finance/expenses'
+                WHERE [Route] = N'/expenses' AND [Name] = N'Expenses';
+                """);
         }
         catch (Exception ex)
         {

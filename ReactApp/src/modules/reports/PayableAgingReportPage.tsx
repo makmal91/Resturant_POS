@@ -1,10 +1,11 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Column } from '../../components/DataTable';
 import Badge from '../../components/Badge';
 import { useBranchWriteAccess } from '../../hooks/useBranchWriteAccess';
 import { hasBranchContext } from '../../types/permissions';
 import { safeString } from '../../utils/safeValues';
-import { AgingBucketFilter } from './AgingSummaryCards';
+import { supplierService, type SupplierItem } from '../supplier/supplierService';
+import { AgingBucketFilter, SupplierFilter } from './AgingSummaryCards';
 import { AgingAttractiveSummary } from './reportAttractiveSummaries';
 import ReportPageShell from './ReportPageShell';
 import { payableAgingExportColumns } from './reportExportColumns';
@@ -24,8 +25,22 @@ const PayableAgingReportPage: React.FC = () => {
   const { selectedBranchId } = useBranchWriteAccess();
   const branchId = hasBranchContext(selectedBranchId) && selectedBranchId !== null ? selectedBranchId : 0;
   const [agingBucket, setAgingBucket] = useState('');
+  const [supplierId, setSupplierId] = useState(0);
+  const [suppliers, setSuppliers] = useState<SupplierItem[]>([]);
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
+
+  useEffect(() => {
+    if (branchId <= 0) {
+      setSuppliers([]);
+      setSupplierId(0);
+      return;
+    }
+    void supplierService
+      .getAllActive(branchId)
+      .then((res) => setSuppliers(Array.isArray(res.data) ? res.data : []))
+      .catch(() => setSuppliers([]));
+  }, [branchId]);
 
   const table = useAgingReportTable<PayableAgingRow>({
     branchId,
@@ -33,6 +48,7 @@ const PayableAgingReportPage: React.FC = () => {
     fetcher: reportService.getPayableAgingReport,
     defaultSortColumn: 'daysOverdue',
     agingBucket,
+    supplierId,
     fromDate,
     toDate,
   });
@@ -45,11 +61,12 @@ const PayableAgingReportPage: React.FC = () => {
       sortColumn: table.sortColumn,
       sortDirection: table.sortDirection,
       agingBucket: agingBucket || undefined,
+      ...(supplierId > 0 ? { supplierId } : {}),
       ...(fromDate ? { fromDate } : {}),
       ...(toDate ? { toDate } : {}),
     });
     return { data: res.data.data, totalRecords: res.data.totalRecords };
-  }, [branchId, table.search, table.sortColumn, table.sortDirection, agingBucket, fromDate, toDate]);
+  }, [branchId, table.search, table.sortColumn, table.sortDirection, agingBucket, supplierId, fromDate, toDate]);
 
   const { exporting, onExport } = useReportExport(
     'payable-aging-report',
@@ -96,12 +113,21 @@ const PayableAgingReportPage: React.FC = () => {
   return (
     <ReportPageShell
       title="Payable Aging Report"
-      description="Supplier outstanding invoices grouped by aging buckets (calculated on server)."
+      description="Open credit purchase balances from GL charges minus payments, grouped by aging buckets."
       fromDate={fromDate}
       toDate={toDate}
       onFromDateChange={(v) => { setFromDate(v); table.setPageNumber(1); }}
       onToDateChange={(v) => { setToDate(v); table.setPageNumber(1); }}
-      extraFilters={<AgingBucketFilter value={agingBucket} onChange={(v) => { setAgingBucket(v); table.setPageNumber(1); }} />}
+      extraFilters={(
+        <>
+          <SupplierFilter
+            suppliers={suppliers}
+            value={supplierId}
+            onChange={(id) => { setSupplierId(id); table.setPageNumber(1); }}
+          />
+          <AgingBucketFilter value={agingBucket} onChange={(v) => { setAgingBucket(v); table.setPageNumber(1); }} />
+        </>
+      )}
       summary={<AgingAttractiveSummary summary={table.summary} variant="payable" loading={table.loading} />}
       error={table.error}
       loading={table.loading}

@@ -1,28 +1,31 @@
 import React, { useEffect, useState } from 'react';
+import CodeFieldWithGenerate from './CodeFieldWithGenerate';
+import { CODE_MODULES } from '../../services/codeGeneratorService';
 import { FormButton, FormInput, FormSelect, FormTextarea } from './index';
 import { useBusinessCurrency } from '../../hooks/useBusinessCurrency';
 import { useFormBranchId } from '../../hooks/useFormBranchId';
 import type { CashFlowPaymentMethod, CashFlowTransactionType } from '../../modules/cashflow/cashFlowService';
+
 export interface CashTransactionFormData {
   transactionType: CashFlowTransactionType;
   paymentMethod: CashFlowPaymentMethod;
   amount: string;
-  referenceNo: string;
+  voucherNo: string;
   description: string;
 }
 
 interface CashTransactionFormProps {
-  initialData?: { transactionType?: CashFlowTransactionType } | null;
+  initialData?: { transactionType?: CashFlowTransactionType; voucherNo?: string; id?: number } | null;
   onSubmit: (data: CashTransactionFormData) => void;
   isLoading?: boolean;
   submitLabel?: string;
 }
 
-const buildDefaultFormData = (initialType: CashFlowTransactionType): CashTransactionFormData => ({
+const buildDefaultFormData = (initialType: CashFlowTransactionType, voucherNo = ''): CashTransactionFormData => ({
   transactionType: initialType,
   paymentMethod: 'Cash',
   amount: '',
-  referenceNo: '',
+  voucherNo,
   description: '',
 });
 
@@ -30,19 +33,22 @@ const CashTransactionForm: React.FC<CashTransactionFormProps> = ({
   initialData,
   onSubmit,
   isLoading = false,
-  submitLabel = 'Record Transaction',
+  submitLabel = 'Add Journal Voucher',
 }) => {
   const initialType = initialData?.transactionType ?? 'CashIn';
-  const { branchError } = useFormBranchId();
+  const isEditMode = Boolean(initialData?.id);
+  const { branchId: resolvedBranchId, branchError } = useFormBranchId();
   const { symbol, currencyCode, loading: currencyLoading } = useBusinessCurrency();
 
-  const [formData, setFormData] = useState<CashTransactionFormData>(() => buildDefaultFormData(initialType));
+  const [formData, setFormData] = useState<CashTransactionFormData>(() =>
+    buildDefaultFormData(initialType, initialData?.voucherNo ?? ''),
+  );
   const [errors, setErrors] = useState<Partial<Record<keyof CashTransactionFormData, string>>>({});
 
   useEffect(() => {
-    setFormData(buildDefaultFormData(initialType));
+    setFormData(buildDefaultFormData(initialType, initialData?.voucherNo ?? ''));
     setErrors({});
-  }, [initialType]);
+  }, [initialType, initialData?.voucherNo]);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>,
@@ -58,7 +64,7 @@ const CashTransactionForm: React.FC<CashTransactionFormProps> = ({
 
     if (!formData.amount.trim()) {
       nextErrors.amount = 'Amount is required';
-    } else     if (isNaN(parsed) || parsed <= 0) {
+    } else if (isNaN(parsed) || parsed <= 0) {
       nextErrors.amount = 'Amount must be greater than zero';
     }
 
@@ -82,13 +88,24 @@ const CashTransactionForm: React.FC<CashTransactionFormProps> = ({
     <form onSubmit={handleSubmit} className="flex h-full min-h-0 flex-col">
       <div className="flex-1 overflow-y-auto min-h-0 px-6 py-4">
         <p className="text-sm text-gray-600 mb-6">
-          Record a manual cash movement for the selected branch. Currency is taken from your business settings.
+          Record a manual journal voucher (cash in or cash out) for the selected branch.
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {branchError && (
             <p className="md:col-span-2 text-sm text-red-600">{branchError}</p>
           )}
+
+          <CodeFieldWithGenerate
+            label="Voucher No"
+            name="voucherNo"
+            value={formData.voucherNo}
+            onChange={(value) => setFormData((prev) => ({ ...prev, voucherNo: value }))}
+            module={CODE_MODULES.JournalVoucher}
+            branchId={resolvedBranchId}
+            isEditMode={isEditMode}
+            required
+          />
 
           <FormInput
             label="Currency"
@@ -99,14 +116,13 @@ const CashTransactionForm: React.FC<CashTransactionFormProps> = ({
           />
 
           <FormSelect
-            label="Transaction Type"
+            label="Voucher Type"
             name="transactionType"
             value={formData.transactionType}
             onChange={handleChange}
             options={[
               { label: 'Cash In', value: 'CashIn' },
               { label: 'Cash Out', value: 'CashOut' },
-              { label: 'Bank Transfer', value: 'BankTransfer' },
             ]}
             required
           />
@@ -163,21 +179,13 @@ const CashTransactionForm: React.FC<CashTransactionFormProps> = ({
             )}
           </div>
 
-          <FormInput
-            label="Reference No."
-            name="referenceNo"
-            value={formData.referenceNo}
-            onChange={handleChange}
-            placeholder="e.g. INV-2026-001"
-          />
-
           <div className="md:col-span-2">
             <FormTextarea
               label="Description"
               name="description"
               value={formData.description}
               onChange={handleChange}
-              placeholder="Reason for this transaction…"
+              placeholder="Reason for this journal voucher…"
               rows={3}
             />
           </div>

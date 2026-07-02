@@ -1,7 +1,9 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Column } from '../../components/DataTable';
 import { useBranchWriteAccess } from '../../hooks/useBranchWriteAccess';
 import { hasBranchContext } from '../../types/permissions';
+import { supplierService, type SupplierItem } from '../supplier/supplierService';
+import { SupplierFilter } from './AgingSummaryCards';
 import ReportPageShell from './ReportPageShell';
 import { SupplierPayableAttractiveSummary } from './reportAttractiveSummaries';
 import { supplierPayableExportColumns } from './reportExportColumns';
@@ -14,6 +16,20 @@ import { useReportTable } from './useReportTable';
 const SupplierPayableReportPage: React.FC = () => {
   const { selectedBranchId } = useBranchWriteAccess();
   const branchId = hasBranchContext(selectedBranchId) && selectedBranchId !== null ? selectedBranchId : 0;
+  const [supplierId, setSupplierId] = useState(0);
+  const [suppliers, setSuppliers] = useState<SupplierItem[]>([]);
+
+  useEffect(() => {
+    if (branchId <= 0) {
+      setSuppliers([]);
+      setSupplierId(0);
+      return;
+    }
+    void supplierService
+      .getAllActive(branchId)
+      .then((res) => setSuppliers(Array.isArray(res.data) ? res.data : []))
+      .catch(() => setSuppliers([]));
+  }, [branchId]);
 
   const table = useReportTable<SupplierPayableRow>({
     branchId,
@@ -21,6 +37,7 @@ const SupplierPayableReportPage: React.FC = () => {
     fetcher: reportService.getSupplierPayableReport,
     defaultSortColumn: 'payableAmount',
     includeDates: false,
+    supplierId,
   });
 
   const fetchAggregatePage = useCallback(async (pageNumber: number, pageSize: number) => {
@@ -30,9 +47,10 @@ const SupplierPayableReportPage: React.FC = () => {
       search: table.search.trim() || undefined,
       sortColumn: table.sortColumn,
       sortDirection: table.sortDirection,
+      ...(supplierId > 0 ? { supplierId } : {}),
     });
     return { data: res.data.data, totalRecords: res.data.totalRecords };
-  }, [branchId, table.search, table.sortColumn, table.sortDirection]);
+  }, [branchId, supplierId, table.search, table.sortColumn, table.sortDirection]);
 
   const aggregate = useCallback((rows: SupplierPayableRow[]) => ({
     supplierCount: rows.length,
@@ -43,7 +61,7 @@ const SupplierPayableReportPage: React.FC = () => {
 
   const { totals, loading: aggregatesLoading } = useReportAggregates({
     enabled: branchId > 0,
-    deps: [branchId, table.search, table.sortColumn, table.sortDirection],
+    deps: [branchId, supplierId, table.search, table.sortColumn, table.sortDirection],
     fetchPage: fetchAggregatePage,
     aggregate,
   });
@@ -89,8 +107,15 @@ const SupplierPayableReportPage: React.FC = () => {
   return (
     <ReportPageShell
       title="Supplier Payable Report"
-      description="Suppliers with unpaid purchase invoice balances."
+      description="Suppliers with GL payable balances and open credit purchases."
       showDateFilters={false}
+      extraFilters={(
+        <SupplierFilter
+          suppliers={suppliers}
+          value={supplierId}
+          onChange={(id) => { setSupplierId(id); table.setPageNumber(1); }}
+        />
+      )}
       error={table.error}
       loading={table.loading}
       onRefresh={table.reload}

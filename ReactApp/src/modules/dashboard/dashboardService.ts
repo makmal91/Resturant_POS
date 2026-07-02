@@ -70,6 +70,8 @@ export interface DashboardFinancialDto {
   grossProfit: number;
   totalExpenses: number;
   netProfit: number;
+  totalReceivables: number;
+  totalPayables: number;
   dailyCashFlow: DailyCashFlowDto[];
 }
 

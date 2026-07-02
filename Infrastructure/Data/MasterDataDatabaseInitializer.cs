@@ -60,6 +60,11 @@ public static class MasterDataDatabaseInitializer
             END
             """,
 
+            """
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[ExpenseCategories]') AND name = N'GlAccountId')
+                ALTER TABLE [dbo].[ExpenseCategories] ADD [GlAccountId] INT NULL;
+            """,
+
             // ── Expenses: add ExpenseCategoryId, migrate from CategoryName ──
             """
             IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[Expenses]') AND name = N'ExpenseCategoryId')

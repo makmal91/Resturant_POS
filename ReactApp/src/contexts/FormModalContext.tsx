@@ -14,7 +14,7 @@ export type FormType =
   | 'purchase'
   | 'customer'
   | 'role'
-  | 'cashTransaction'
+  | 'journalVoucher'
   | 'receivePayment'
   | 'paySupplier'
   | 'expense'
@@ -143,7 +143,7 @@ const DEFAULT_ROLE_FORM_DATA = {
   status: 'Active',
 };
 
-const DEFAULT_CASH_TRANSACTION_FORM_DATA = {
+const DEFAULT_JOURNAL_VOUCHER_FORM_DATA = {
   transactionType: 'CashIn' as const,
 };
 
@@ -240,8 +240,8 @@ const getDefaultFormData = (type: FormType) => {
     return DEFAULT_ROLE_FORM_DATA;
   }
 
-  if (type === 'cashTransaction') {
-    return DEFAULT_CASH_TRANSACTION_FORM_DATA;
+  if (type === 'journalVoucher') {
+    return DEFAULT_JOURNAL_VOUCHER_FORM_DATA;
   }
 
   if (type === 'receivePayment') {

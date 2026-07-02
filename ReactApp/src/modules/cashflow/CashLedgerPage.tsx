@@ -11,6 +11,7 @@ import {
   type CashFlowTransactionDto,
   type CashFlowTransactionType,
   type CashFlowPaymentMethod,
+  type LedgerResponse,
 } from './cashFlowService';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -26,8 +27,6 @@ const formatDate = (s: string) => {
         year: 'numeric',
         month: 'short',
         day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
       });
 };
 
@@ -39,6 +38,7 @@ const TYPE_COLORS: Record<CashFlowTransactionType, string> = {
   BankTransfer: 'bg-purple-100 text-purple-700',
   OpeningBalance: 'bg-gray-100 text-gray-600',
   ClosingBalance: 'bg-gray-100 text-gray-700',
+  Reversal: 'bg-amber-100 text-amber-800',
 };
 
 const TYPE_LABELS: Record<CashFlowTransactionType, string> = {
@@ -49,10 +49,8 @@ const TYPE_LABELS: Record<CashFlowTransactionType, string> = {
   BankTransfer: 'Bank Transfer',
   OpeningBalance: 'Opening',
   ClosingBalance: 'Closing',
+  Reversal: 'Reversal',
 };
-
-const isInflow = (type: CashFlowTransactionType) =>
-  type === 'Sale' || type === 'CashIn' || type === 'OpeningBalance';
 
 const TX_TYPES: CashFlowTransactionType[] = [
   'Sale',
@@ -62,30 +60,31 @@ const TX_TYPES: CashFlowTransactionType[] = [
   'BankTransfer',
   'OpeningBalance',
   'ClosingBalance',
+  'Reversal',
 ];
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function CashLedgerPage() {
   const navigate = useNavigate();
-  const { openForm, isOpen } = useFormModal();
+  const { isOpen } = useFormModal();
   const { selectedBranchId } = useBranchStore();
   const branchId = selectedBranchId ?? 0;
 
-  const today = new Date().toISOString().slice(0, 10);
-  const [fromDate, setFromDate] = useState(today);
-  const [toDate, setToDate] = useState(today);
-  const [typeFilter, setTypeFilter] = useState<CashFlowTransactionType | ''>('');
-  const [methodFilter, setMethod] = useState<CashFlowPaymentMethod | ''>('');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
   const [rows, setRows] = useState<CashFlowTransactionDto[]>([]);
   const [totalRecords, setTotalRecords] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
-  const [totalIn, setTotalIn] = useState(0);
-  const [totalOut, setTotalOut] = useState(0);
+  const [totalDebit, setTotalDebit] = useState(0);
+  const [totalCredit, setTotalCredit] = useState(0);
   const [netTotal, setNetTotal] = useState(0);
+  const [periodOpeningBalance, setPeriodOpeningBalance] = useState(0);
+  const [closingBalance, setClosingBalance] = useState(0);
+  const [accountName, setAccountName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -117,17 +116,21 @@ export default function CashLedgerPage() {
         },
       },
       {
-        key: 'paymentMethod',
-        header: 'Method',
+        key: 'accountName',
+        header: 'Account',
         sortable: false,
-        render: (value: string) => <span className="text-gray-500">{value}</span>,
+        render: (value: string | null) => (
+          <span className="text-gray-700 max-w-[180px] truncate block" title={value?.trim() || undefined}>
+            {value?.trim() || '—'}
+          </span>
+        ),
       },
       {
         key: 'description',
         header: 'Description',
         sortable: false,
         render: (value: string | null) => (
-          <span className="text-gray-600 max-w-[200px] truncate block" title={value ?? undefined}>
+          <span className="text-gray-600 max-w-[240px] truncate block" title={value ?? undefined}>
             {value?.trim() || '—'}
           </span>
         ),
@@ -141,38 +144,62 @@ export default function CashLedgerPage() {
         ),
       },
       {
-        key: 'branchName',
-        header: 'Branch',
+        key: 'debit',
+        header: 'In',
         sortable: false,
-        render: (value: string) => <span className="text-gray-500">{value}</span>,
+        width: '110px',
+        render: (value: number) => (
+          <span className="tabular-nums text-emerald-600">{value > 0 ? fmt(value) : '—'}</span>
+        ),
       },
       {
-        key: 'amount',
-        header: 'Amount',
+        key: 'credit',
+        header: 'Out',
         sortable: false,
-        width: '120px',
-        render: (value: number, item) => {
-          const inflow = isInflow(item.transactionType as CashFlowTransactionType);
-          return (
-            <span className={`font-bold ${inflow ? 'text-emerald-600' : 'text-red-500'}`}>
-              {inflow ? '+' : '−'}
-              {fmt(value)}
-            </span>
-          );
-        },
+        width: '110px',
+        render: (value: number) => (
+          <span className="tabular-nums text-red-600">{value > 0 ? fmt(value) : '—'}</span>
+        ),
+      },
+      {
+        key: 'runningBalance',
+        header: 'Balance',
+        sortable: false,
+        width: '130px',
+        render: (value: number) => (
+          <span className="tabular-nums font-semibold text-gray-800">{fmt(value)}</span>
+        ),
       },
     ],
     [],
   );
+
+  const footerRow = useMemo(() => {
+    if (totalRecords <= 0) return undefined;
+    return {
+      label: 'Total',
+      values: {
+        transactionType: 'Total',
+        debit: <span className="tabular-nums font-bold text-emerald-600">{fmt(totalDebit)}</span>,
+        credit: <span className="tabular-nums font-bold text-red-600">{fmt(totalCredit)}</span>,
+        runningBalance: (
+          <span className="tabular-nums font-bold text-blue-800">{fmt(closingBalance)}</span>
+        ),
+      },
+    };
+  }, [totalRecords, totalDebit, totalCredit, closingBalance]);
 
   const fetchLedger = useCallback(async () => {
     if (branchId <= 0) {
       setRows([]);
       setTotalRecords(0);
       setTotalPages(0);
-      setTotalIn(0);
-      setTotalOut(0);
+      setTotalDebit(0);
+      setTotalCredit(0);
       setNetTotal(0);
+      setPeriodOpeningBalance(0);
+      setClosingBalance(0);
+      setAccountName('');
       setLoading(false);
       return;
     }
@@ -183,47 +210,64 @@ export default function CashLedgerPage() {
       const res = await cashFlowService.getLedger(branchId, {
         fromDate,
         toDate,
-        transactionType: typeFilter || null,
-        paymentMethod: methodFilter || null,
         page: currentPage,
         pageSize,
       });
-      setRows(res.data.transactions);
-      setTotalRecords(res.data.totalRecords);
-      setTotalPages(res.data.totalPages);
-      setTotalIn(Number(res.data.totalIn ?? 0));
-      setTotalOut(Number(res.data.totalOut ?? 0));
-      setNetTotal(Number(res.data.netTotal ?? 0));
+      const payload = res.data as LedgerResponse & Record<string, unknown>;
+      setRows(
+        (payload.transactions ?? []).map((row) => {
+          const isInflow = Boolean(row.isInflow ?? row.IsInflow ?? false);
+          const displayAmount = Number(row.displayAmount ?? row.DisplayAmount ?? Math.abs(Number(row.amount ?? 0)));
+          const debit = Number(row.debit ?? row.Debit ?? (isInflow ? displayAmount : 0));
+          const credit = Number(row.credit ?? row.Credit ?? (isInflow ? 0 : displayAmount));
+          return {
+            ...row,
+            accountName: String(row.accountName ?? row.AccountName ?? ''),
+            runningBalance: Number(row.runningBalance ?? row.RunningBalance ?? 0),
+            displayAmount,
+            isInflow,
+            debit,
+            credit,
+          };
+        })
+      );
+      setTotalRecords(payload.totalRecords);
+      setTotalPages(payload.totalPages);
+      setTotalDebit(Number(payload.totalDebit ?? payload.totalOut ?? 0));
+      setTotalCredit(Number(payload.totalCredit ?? payload.totalIn ?? 0));
+      setNetTotal(Number(payload.netTotal ?? 0));
+      setPeriodOpeningBalance(Number(payload.periodOpeningBalance ?? 0));
+      setClosingBalance(
+        Number(payload.closingBalance ?? Number(payload.periodOpeningBalance ?? 0) + Number(payload.netTotal ?? 0))
+      );
+      setAccountName(String(payload.accountName ?? payload.AccountName ?? ''));
     } catch (e) {
       setError(getApiErrorMessage(e, 'Failed to load ledger.'));
       setRows([]);
       setTotalRecords(0);
       setTotalPages(0);
-      setTotalIn(0);
-      setTotalOut(0);
+      setTotalDebit(0);
+      setTotalCredit(0);
       setNetTotal(0);
+      setPeriodOpeningBalance(0);
+      setClosingBalance(0);
+      setAccountName('');
     } finally {
       setLoading(false);
     }
-  }, [branchId, fromDate, toDate, typeFilter, methodFilter, currentPage, pageSize]);
+  }, [branchId, fromDate, toDate, currentPage, pageSize]);
 
   const fetchExportPage = useCallback(async (pageNumber: number, exportPageSize: number) => {
     const res = await cashFlowService.getLedger(branchId, {
       fromDate,
       toDate,
-      transactionType: typeFilter || null,
-      paymentMethod: methodFilter || null,
       page: pageNumber,
       pageSize: exportPageSize,
     });
     return { data: res.data.transactions, totalRecords: res.data.totalRecords };
-  }, [branchId, fromDate, toDate, typeFilter, methodFilter]);
+  }, [branchId, fromDate, toDate]);
 
-  const exportFilename = useMemo(() => {
-    const typePart = typeFilter ? `-${typeFilter.toLowerCase()}` : '';
-    const methodPart = methodFilter ? `-${methodFilter.toLowerCase()}` : '';
-    return `cash-ledger-${fromDate}-${toDate}${typePart}${methodPart}`;
-  }, [fromDate, toDate, typeFilter, methodFilter]);
+  const exportFilename = useMemo(() => `cash-ledger-${fromDate}-${toDate}`, [fromDate, toDate]);
 
   const { exporting, onExport } = useGridExport(
     exportFilename,
@@ -251,11 +295,14 @@ export default function CashLedgerPage() {
   }
 
   return (
-    <div className="space-y-4 p-4 md:p-6">
+    <div className="flex h-[calc(100dvh-7.5rem)] min-h-[28rem] flex-col gap-4 overflow-hidden">
+      <div className="shrink-0 space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Cash Flow Ledger</h1>
-          <p className="text-sm text-gray-500 mt-0.5">All cash movements for the selected filters</p>
+          <h1 className="text-2xl font-bold text-gray-800">
+            Cash Flow Ledger{accountName ? ` — ${accountName}` : ''}
+          </h1>
+          <p className="text-sm text-gray-500 mt-0.5">Cash account movements from the general ledger</p>
         </div>
         <div className="flex gap-2">
           <button
@@ -268,13 +315,6 @@ export default function CashLedgerPage() {
           </button>
           <button
             type="button"
-            onClick={() => openForm('cashTransaction')}
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            + New Transaction
-          </button>
-          <button
-            type="button"
             onClick={() => navigate('/cashflow')}
             className="px-4 py-2 bg-white border border-gray-200 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors"
           >
@@ -284,7 +324,7 @@ export default function CashLedgerPage() {
       </div>
 
       <div className="bg-white rounded-xl border border-gray-100 p-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-2 gap-3">
           <div>
             <label className="text-xs text-gray-500 font-medium mb-1 block">From Date</label>
             <input
@@ -309,40 +349,6 @@ export default function CashLedgerPage() {
               className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
             />
           </div>
-          <div>
-            <label className="text-xs text-gray-500 font-medium mb-1 block">Type</label>
-            <select
-              value={typeFilter}
-              onChange={(e) => {
-                setTypeFilter(e.target.value as CashFlowTransactionType | '');
-                setCurrentPage(1);
-              }}
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
-            >
-              <option value="">All Types</option>
-              {TX_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {TYPE_LABELS[t]}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs text-gray-500 font-medium mb-1 block">Method</label>
-            <select
-              value={methodFilter}
-              onChange={(e) => {
-                setMethod(e.target.value as CashFlowPaymentMethod | '');
-                setCurrentPage(1);
-              }}
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
-            >
-              <option value="">All Methods</option>
-              <option value="Cash">Cash</option>
-              <option value="Bank">Bank</option>
-              <option value="Wallet">Wallet</option>
-            </select>
-          </div>
         </div>
       </div>
 
@@ -350,18 +356,24 @@ export default function CashLedgerPage() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 text-center">
             <p className="text-xs text-emerald-600 font-medium uppercase">Total In</p>
-            <p className="text-lg font-bold text-emerald-700 mt-1">{fmt(totalIn)}</p>
+            <p className="text-lg font-bold text-emerald-700 mt-1">{fmt(totalDebit)}</p>
           </div>
           <div className="bg-red-50 border border-red-100 rounded-xl p-4 text-center">
             <p className="text-xs text-red-500 font-medium uppercase">Total Out</p>
-            <p className="text-lg font-bold text-red-600 mt-1">{fmt(totalOut)}</p>
+            <p className="text-lg font-bold text-red-600 mt-1">{fmt(totalCredit)}</p>
           </div>
           <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-center">
-            <p className="text-xs text-blue-600 font-medium uppercase">Net</p>
+            <p className="text-xs text-blue-600 font-medium uppercase">Balance</p>
             <p className={`text-lg font-bold mt-1 ${netTotal >= 0 ? 'text-blue-700' : 'text-red-600'}`}>
-              {fmt(netTotal)}
+              {fmt(closingBalance)}
             </p>
           </div>
+        </div>
+      )}
+
+      {!loading && periodOpeningBalance !== 0 && (
+        <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-sm text-gray-600">
+          Opening balance before selected period: <span className="font-semibold text-gray-800">{fmt(periodOpeningBalance)}</span>
         </div>
       )}
 
@@ -370,7 +382,9 @@ export default function CashLedgerPage() {
           {error}
         </div>
       )}
+      </div>
 
+      <div className="min-h-0 flex-1 flex flex-col">
       <DataTable
         data={rows}
         columns={columns}
@@ -378,6 +392,7 @@ export default function CashLedgerPage() {
         searchable={false}
         pagination
         serverSide
+        fillHeight
         totalRecords={totalRecords}
         totalPages={totalPages}
         currentPage={currentPage}
@@ -388,8 +403,10 @@ export default function CashLedgerPage() {
           setPageSize(size);
           setCurrentPage(1);
         }}
+        footerRow={footerRow}
         emptyMessage="No transactions found for the selected filters."
       />
+      </div>
     </div>
   );
 }

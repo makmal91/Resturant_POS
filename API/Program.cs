@@ -8,6 +8,7 @@ using POSSystem.Application;
 using POSSystem.Application.Interfaces;
 using POSSystem.Infrastructure;
 using POSSystem.Application.License.Interfaces;
+using POSSystem.Infrastructure.Services;
 using POSSystem.Infrastructure.Data;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -94,6 +95,17 @@ using (var scope = app.Services.CreateScope())
     var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
     var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("DatabaseInitializer");
     await DatabaseBootstrapper.InitializeAsync(db, configuration, logger, args);
+
+    try
+    {
+        var backfill = scope.ServiceProvider.GetRequiredService<GlBackfillService>();
+        await backfill.BackfillMissingJournalsAsync();
+        logger.LogInformation("GL journal backfill completed.");
+    }
+    catch (Exception ex)
+    {
+        logger.LogWarning(ex, "GL journal backfill skipped or partially applied.");
+    }
 }
 
 var licenseService = app.Services.GetRequiredService<ILicenseService>();

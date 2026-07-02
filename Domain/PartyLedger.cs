@@ -5,14 +5,16 @@ public enum CustomerLedgerTransactionType
     CreditSale = 1,
     PaymentReceived = 2,
     Reversal = 3,
-    OpeningBalance = 4
+    OpeningBalance = 4,
+    CashSale = 5
 }
 
 public enum SupplierLedgerTransactionType
 {
     CreditPurchase = 1,
     PaymentMade = 2,
-    Reversal = 3
+    Reversal = 3,
+    CashPurchase = 4,
 }
 
 public class CustomerLedgerTransaction : BaseEntity

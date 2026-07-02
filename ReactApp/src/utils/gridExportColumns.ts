@@ -18,6 +18,7 @@ const CASH_TYPE_LABELS: Record<CashFlowTransactionType, string> = {
   BankTransfer: 'Bank Transfer',
   OpeningBalance: 'Opening',
   ClosingBalance: 'Closing',
+  Reversal: 'Reversal',
 };
 
 const STOCK_TYPE_LABELS: Record<StockLedgerType, string> = {
@@ -37,19 +38,29 @@ export const partyLedgerExportColumns: GridExportColumn<PartyLedgerEntry>[] = [
   { key: 'date', header: 'Date', format: date },
   { key: 'type', header: 'Type', format: (v) => LEDGER_TYPE_LABELS[String(v)] ?? String(v ?? '') },
   { key: 'description', header: 'Description' },
-  { key: 'debit', header: 'Debit', format: (v) => (Number(v) > 0 ? money(v) : '') },
-  { key: 'credit', header: 'Credit', format: (v) => (Number(v) > 0 ? money(v) : '') },
+  { key: 'credit', header: 'In', format: (v) => (Number(v) > 0 ? money(v) : '') },
+  { key: 'debit', header: 'Out', format: (v) => (Number(v) > 0 ? money(v) : '') },
+  { key: 'runningBalance', header: 'Running Balance', format: money },
+];
+
+export const supplierLedgerExportColumns: GridExportColumn<PartyLedgerEntry>[] = [
+  { key: 'date', header: 'Date', format: date },
+  { key: 'type', header: 'Type', format: (v) => LEDGER_TYPE_LABELS[String(v)] ?? String(v ?? '') },
+  { key: 'description', header: 'Description' },
+  { key: 'debit', header: 'In', format: (v) => (Number(v) > 0 ? money(v) : '') },
+  { key: 'credit', header: 'Out', format: (v) => (Number(v) > 0 ? money(v) : '') },
   { key: 'runningBalance', header: 'Running Balance', format: money },
 ];
 
 export const cashLedgerExportColumns: GridExportColumn<CashFlowTransactionDto>[] = [
   { key: 'transactionDate', header: 'Date', format: date },
   { key: 'transactionType', header: 'Type', format: (v) => CASH_TYPE_LABELS[v as CashFlowTransactionType] ?? text(v) },
-  { key: 'paymentMethod', header: 'Method' },
+  { key: 'accountName', header: 'Account', format: text },
   { key: 'description', header: 'Description', format: text },
   { key: 'referenceNo', header: 'Reference', format: text },
-  { key: 'branchName', header: 'Branch' },
-  { key: 'amount', header: 'Amount', format: money },
+  { key: 'debit', header: 'In', format: (v) => (Number(v) > 0 ? money(v) : '') },
+  { key: 'credit', header: 'Out', format: (v) => (Number(v) > 0 ? money(v) : '') },
+  { key: 'runningBalance', header: 'Balance', format: money },
 ];
 
 export interface CashDailyTrendRow extends Record<string, unknown> {

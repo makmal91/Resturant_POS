@@ -387,6 +387,8 @@ export default function AdminDashboardPage() {
                 { label: 'Gross Profit', value: data.financial.grossProfit, color: 'text-blue-700' },
                 { label: 'Expenses', value: data.financial.totalExpenses, color: 'text-red-600' },
                 { label: 'Net Profit', value: data.financial.netProfit, color: 'text-indigo-700' },
+                { label: 'Receivables', value: data.financial.totalReceivables, color: 'text-sky-700' },
+                { label: 'Payables', value: data.financial.totalPayables, color: 'text-amber-700' },
               ].map((row) => (
                 <div key={row.label} className="flex justify-between items-center py-2 border-b border-gray-50 last:border-0">
                   <span className="text-sm text-gray-600">{row.label}</span>

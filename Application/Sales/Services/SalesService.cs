@@ -1,10 +1,9 @@
+using POSSystem.Application.Accounting.Interfaces;
 using POSSystem.Application.Auth.Interfaces;
-using POSSystem.Application.CashFlow.Interfaces;
 using POSSystem.Application.Common.Constants;
 using POSSystem.Application.Common.DTOs;
 using POSSystem.Application.Common.Helpers;
 using POSSystem.Application.Common.Interfaces;
-using POSSystem.Application.Ledger.Interfaces;
 using POSSystem.Application.Payments.Interfaces;
 using POSSystem.Application.Product.Interfaces;
 using POSSystem.Application.Sales.DTOs;
@@ -21,38 +20,38 @@ public class SalesService : ISalesService
     private readonly IStockLedgerRepository _stockLedgerRepository;
     private readonly IProductRepository _productRepository;
     private readonly ILowStockAlertService _lowStockAlertService;
-    private readonly ICashFlowService _cashFlowService;
-    private readonly IPartyLedgerService _partyLedgerService;
     private readonly IInvoicePaymentService _invoicePaymentService;
     private readonly ICodeGeneratorService _codeGenerator;
     private readonly IStockValidationService _stockValidationService;
     private readonly IUnitPricingService _unitPricingService;
     private readonly IFeaturePermissionService _featurePermission;
+    private readonly IAccountingIntegrationService _accountingIntegration;
+    private readonly IAccountingRepository _accountingRepository;
 
     public SalesService(
         ISalesRepository salesRepository,
         IStockLedgerRepository stockLedgerRepository,
         IProductRepository productRepository,
         ILowStockAlertService lowStockAlertService,
-        ICashFlowService cashFlowService,
-        IPartyLedgerService partyLedgerService,
         IInvoicePaymentService invoicePaymentService,
         ICodeGeneratorService codeGenerator,
         IStockValidationService stockValidationService,
         IUnitPricingService unitPricingService,
-        IFeaturePermissionService featurePermission)
+        IFeaturePermissionService featurePermission,
+        IAccountingIntegrationService accountingIntegration,
+        IAccountingRepository accountingRepository)
     {
         _salesRepository = salesRepository;
         _stockLedgerRepository = stockLedgerRepository;
         _productRepository = productRepository;
         _lowStockAlertService = lowStockAlertService;
-        _cashFlowService = cashFlowService;
-        _partyLedgerService = partyLedgerService;
         _invoicePaymentService = invoicePaymentService;
         _codeGenerator = codeGenerator;
         _stockValidationService = stockValidationService;
         _unitPricingService = unitPricingService;
         _featurePermission = featurePermission;
+        _accountingIntegration = accountingIntegration;
+        _accountingRepository = accountingRepository;
     }
 
     public async Task<PosProductLookupDto?> GetProductByBarcodeAsync(
@@ -250,12 +249,18 @@ public class SalesService : ISalesService
                 }
 
                 await _stockLedgerRepository.SaveChangesAsync();
+
+                await _accountingIntegration.PostSaleAsync(invoice, stockModuleEnabled: true);
             });
         }
         else
         {
-            await _salesRepository.AddAsync(invoice);
-            await _salesRepository.SaveChangesAsync();
+            await _accountingRepository.RunInTransactionAsync(async () =>
+            {
+                await _salesRepository.AddAsync(invoice);
+                await _salesRepository.SaveChangesAsync();
+                await _accountingIntegration.PostSaleAsync(invoice, stockModuleEnabled: false);
+            });
         }
 
         if (stockEnabled)
@@ -268,25 +273,15 @@ public class SalesService : ISalesService
                     .Select(i => new StockChangeItem(i.ProductId, i.VariantId, invoice.WarehouseId)));
         }
 
-        if (invoice.IsCreditSale)
-        {
-            await _partyLedgerService.RecordCreditSaleAsync(
-                dto.BusinessId, dto.BranchId, invoice.CustomerId!.Value,
-                invoice.Id, invoice.InvoiceNo, invoice.GrandTotal, invoice.SaleDate);
-        }
-        else
+        if (!invoice.IsCreditSale)
         {
             var (cash, card) = ResolvePaymentAmounts(invoice);
-            await _cashFlowService.RecordSaleAsync(
-                dto.BusinessId, dto.BranchId, invoice.Id, invoice.InvoiceNo, cash, card, invoice.SaleDate);
-
             try
             {
                 await _invoicePaymentService.RecordPosSalePaymentsAsync(invoice);
             }
             catch
             {
-                // Keep sale completed even if payment rows fail; PaidAmount remains from invoice totals.
                 invoice.PaidAmount = cash + card > 0 ? cash + card : invoice.GrandTotal;
                 await _salesRepository.UpdatePaidAmountAsync(invoice.Id, dto.BusinessId, dto.BranchId, invoice.PaidAmount);
             }
@@ -856,10 +851,8 @@ public class SalesService : ISalesService
             throw new InvalidOperationException(
                 $"Only completed invoices can be voided. Current status: {invoice.Status}.");
 
-        var (prevCash, prevCard) = ResolvePaymentAmounts(invoice);
-        var prevWasCredit = invoice.IsCreditSale;
-        var prevCreditAmount = invoice.GrandTotal;
-        var prevCustomerId = invoice.CustomerId;
+        await _accountingIntegration.ReverseTransactionAsync(
+            id, GlTransactionType.Sale, $"Void — {invoice.InvoiceNo}");
 
         // Load the original SaleEntry ledger records for this invoice
         var stockEnabled = await _featurePermission.IsStockEnabledAsync();
@@ -903,19 +896,6 @@ public class SalesService : ISalesService
 
         await _salesRepository.SaveChangesAsync();
 
-        if (prevWasCredit && prevCustomerId.HasValue)
-        {
-            await _partyLedgerService.ReverseCreditSaleAsync(
-                dto.BusinessId, dto.BranchId, prevCustomerId.Value, invoice.Id, invoice.InvoiceNo,
-                prevCreditAmount, DateTime.UtcNow, dto.Reason);
-        }
-        else
-        {
-            await _cashFlowService.ReverseSaleAsync(
-                dto.BusinessId, dto.BranchId, invoice.Id, invoice.InvoiceNo,
-                prevCash, prevCard, DateTime.UtcNow, dto.Reason);
-        }
-
         var result = await _salesRepository.GetByIdAsync(id, dto.BusinessId, dto.BranchId);
         return await MapInvoiceDtoAsync(result!);
     }
@@ -932,13 +912,12 @@ public class SalesService : ISalesService
             throw new InvalidOperationException(
                 $"Only completed invoices can be edited. Current status: {invoice.Status}.");
 
-        var (prevCash, prevCard) = ResolvePaymentAmounts(invoice);
-        var prevWasCredit = invoice.IsCreditSale;
-        var prevCreditAmount = invoice.GrandTotal;
-        var prevCustomerId = invoice.CustomerId;
+        var stockEnabled = await _featurePermission.IsStockEnabledAsync();
+
+        await _accountingIntegration.ReverseTransactionAsync(
+            id, GlTransactionType.Sale, $"Edit — {invoice.InvoiceNo}");
 
         // STEP 1: Reverse the existing stock ledger entries
-        var stockEnabled = await _featurePermission.IsStockEnabledAsync();
         if (stockEnabled)
         {
             var originalEntries = await _stockLedgerRepository.GetByReferenceAsync(
@@ -1060,34 +1039,8 @@ public class SalesService : ISalesService
                     .Select(i => new StockChangeItem(i.ProductId, i.VariantId, invoice.WarehouseId)));
         }
 
-        if (prevWasCredit && prevCustomerId.HasValue)
-        {
-            await _partyLedgerService.ReverseCreditSaleAsync(
-                dto.BusinessId, dto.BranchId, prevCustomerId.Value, invoice.Id, invoice.InvoiceNo,
-                prevCreditAmount, DateTime.UtcNow, "Invoice correction");
-        }
-        else
-        {
-            await _cashFlowService.ReverseSaleAsync(
-                dto.BusinessId, dto.BranchId, invoice.Id, invoice.InvoiceNo,
-                prevCash, prevCard, DateTime.UtcNow, "Invoice correction");
-        }
-
-        if (invoice.IsCreditSale)
-        {
-            await _partyLedgerService.RecordCreditSaleAsync(
-                dto.BusinessId, dto.BranchId, invoice.CustomerId!.Value,
-                invoice.Id, invoice.InvoiceNo, invoice.GrandTotal, invoice.SaleDate);
-        }
-        else
-        {
-            var (newCash, newCard) = ResolvePaymentAmounts(invoice);
-            await _cashFlowService.RecordSaleAsync(
-                dto.BusinessId, dto.BranchId, invoice.Id, invoice.InvoiceNo,
-                newCash, newCard, invoice.SaleDate);
-        }
-
         var result = await _salesRepository.GetByIdAsync(id, dto.BusinessId, dto.BranchId);
+        await _accountingIntegration.PostSaleAsync(result!, stockEnabled);
         return await MapInvoiceDtoAsync(result!);
     }
 

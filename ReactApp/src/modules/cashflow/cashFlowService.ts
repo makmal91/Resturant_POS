@@ -3,7 +3,7 @@ import apiClient from '../../services/api';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type CashFlowTransactionType =
-  | 'Sale' | 'Expense' | 'CashIn' | 'CashOut' | 'BankTransfer' | 'OpeningBalance' | 'ClosingBalance';
+  | 'Sale' | 'Expense' | 'CashIn' | 'CashOut' | 'BankTransfer' | 'OpeningBalance' | 'ClosingBalance' | 'Reversal';
 
 export type CashFlowPaymentMethod = 'Cash' | 'Bank' | 'Wallet';
 
@@ -14,9 +14,15 @@ export interface CashFlowTransactionDto {
   transactionType: CashFlowTransactionType;
   paymentMethod: CashFlowPaymentMethod;
   amount: number;
+  debit: number;
+  credit: number;
+  displayAmount: number;
+  isInflow: boolean;
   referenceNo: string | null;
   description: string | null;
+  accountName: string;
   transactionDate: string;
+  runningBalance: number;
   createdBy: number | null;
   createdAt: string;
 }
@@ -77,6 +83,7 @@ export interface BranchCashSummaryDto {
 }
 
 export interface LedgerResponse {
+  accountName: string;
   transactions: CashFlowTransactionDto[];
   totalRecords: number;
   totalPages: number;
@@ -85,6 +92,10 @@ export interface LedgerResponse {
   totalIn: number;
   totalOut: number;
   netTotal: number;
+  periodOpeningBalance: number;
+  totalDebit: number;
+  totalCredit: number;
+  closingBalance: number;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

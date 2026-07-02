@@ -20,8 +20,12 @@ public class CodeGeneratorService : ICodeGeneratorService
         [CodeModuleNames.Product]      = new("PRD", 5, CodeResetType.None,    false),
         [CodeModuleNames.Customer]     = new("CUS", 5, CodeResetType.None,    false),
         [CodeModuleNames.Supplier]     = new("SUP", 5, CodeResetType.None,    false),
-        [CodeModuleNames.Purchase]     = new("PUR", 4, CodeResetType.Monthly, false),
-        [CodeModuleNames.SalesInvoice] = new("INV", 4, CodeResetType.Daily,   false),
+        [CodeModuleNames.Purchase]         = new("PUR", 4, CodeResetType.Monthly, false),
+        [CodeModuleNames.SalesInvoice]     = new("INV", 4, CodeResetType.Daily,   false),
+        [CodeModuleNames.CustomerReceipt]  = new("REC", 4, CodeResetType.Daily,   false),
+        [CodeModuleNames.SupplierPayment]  = new("PAY", 4, CodeResetType.Daily,   false),
+        [CodeModuleNames.Expense]          = new("EXP", 4, CodeResetType.Daily,   false),
+        [CodeModuleNames.JournalVoucher]   = new("JV",  4, CodeResetType.Daily,   false),
     };
 
     public CodeGeneratorService(POSDbContext context) => _context = context;
@@ -265,6 +269,38 @@ public class CodeGeneratorService : ICodeGeneratorService
                    AND [InvoiceNo] LIKE {$"{config.Prefix}-{now:yyyyMMdd}-%"}
                  """,
 
+            CodeModuleNames.CustomerReceipt =>
+                $"""
+                 SELECT ISNULL(MAX(TRY_CAST(RIGHT([ReferenceNo], {padLength}) AS bigint)), CAST(0 AS bigint)) AS [Value]
+                 FROM [InvoicePayments]
+                 WHERE [IsDeleted] = 0 AND [BranchId] = {branchId!.Value} AND [Module] = 1
+                   AND [ReferenceNo] LIKE {$"{config.Prefix}-{now:yyyyMMdd}-%"}
+                 """,
+
+            CodeModuleNames.SupplierPayment =>
+                $"""
+                 SELECT ISNULL(MAX(TRY_CAST(RIGHT([ReferenceNo], {padLength}) AS bigint)), CAST(0 AS bigint)) AS [Value]
+                 FROM [InvoicePayments]
+                 WHERE [IsDeleted] = 0 AND [BranchId] = {branchId!.Value} AND [Module] = 2
+                   AND [ReferenceNo] LIKE {$"{config.Prefix}-{now:yyyyMMdd}-%"}
+                 """,
+
+            CodeModuleNames.Expense =>
+                $"""
+                 SELECT ISNULL(MAX(TRY_CAST(RIGHT([ReferenceNo], {padLength}) AS bigint)), CAST(0 AS bigint)) AS [Value]
+                 FROM [Expenses]
+                 WHERE [IsDeleted] = 0 AND [BranchId] = {branchId!.Value}
+                   AND [ReferenceNo] LIKE {$"{config.Prefix}-{now:yyyyMMdd}-%"}
+                 """,
+
+            CodeModuleNames.JournalVoucher =>
+                $"""
+                 SELECT ISNULL(MAX(TRY_CAST(RIGHT([VoucherNo], {padLength}) AS bigint)), CAST(0 AS bigint)) AS [Value]
+                 FROM [JournalVouchers]
+                 WHERE [IsDeleted] = 0 AND [BranchId] = {branchId!.Value}
+                   AND [VoucherNo] LIKE {$"{config.Prefix}-{now:yyyyMMdd}-%"}
+                 """,
+
             _ => throw new InvalidOperationException($"Unknown code module '{moduleName}'.")
         };
 
@@ -312,6 +348,18 @@ public class CodeGeneratorService : ICodeGeneratorService
             CodeModuleNames.SalesInvoice when parts.Length == 3
                 && parts[0].Equals(config.Prefix, StringComparison.OrdinalIgnoreCase)
                 && long.TryParse(parts[2], out number) => true,
+            CodeModuleNames.CustomerReceipt when parts.Length == 3
+                && parts[0].Equals(config.Prefix, StringComparison.OrdinalIgnoreCase)
+                && long.TryParse(parts[2], out number) => true,
+            CodeModuleNames.SupplierPayment when parts.Length == 3
+                && parts[0].Equals(config.Prefix, StringComparison.OrdinalIgnoreCase)
+                && long.TryParse(parts[2], out number) => true,
+            CodeModuleNames.Expense when parts.Length == 3
+                && parts[0].Equals(config.Prefix, StringComparison.OrdinalIgnoreCase)
+                && long.TryParse(parts[2], out number) => true,
+            CodeModuleNames.JournalVoucher when parts.Length == 3
+                && parts[0].Equals(config.Prefix, StringComparison.OrdinalIgnoreCase)
+                && long.TryParse(parts[2], out number) => true,
             _ when parts.Length == 2
                 && parts[0].Equals(config.Prefix, StringComparison.OrdinalIgnoreCase)
                 && long.TryParse(parts[1], out number) => true,
@@ -329,6 +377,14 @@ public class CodeGeneratorService : ICodeGeneratorService
             CodeModuleNames.Purchase when parts.Length == 3
                 => parts[1] == now.ToString("yyyyMM"),
             CodeModuleNames.SalesInvoice when parts.Length == 3
+                => parts[1] == now.ToString("yyyyMMdd"),
+            CodeModuleNames.CustomerReceipt when parts.Length == 3
+                => parts[1] == now.ToString("yyyyMMdd"),
+            CodeModuleNames.SupplierPayment when parts.Length == 3
+                => parts[1] == now.ToString("yyyyMMdd"),
+            CodeModuleNames.Expense when parts.Length == 3
+                => parts[1] == now.ToString("yyyyMMdd"),
+            CodeModuleNames.JournalVoucher when parts.Length == 3
                 => parts[1] == now.ToString("yyyyMMdd"),
             _ => true
         };
@@ -364,9 +420,13 @@ public class CodeGeneratorService : ICodeGeneratorService
 
         return moduleName switch
         {
-            CodeModuleNames.Purchase     => $"{config.Prefix}-{now:yyyyMM}-{padded}",
-            CodeModuleNames.SalesInvoice => $"{config.Prefix}-{now:yyyyMMdd}-{padded}",
-            _                          => $"{config.Prefix}-{padded}"
+            CodeModuleNames.Purchase         => $"{config.Prefix}-{now:yyyyMM}-{padded}",
+            CodeModuleNames.SalesInvoice     => $"{config.Prefix}-{now:yyyyMMdd}-{padded}",
+            CodeModuleNames.CustomerReceipt  => $"{config.Prefix}-{now:yyyyMMdd}-{padded}",
+            CodeModuleNames.SupplierPayment  => $"{config.Prefix}-{now:yyyyMMdd}-{padded}",
+            CodeModuleNames.Expense          => $"{config.Prefix}-{now:yyyyMMdd}-{padded}",
+            CodeModuleNames.JournalVoucher   => $"{config.Prefix}-{now:yyyyMMdd}-{padded}",
+            _                              => $"{config.Prefix}-{padded}"
         };
     }
 

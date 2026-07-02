@@ -13,6 +13,7 @@ public class SupplierDto
     public bool IsActive { get; set; }
     public int BranchId { get; set; }
     public string BranchName { get; set; } = string.Empty;
+    public int? AccountId { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? ModifiedAt { get; set; }
 }

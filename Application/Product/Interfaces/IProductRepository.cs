@@ -15,6 +15,7 @@ public interface IProductRepository
     Task<bool> BrandExistsAsync(int brandId, int businessId, int branchId);
     Task<Dictionary<int, (bool AllowNegativeStock, bool EnableLowStockAlert, decimal? LowStockAlertLevel)>> GetStockSettingsByIdsAsync(
         int businessId, int branchId, IEnumerable<int> productIds);
+    Task<Dictionary<int, decimal>> GetCostPricesByIdsAsync(int businessId, int branchId, IEnumerable<int> productIds);
     Task AddAsync(ProductEntity product);
     Task<POSSystem.Domain.ProductImage?> GetImageByIdAsync(int productId, int imageId, int businessId, int branchId);
     void RemoveImage(POSSystem.Domain.ProductImage image);
