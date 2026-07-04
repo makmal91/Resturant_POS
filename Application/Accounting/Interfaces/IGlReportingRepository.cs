@@ -26,6 +26,11 @@ public interface IGlReportingRepository
         IEnumerable<int> partyAccountIds, GlTransactionType transactionType, int? branchId, DateTime? asOfDate = null);
     Task<IReadOnlyList<DailyGlCashMovementRow>> GetDailyCashMovementsAsync(int? branchId, DateTime from, DateTime to);
     Task<GlCashDaySummary> GetGlCashDaySummaryAsync(int branchId, DateTime date);
+    Task<GlCashDaySummary> GetGlCashAccountDaySummaryAsync(int cashAccountId, int branchId, DateTime date);
+    Task<GlCashDaySummary> GetGlCashAccountRangeSummaryAsync(
+        int cashAccountId, int branchId, DateTime fromInclusive, DateTime toExclusive);
+    Task<GlCashDaySummary> GetGlCashAccountSessionSummaryAsync(
+        int cashAccountId, int branchId, DateTime openedAtInclusive, DateTime toExclusive);
 }
 
 public sealed class DailyGlCashMovementRow

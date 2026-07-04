@@ -120,6 +120,7 @@ public static class ServiceRegistration
 
         // Register cash flow service
         services.AddScoped<ICashFlowService, CashFlowService>();
+        services.AddScoped<IPosRegisterService, PosRegisterService>();
 
         // General ledger / chart of accounts
         services.AddScoped<IGlAccountService, GlAccountService>();

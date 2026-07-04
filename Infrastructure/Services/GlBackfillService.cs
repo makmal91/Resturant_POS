@@ -108,6 +108,10 @@ public class GlBackfillService
 
         foreach (var payment in payments)
         {
+            // POS at-sale tender is already booked by the sale journal; never post a receipt for it.
+            if (payment.Category == InvoicePaymentCategory.PosSale)
+                continue;
+
             var type = payment.Module == InvoicePaymentModule.Sale
                 ? GlTransactionType.Receipt
                 : GlTransactionType.Payment;

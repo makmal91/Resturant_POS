@@ -66,6 +66,8 @@ public class POSDbContext : DbContext
 
     // Cash register (operational; movements are in GL Transactions)
     public DbSet<CashRegister> CashRegisters { get; set; } = null!;
+    public DbSet<PosRegister> PosRegisters { get; set; } = null!;
+    public DbSet<RegisterSession> RegisterSessions { get; set; } = null!;
 
     public DbSet<InvoicePayment> InvoicePayments { get; set; } = null!;
     public DbSet<PaymentAllocation> PaymentAllocations { get; set; } = null!;
@@ -135,6 +137,8 @@ public class POSDbContext : DbContext
         modelBuilder.ApplyConfiguration(new SaleInvoiceConfiguration());
         modelBuilder.ApplyConfiguration(new SaleInvoiceItemConfiguration());
         modelBuilder.ApplyConfiguration(new CashRegisterConfiguration());
+        modelBuilder.ApplyConfiguration(new PosRegisterConfiguration());
+        modelBuilder.ApplyConfiguration(new RegisterSessionConfiguration());
         modelBuilder.ApplyConfiguration(new InvoicePaymentConfiguration());
         modelBuilder.ApplyConfiguration(new PaymentAllocationConfiguration());
         modelBuilder.ApplyConfiguration(new ExpenseCategoryConfiguration());

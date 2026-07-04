@@ -174,6 +174,8 @@ public class BranchCashSummaryDto
     public decimal NetPosition { get; set; }
     public decimal OpeningCash { get; set; }
     public bool IsOpenForDay { get; set; }
+    // "Open" = a register is currently open, "Closed" = opened today then closed, "NotStarted" = no session today.
+    public string Status { get; set; } = "NotStarted";
 }
 
 /// <summary>Completed sale invoice that has not yet been posted to the cash flow ledger.</summary>

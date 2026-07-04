@@ -327,6 +327,65 @@ public class GlReportingRepository : IGlReportingRepository
         };
     }
 
+    public Task<GlCashDaySummary> GetGlCashAccountDaySummaryAsync(int cashAccountId, int branchId, DateTime date) =>
+        GetGlCashAccountRangeSummaryAsync(cashAccountId, branchId, date.Date, date.Date.AddDays(1));
+
+    public async Task<GlCashDaySummary> GetGlCashAccountRangeSummaryAsync(
+        int cashAccountId, int branchId, DateTime fromInclusive, DateTime toExclusive)
+    {
+        var lines = await ActiveLines()
+            .Where(t => t.BranchId == branchId)
+            .Where(t => t.AccountId == cashAccountId)
+            .Where(t => t.Date >= fromInclusive && t.Date < toExclusive)
+            .Select(t => new CashLine(t.TransactionType, t.DebitAmount, t.CreditAmount))
+            .ToListAsync();
+
+        return SummarizeCashLines(lines);
+    }
+
+    public async Task<GlCashDaySummary> GetGlCashAccountSessionSummaryAsync(
+        int cashAccountId, int branchId, DateTime openedAtInclusive, DateTime toExclusive)
+    {
+        // Register sessions are reconciled by the actual posting time (CreatedAt), not the
+        // document Date. Date-only documents (expenses, purchases) are stamped at midnight,
+        // so filtering by Date would drop same-day expenses entered after the drawer opened.
+        var lines = await ActiveLines()
+            .Where(t => t.BranchId == branchId)
+            .Where(t => t.AccountId == cashAccountId)
+            .Where(t => t.CreatedAt >= openedAtInclusive && t.CreatedAt < toExclusive)
+            .Select(t => new CashLine(t.TransactionType, t.DebitAmount, t.CreditAmount))
+            .ToListAsync();
+
+        return SummarizeCashLines(lines);
+    }
+
+    private readonly record struct CashLine(GlTransactionType Type, decimal Debit, decimal Credit);
+
+    private static GlCashDaySummary SummarizeCashLines(IReadOnlyCollection<CashLine> lines)
+    {
+        var cashSales = lines.Where(t => t.Type == GlTransactionType.Sale).Sum(t => t.Debit);
+        var expenses = lines.Where(t => t.Type == GlTransactionType.Expense).Sum(t => t.Credit);
+        expenses += lines.Where(t => t.Type == GlTransactionType.Purchase).Sum(t => t.Credit);
+
+        var cashIn = lines.Where(t => t.Type == GlTransactionType.Receipt).Sum(t => t.Debit);
+        cashIn += lines.Where(t => t.Type == GlTransactionType.Adjustment).Sum(t => t.Debit);
+
+        var cashOut = lines.Where(t => t.Type == GlTransactionType.Payment).Sum(t => t.Credit);
+        cashOut += lines.Where(t => t.Type == GlTransactionType.Adjustment).Sum(t => t.Credit);
+
+        var netCash = lines.Sum(t => t.Debit - t.Credit);
+
+        return new GlCashDaySummary
+        {
+            CashSales = cashSales,
+            CardSales = 0,
+            Expenses = expenses,
+            CashIn = cashIn,
+            CashOut = cashOut,
+            NetMovement = netCash,
+        };
+    }
+
     private static IQueryable<GlTransaction> FilterByBranch(IQueryable<GlTransaction> query, int? branchId)
     {
         if (branchId is > 0)

@@ -241,6 +241,7 @@ public static class PermissionModuleDatabaseInitializer
                 """);
 
             await EnsureTrialBalanceReportModuleAsync(context, logger);
+            await EnsureRegisterHistoryModuleAsync(context, logger);
         }
         catch (Exception ex)
         {
@@ -363,6 +364,114 @@ public static class PermissionModuleDatabaseInitializer
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to ensure Trial Balance report module for sidebar.");
+        }
+    }
+
+    /// <summary>Ensures Register History appears under Finance (sidebar uses Modules).</summary>
+    internal static async Task EnsureRegisterHistoryModuleAsync(POSDbContext context, ILogger logger)
+    {
+        try
+        {
+            var financeParent = await context.PermissionModules
+                .IgnoreQueryFilters()
+                .Where(m => !m.IsDeleted && m.ParentModuleId == null && m.ModuleName == "Finance")
+                .OrderBy(m => m.Id)
+                .FirstOrDefaultAsync();
+
+            if (financeParent == null)
+            {
+                logger.LogWarning("Register History sidebar patch skipped: Finance parent module not found.");
+                return;
+            }
+
+            var module = await context.PermissionModules
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(m => m.ModuleKey == PermissionModules.RegisterHistoryReport);
+
+            if (module == null)
+            {
+                module = new PermissionModule
+                {
+                    ModuleName = "Register History",
+                    ModuleKey = PermissionModules.RegisterHistoryReport,
+                    ParentModuleId = financeParent.Id,
+                    Route = "/cashflow/register-history",
+                    Icon = "RH",
+                    DisplayOrder = 7,
+                    IsActive = true,
+                    IsDeleted = false,
+                    CreatedDate = DateTime.UtcNow,
+                };
+                await context.PermissionModules.AddAsync(module);
+            }
+            else
+            {
+                module.ModuleName = "Register History";
+                module.ParentModuleId = financeParent.Id;
+                module.Route = "/cashflow/register-history";
+                module.Icon = "RH";
+                module.DisplayOrder = 7;
+                module.IsActive = true;
+                module.IsDeleted = false;
+                module.UpdatedDate = DateTime.UtcNow;
+            }
+
+            await context.SaveChangesAsync();
+
+            var privilegedRoleNames = new[] { RoleNames.Admin, RoleNames.SystemAdmin, RoleNames.Manager };
+            var privilegedRoleIds = await context.Roles
+                .AsNoTracking()
+                .Where(r => !r.IsDeleted && privilegedRoleNames.Contains(r.Name))
+                .Select(r => r.Id)
+                .ToListAsync();
+
+            var rolesWithCashFlow = await context.RolePermissions
+                .AsNoTracking()
+                .Where(rp => !rp.IsDeleted && rp.CanView && rp.ModuleName == PermissionModules.CashFlow)
+                .Select(rp => rp.RoleId)
+                .Distinct()
+                .ToListAsync();
+
+            foreach (var roleId in privilegedRoleIds.Union(rolesWithCashFlow).Distinct())
+            {
+                var permission = await context.RolePermissions
+                    .IgnoreQueryFilters()
+                    .FirstOrDefaultAsync(rp =>
+                        rp.RoleId == roleId
+                        && (rp.ModuleId == module.Id || rp.ModuleName == PermissionModules.RegisterHistoryReport));
+
+                if (permission == null)
+                {
+                    await context.RolePermissions.AddAsync(new RolePermission
+                    {
+                        RoleId = roleId,
+                        ModuleId = module.Id,
+                        ModuleName = PermissionModules.RegisterHistoryReport,
+                        CanView = true,
+                        CanCreate = false,
+                        CanEdit = false,
+                        CanDelete = false,
+                        CanExport = true,
+                        CanUpload = false,
+                        IsDeleted = false,
+                        CreatedDate = DateTime.UtcNow,
+                    });
+                    continue;
+                }
+
+                permission.ModuleId = module.Id;
+                permission.ModuleName = PermissionModules.RegisterHistoryReport;
+                permission.CanView = true;
+                permission.CanExport = true;
+                permission.IsDeleted = false;
+                permission.UpdatedDate = DateTime.UtcNow;
+            }
+
+            await context.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to ensure Register History module for sidebar.");
         }
     }
 }

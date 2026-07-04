@@ -24,7 +24,10 @@ public enum InvoicePaymentCategory
 {
     AgainstInvoice = 1,
     Advance = 2,
-    Adjustment = 3
+    Adjustment = 3,
+    // Cash/card tendered at POS sale time. The cash leg is already booked by the
+    // sale journal (PostSaleAsync), so these payments must NOT create a GL receipt.
+    PosSale = 4
 }
 
 public class InvoicePayment : BaseEntity

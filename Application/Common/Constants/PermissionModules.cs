@@ -43,6 +43,7 @@ public static class PermissionModules
     public const string SupplierPayableReport = "Supplier Payable Report";
     public const string ProfitLossReport = "Profit & Loss Report";
     public const string TrialBalanceReport = "Trial Balance Report";
+    public const string RegisterHistoryReport = "Register History Report";
     public const string CustomerReceivableAgingReport = "Customer Receivable Aging";
     public const string SupplierPayableAgingReport = "Supplier Payable Aging";
     public const string SystemSettings = "System Settings";
@@ -91,6 +92,7 @@ public static class PermissionModules
         SupplierPayableReport,
         ProfitLossReport,
         TrialBalanceReport,
+        RegisterHistoryReport,
         CustomerReceivableAgingReport,
         SupplierPayableAgingReport,
         SystemSettings,

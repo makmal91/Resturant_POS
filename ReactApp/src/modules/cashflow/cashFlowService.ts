@@ -80,6 +80,7 @@ export interface BranchCashSummaryDto {
   netPosition: number;
   openingCash: number;
   isOpenForDay: boolean;
+  status: 'Open' | 'Closed' | 'NotStarted';
 }
 
 export interface LedgerResponse {
@@ -96,6 +97,83 @@ export interface LedgerResponse {
   totalDebit: number;
   totalCredit: number;
   closingBalance: number;
+}
+
+export interface RegisterSessionDto {
+  id: number;
+  posRegisterId: number;
+  registerName: string;
+  branchId: number;
+  sessionDate: string;
+  openingBalance: number;
+  isOpeningOverride: boolean;
+  openingOverrideReason: string | null;
+  openedBy: number | null;
+  openedByName: string | null;
+  openedAt: string;
+  expectedClosing: number | null;
+  physicalCash: number | null;
+  difference: number | null;
+  totalCashSales: number;
+  totalExpensesCash: number;
+  totalCashIn: number;
+  totalCashOut: number;
+  totalAdjustments: number;
+  isClosed: boolean;
+  closedBy: number | null;
+  closedByName: string | null;
+  closedAt: string | null;
+  closeMismatchReason: string | null;
+  notes: string | null;
+}
+
+export interface PosRegisterDto {
+  id: number;
+  branchId: number;
+  name: string;
+  linkedCashAccountId: number;
+  linkedCashAccountName: string;
+  linkedCashAccountCode: string;
+  isActive: boolean;
+  isDefault: boolean;
+  hasOpenSession: boolean;
+  currentBalance: number | null;
+}
+
+export interface RegisterOpeningHintDto {
+  posRegisterId: number;
+  registerName: string;
+  isFirstTime: boolean;
+  lastClosingBalance: number | null;
+  lastClosedAt: string | null;
+  suggestedOpeningBalance: number;
+  hasOpenSessionToday: boolean;
+  openSession: RegisterSessionDto | null;
+}
+
+export interface RegisterClosePreviewDto {
+  posRegisterId: number;
+  registerName: string;
+  sessionId: number;
+  openingBalance: number;
+  totalCashSales: number;
+  totalExpensesCash: number;
+  totalCashIn: number;
+  totalCashOut: number;
+  totalAdjustments: number;
+  expectedCash: number;
+  isClosed: boolean;
+}
+
+export interface RegisterDashboardDto {
+  registers: PosRegisterDto[];
+  openSessions: RegisterSessionDto[];
+}
+
+export interface RegisterHistoryPageDto {
+  items: RegisterSessionDto[];
+  totalRecords: number;
+  totalPages: number;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -173,5 +251,65 @@ export const cashFlowService = {
   getBranchSummary: (date?: string) =>
     apiClient.get<BranchCashSummaryDto[]>('/cashflow/summary/branch', {
       params: date ? { date } : {},
+    }),
+
+  // Multi-register POS drawers
+  getRegisterDashboard: (branchId: number) =>
+    apiClient.get<RegisterDashboardDto>('/cashflow/registers/dashboard', {
+      params: { branchId },
+      ...bh(branchId),
+    }),
+
+  getRegisters: (branchId: number) =>
+    apiClient.get<PosRegisterDto[]>('/cashflow/registers', {
+      params: { branchId },
+      ...bh(branchId),
+    }),
+
+  getOpeningHint: (branchId: number, registerId: number) =>
+    apiClient.get<RegisterOpeningHintDto>(`/cashflow/registers/${registerId}/opening-hint`, {
+      params: { branchId },
+      ...bh(branchId),
+    }),
+
+  openRegister: (
+    branchId: number,
+    posRegisterId: number,
+    openingBalance: number,
+    overrideOpening = false,
+    overrideReason?: string,
+  ) =>
+    apiClient.post<RegisterSessionDto>(
+      '/cashflow/registers/open',
+      { posRegisterId, openingBalance, overrideOpening, overrideReason },
+      bh(branchId),
+    ),
+
+  getClosePreview: (branchId: number, registerId: number) =>
+    apiClient.get<RegisterClosePreviewDto>(`/cashflow/registers/${registerId}/close-preview`, {
+      params: { branchId },
+      ...bh(branchId),
+    }),
+
+  closeRegister: (
+    branchId: number,
+    posRegisterId: number,
+    physicalCash: number,
+    mismatchReason?: string,
+    notes?: string,
+  ) =>
+    apiClient.post<RegisterSessionDto>(
+      '/cashflow/registers/close',
+      { posRegisterId, physicalCash, mismatchReason, notes },
+      bh(branchId),
+    ),
+
+  getRegisterHistory: (
+    branchId: number,
+    params: { posRegisterId?: number; from?: string; to?: string; page?: number; pageSize?: number } = {},
+  ) =>
+    apiClient.get<RegisterHistoryPageDto>('/cashflow/registers/history', {
+      params: { branchId, ...params },
+      ...bh(branchId),
     }),
 };

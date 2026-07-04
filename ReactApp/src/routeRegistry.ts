@@ -31,6 +31,7 @@ import SaleInvoicesPage from './modules/sales/SaleInvoicesPage';
 import CashFlowDashboardPage from './modules/cashflow/CashFlowDashboardPage';
 import CashLedgerPage from './modules/cashflow/CashLedgerPage';
 import CashFlowSummaryPage from './modules/cashflow/CashFlowSummaryPage';
+import RegisterHistoryReportPage from './modules/cashflow/RegisterHistoryReportPage';
 import CustomerLedgerPage from './modules/ledger/CustomerLedgerPage';
 import SupplierLedgerPage from './modules/ledger/SupplierLedgerPage';
 import AccountLedgerPage from './modules/accounting/AccountLedgerPage';
@@ -108,6 +109,7 @@ export const routeRegistry: RouteDefinition[] = [
   { path: '/cashflow',          label: 'Cash Dashboard',  component: CashFlowDashboardPage, module: 'Cash Flow' },
   { path: '/cashflow/ledger',   label: 'Cash Ledger',     component: CashLedgerPage,        module: 'Cash Flow' },
   { path: '/cashflow/summary',  label: 'Cash Summary',    component: CashFlowSummaryPage,   module: 'Cash Flow' },
+  { path: '/cashflow/register-history', label: 'Register History', component: RegisterHistoryReportPage, module: 'Register History Report' },
   { path: '/ledger/customers', label: 'Customer Ledger', component: CustomerLedgerPage, module: 'Party Ledger' },
   { path: '/ledger/suppliers', label: 'Supplier Ledger', component: SupplierLedgerPage, module: 'Party Ledger' },
   { path: '/accounting/ledger', label: 'Account Ledger', component: AccountLedgerPage, module: 'Account Ledger' },
@@ -125,6 +127,7 @@ const extraRouteContext: Record<string, { module: string; form: string }> = {
   '/sales-invoices/edit': { module: 'Sales', form: 'EditInvoice' },
   '/cashflow/opening': { module: 'Cash Flow', form: 'OpeningCash' },
   '/cashflow/closing': { module: 'Cash Flow', form: 'ClosingCash' },
+  '/cashflow/register-history': { module: 'Register History Report', form: 'RegisterHistory' },
   '/finance/payables': { module: 'Party Ledger', form: 'PaySupplier' },
   '/finance/receivables': { module: 'Party Ledger', form: 'ReceivePayment' },
   '/finance/expenses': { module: 'Expenses', form: 'Expense' },

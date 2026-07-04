@@ -124,30 +124,65 @@ public class CashFlowRepository : ICashFlowRepository
     public async Task<List<BranchCashSummaryDto>> GetBranchSummariesAsync(int businessId, DateTime date)
     {
         var dateOnly = date.Date;
+        var nextDay = dateOnly.AddDays(1);
+        var now = DateTime.UtcNow.AddSeconds(1);
+
         var branches = await _db.Branches.AsNoTracking()
             .Where(b => b.BusinessId == businessId && b.IsActive && !b.IsDeleted)
+            .Select(b => new { b.Id, b.Name })
             .ToListAsync();
 
-        var registers = await _db.CashRegisters.AsNoTracking()
-            .Where(r => r.BusinessId == businessId && r.RegisterDate == dateOnly)
+        // Register sessions relevant to "today": currently open (may span days) or opened/dated today.
+        var sessions = await _db.RegisterSessions.AsNoTracking()
+            .Where(s => !s.IsDeleted && s.BusinessId == businessId)
+            .Where(s => !s.IsClosed
+                        || (s.OpenedAt >= dateOnly && s.OpenedAt < nextDay)
+                        || s.SessionDate == dateOnly)
+            .Join(
+                _db.PosRegisters.AsNoTracking(),
+                s => s.PosRegisterId,
+                r => r.Id,
+                (s, r) => new
+                {
+                    s.BranchId,
+                    s.OpeningBalance,
+                    s.IsClosed,
+                    s.OpenedAt,
+                    r.LinkedCashAccountId,
+                })
             .ToListAsync();
 
         var results = new List<BranchCashSummaryDto>(branches.Count);
         foreach (var branch in branches)
         {
-            var register = registers.FirstOrDefault(r => r.BranchId == branch.Id);
-            var gl = await _glReporting.GetGlCashDaySummaryAsync(branch.Id, dateOnly);
-            var opening = register?.OpeningCash ?? 0;
+            var branchSessions = sessions.Where(s => s.BranchId == branch.Id).ToList();
+            var openSessions = branchSessions.Where(s => !s.IsClosed).ToList();
+
+            decimal opening = 0, cashIn = 0, cashOut = 0;
+            foreach (var s in openSessions)
+            {
+                // Session-scoped GL (CreatedAt based) so it matches the register dashboard exactly.
+                var gl = await _glReporting.GetGlCashAccountSessionSummaryAsync(
+                    s.LinkedCashAccountId, branch.Id, s.OpenedAt, now);
+                opening += s.OpeningBalance;
+                cashIn += gl.CashIn + gl.CashSales;
+                cashOut += gl.CashOut + gl.Expenses;
+            }
+
+            var status = openSessions.Count > 0
+                ? "Open"
+                : branchSessions.Count > 0 ? "Closed" : "NotStarted";
 
             results.Add(new BranchCashSummaryDto
             {
                 BranchId = branch.Id,
                 BranchName = branch.Name,
                 OpeningCash = opening,
-                TodayCashIn = gl.CashIn + gl.CashSales,
-                TodayCashOut = gl.CashOut + gl.Expenses,
-                NetPosition = opening + gl.NetMovement,
-                IsOpenForDay = register != null && !register.IsClosed,
+                TodayCashIn = cashIn,
+                TodayCashOut = cashOut,
+                NetPosition = opening + cashIn - cashOut,
+                IsOpenForDay = openSessions.Count > 0,
+                Status = status,
             });
         }
 

@@ -141,6 +141,11 @@ public class AccountingIntegrationService : IAccountingIntegrationService
 
     public async Task PostPaymentReceivedAsync(InvoicePayment payment)
     {
+        // POS at-sale tender: the cash/card leg is already booked by the sale journal
+        // (PostSaleAsync). Posting a receipt here would double-count cash, so skip it.
+        if (payment.Category == InvoicePaymentCategory.PosSale)
+            return;
+
         if (await _accountingRepository.ExistsForReferenceAsync(payment.Id, GlTransactionType.Receipt))
             return;
 

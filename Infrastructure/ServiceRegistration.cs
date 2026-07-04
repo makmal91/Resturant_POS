@@ -77,6 +77,7 @@ public static class ServiceRegistration
 
         // Register cash flow repository
         services.AddScoped<ICashFlowRepository, CashFlowRepository>();
+        services.AddScoped<IPosRegisterRepository, PosRegisterRepository>();
 
         // General ledger
         services.AddScoped<IGlAccountRepository, GlAccountRepository>();
