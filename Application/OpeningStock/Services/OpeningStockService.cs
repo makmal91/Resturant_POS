@@ -357,8 +357,15 @@ public class OpeningStockService : IOpeningStockService
         int branchId,
         string remarks)
     {
-        var entries = await _stockLedgerRepository.GetByReferenceAsync(
-            voucher.Id, businessId, branchId, StockLedgerType.Opening, StockLedgerType.OpeningReversal);
+        var voucherLineKeys = voucher.Lines
+            .Where(l => !l.IsDeleted)
+            .Select(l => (l.ProductId, l.VariantId))
+            .ToHashSet();
+
+        var entries = (await _stockLedgerRepository.GetByReferenceAsync(
+                voucher.Id, businessId, branchId, StockLedgerType.Opening, StockLedgerType.OpeningReversal))
+            .Where(e => voucherLineKeys.Contains((e.ProductId, e.VariantId)))
+            .ToList();
 
         if (entries.Count == 0)
             return [];

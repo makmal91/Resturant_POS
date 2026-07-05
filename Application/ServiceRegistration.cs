@@ -36,6 +36,8 @@ using POSSystem.Application.Purchase.Interfaces;
 using POSSystem.Application.Purchase.Services;
 using POSSystem.Application.OpeningStock.Interfaces;
 using POSSystem.Application.OpeningStock.Services;
+using POSSystem.Application.StockTransfer.Interfaces;
+using POSSystem.Application.StockTransfer.Services;
 using POSSystem.Application.Stock.Interfaces;
 using POSSystem.Application.Stock.Services;
 using POSSystem.Application.Sales.Interfaces;
@@ -111,6 +113,7 @@ public static class ServiceRegistration
         services.AddScoped<ISupplierService, SupplierService>();
         services.AddScoped<IPurchaseService, PurchaseService>();
         services.AddScoped<IOpeningStockService, OpeningStockService>();
+        services.AddScoped<IStockTransferService, StockTransferService>();
         services.AddScoped<IStockService, StockService>();
         services.AddScoped<ILowStockAlertService, LowStockAlertService>();
         services.AddScoped<IStockValidationService, StockValidationService>();

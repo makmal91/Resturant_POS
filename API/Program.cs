@@ -106,6 +106,17 @@ using (var scope = app.Services.CreateScope())
     {
         logger.LogWarning(ex, "GL journal backfill skipped or partially applied.");
     }
+
+    try
+    {
+        var openingCleanup = scope.ServiceProvider.GetRequiredService<OpeningStockDuplicateCleanupService>();
+        await openingCleanup.CleanupAsync();
+        logger.LogInformation("Opening stock duplicate cleanup completed.");
+    }
+    catch (Exception ex)
+    {
+        logger.LogWarning(ex, "Opening stock duplicate cleanup skipped or partially applied.");
+    }
 }
 
 var licenseService = app.Services.GetRequiredService<ILicenseService>();

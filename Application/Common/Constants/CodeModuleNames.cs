@@ -15,4 +15,5 @@ public static class CodeModuleNames
     public const string Expense = "Expense";
     public const string JournalVoucher = "JournalVoucher";
     public const string OpeningStock = "OpeningStock";
+    public const string StockTransfer = "StockTransfer";
 }

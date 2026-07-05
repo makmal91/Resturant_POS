@@ -145,8 +145,18 @@ public class GlBackfillService
             .Distinct()
             .ToListAsync(cancellationToken);
 
+        var productsInActiveVouchers = await (
+            from line in _db.OpeningStockVoucherLines.AsNoTracking()
+            join voucher in _db.OpeningStockVouchers.AsNoTracking() on line.VoucherId equals voucher.Id
+            where !line.IsDeleted && !voucher.IsDeleted && !voucher.IsReversed
+            select line.ProductId).Distinct().ToListAsync(cancellationToken);
+        var voucherProductSet = productsInActiveVouchers.ToHashSet();
+
         foreach (var row in openingStockProducts)
         {
+            if (voucherProductSet.Contains(row.ProductId))
+                continue;
+
             if (await _accountingRepository.ExistsForReferenceAsync(row.ProductId, GlTransactionType.OpeningBalance))
                 continue;
 

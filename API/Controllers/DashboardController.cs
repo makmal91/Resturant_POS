@@ -703,6 +703,7 @@ public class DashboardController : ControllerBase
             ledgerQuery = ledgerQuery.Where(e => e.BranchId == branchId);
 
         var balances = await ledgerQuery
+            .Where(e => !e.IsDeleted)
             .GroupBy(e => new { e.ProductId, e.VariantId, e.WarehouseId, e.BranchId })
             .Select(g => new
             {
@@ -710,6 +711,7 @@ public class DashboardController : ControllerBase
                 g.Key.VariantId,
                 g.Key.WarehouseId,
                 Quantity = g.Sum(e => e.QuantityInBaseUnit),
+                StockValue = g.Sum(e => e.QuantityInBaseUnit >= 0 ? e.TotalAmount : -e.TotalAmount),
             })
             .ToListAsync();
 
@@ -758,8 +760,10 @@ public class DashboardController : ControllerBase
             variantMap.TryGetValue(b.VariantId ?? 0, out var variant);
             warehouseMap.TryGetValue(b.WarehouseId, out var whName);
 
-            var costPrice  = variant?.CostPriceOverride ?? product?.CostPrice ?? 0m;
-            var stockValue = b.Quantity * costPrice;
+            var costPrice = variant?.CostPriceOverride ?? product?.CostPrice ?? 0m;
+            var stockValue = b.Quantity > 0
+                ? (b.StockValue > 0 ? b.StockValue : b.Quantity * costPrice)
+                : 0m;
 
             return new StockAlertItemDto
             {
@@ -803,8 +807,8 @@ public class DashboardController : ControllerBase
         {
             TotalProducts         = totalProducts,
             TotalVariants         = totalVariants,
-            TotalQuantity         = items.Sum(i => i.Quantity),
-            TotalStockValue       = items.Sum(i => i.StockValue),
+            TotalQuantity         = items.Where(i => i.Quantity > 0).Sum(i => i.Quantity),
+            TotalStockValue       = items.Where(i => i.Quantity > 0).Sum(i => i.StockValue),
             LowStockCount         = items.Count(IsLowStock),
             OutOfStockCount       = items.Count(i => i.Quantity <= 0),
             LowStockItems         = lowStockItems,

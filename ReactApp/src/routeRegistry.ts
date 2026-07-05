@@ -27,6 +27,7 @@ import DiscountPage from './modules/discount/DiscountPage';
 import WarehousePage from './modules/warehouse/WarehousePage';
 import PurchasePage from './modules/purchase/PurchasePage';
 import OpeningStockPage from './modules/opening-stock/OpeningStockPage';
+import StockTransferPage from './modules/stock-transfer/StockTransferPage';
 import StockLedgerPage from './modules/stock/StockLedgerPage';
 import SaleInvoicesPage from './modules/sales/SaleInvoicesPage';
 import CashFlowDashboardPage from './modules/cashflow/CashFlowDashboardPage';
@@ -89,6 +90,7 @@ export const routeRegistry: RouteDefinition[] = [
   { path: '/warehouses', label: 'Warehouses', component: WarehousePage, module: 'Warehouses' },
   { path: '/purchase', label: 'Purchase', component: PurchasePage, module: 'Purchase' },
   { path: '/opening-stock', label: 'Opening Stock', component: OpeningStockPage, module: 'Opening Stock', feature: 'product.stock.enable' },
+  { path: '/stock-transfer', label: 'Stock Transfer', component: StockTransferPage, module: 'Stock Transfer', feature: 'product.stock.enable' },
   { path: '/stock', label: 'Stock', component: StockLedgerPage, module: 'Stock', feature: 'product.stock.enable' },
   { path: '/reports/sales', label: 'Sales Report', component: SalesReportPage, module: 'Sales Reports' },
   { path: '/reports/product-wise-sales', label: 'Product Wise Sales', component: ProductWiseSalesReportPage, module: 'Product Wise Sales Report' },

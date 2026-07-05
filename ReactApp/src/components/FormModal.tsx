@@ -1,6 +1,6 @@
 import React, { useMemo, useEffect, useState } from 'react';
 import { useFormModal } from '../contexts/FormModalContext';
-import { BranchForm, BusinessForm, UserForm, MenuForm, InventoryForm, CategoryForm, SubCategoryForm, BrandForm, WarehouseForm, SupplierForm, PurchaseForm, OpeningStockForm, CustomerForm, RoleForm, CashTransactionForm, ReceivePaymentForm, PaySupplierForm, ExpenseForm, type CashTransactionFormData, type ReceivePaymentFormData, type PaySupplierFormData, type ExpenseFormData } from './forms';
+import { BranchForm, BusinessForm, UserForm, MenuForm, InventoryForm, CategoryForm, SubCategoryForm, BrandForm, WarehouseForm, SupplierForm, PurchaseForm, OpeningStockForm, StockTransferForm, CustomerForm, RoleForm, CashTransactionForm, ReceivePaymentForm, PaySupplierForm, ExpenseForm, type CashTransactionFormData, type ReceivePaymentFormData, type PaySupplierFormData, type ExpenseFormData } from './forms';
 import { BranchService, BusinessService, MenuService, InventoryService } from '../services/apiService';
 import { getApiErrorMessage } from '../services/api';
 import { categoryService } from '../modules/category/categoryService';
@@ -10,6 +10,7 @@ import { warehouseService } from '../modules/warehouse/warehouseService';
 import { supplierService } from '../modules/supplier/supplierService';
 import { purchaseService } from '../modules/purchase/purchaseService';
 import { openingStockService } from '../modules/opening-stock/openingStockService';
+import { stockTransferService } from '../modules/stock-transfer/stockTransferService';
 import { customerService as apiCustomerService } from '../modules/customer/customerService';
 import { userService, RoleListItem } from '../modules/user/userService';
 import { roleService } from '../services/roleService';
@@ -193,7 +194,7 @@ const FormModal: React.FC = () => {
     let isCancelled = false;
 
     const loadPurchaseMeta = async () => {
-      if (!isOpen || (formType !== 'purchase' && formType !== 'openingStock')) {
+      if (!isOpen || (formType !== 'purchase' && formType !== 'openingStock' && formType !== 'stockTransfer')) {
         return;
       }
 
@@ -1276,6 +1277,66 @@ const FormModal: React.FC = () => {
     }
   };
 
+  const handleStockTransferSubmit = async (data: any) => {
+    setIsSubmitting(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    const branchId = Number(data?.branchId ?? 0);
+    const fromWarehouseId = Number(data?.fromWarehouseId ?? 0);
+    const toWarehouseId = Number(data?.toWarehouseId ?? 0);
+    const lines = Array.isArray(data?.lines) ? data.lines : [];
+
+    if (branchId <= 0 || fromWarehouseId <= 0 || toWarehouseId <= 0) {
+      setError('Branch and both warehouses are required.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (fromWarehouseId === toWarehouseId) {
+      setError('From and To warehouse must be different.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (lines.length === 0) {
+      setError('At least one product line is required.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    const payload = {
+      transferDate: new Date(String(data?.transferDate ?? new Date().toISOString())).toISOString(),
+      description: String(data?.description ?? '').trim(),
+      fromWarehouseId,
+      toWarehouseId,
+      branchId,
+      lines: lines.map((line: any) => ({
+        productId: Number(line.productId ?? 0),
+        variantId: line.variantId != null ? Number(line.variantId) : null,
+        unitId: Number(line.unitId ?? 0),
+        quantity: Number(line.quantity ?? 0),
+      })),
+    };
+
+    const transferId = Number(data?.id ?? editingData?.id ?? 0);
+
+    try {
+      useBranchStore.getState().setSelectedBranchId(branchId);
+      if (transferId > 0) {
+        await stockTransferService.update(transferId, branchId, payload);
+        closeWithSuccess('Stock transfer updated successfully.');
+      } else {
+        await stockTransferService.create(branchId, payload);
+        closeWithSuccess('Stock transfer saved successfully.');
+      }
+    } catch (err: any) {
+      setError(getApiErrorMessage(err, 'Failed to save stock transfer.'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const getFormComponent = () => {
     switch (formType) {
       case 'branch':
@@ -1399,6 +1460,15 @@ const FormModal: React.FC = () => {
             isLoading={isSubmitting || isPurchaseMetaLoading}
           />
         );
+      case 'stockTransfer':
+        return (
+          <StockTransferForm
+            initialData={editingData}
+            warehouses={purchaseWarehouses}
+            onSubmit={handleStockTransferSubmit}
+            isLoading={isSubmitting || isPurchaseMetaLoading}
+          />
+        );
       case 'customer':
         return (
           <CustomerForm
@@ -1475,6 +1545,7 @@ const FormModal: React.FC = () => {
     formType === 'supplier' ||
     formType === 'purchase' ||
     formType === 'openingStock' ||
+    formType === 'stockTransfer' ||
     formType === 'customer' ||
     formType === 'user' ||
     formType === 'role' ||
@@ -1487,6 +1558,10 @@ const FormModal: React.FC = () => {
 
   const isOpeningStockView = formType === 'openingStock' && Boolean(editingData?.readOnly);
   const isOpeningStockEdit = formType === 'openingStock' && Boolean(editingData?.id) && !editingData?.readOnly;
+  const isStockTransferView = formType === 'stockTransfer' && Boolean(editingData?.readOnly);
+  const isStockTransferEdit = formType === 'stockTransfer' && Boolean(editingData?.id) && !editingData?.readOnly;
+  const isDocumentView = isOpeningStockView || isStockTransferView;
+  const isDocumentEdit = isOpeningStockEdit || isStockTransferEdit;
 
   const formTypeLabel =
     formType === 'subcategory'
@@ -1501,6 +1576,8 @@ const FormModal: React.FC = () => {
             ? 'Purchase'
             : formType === 'openingStock'
               ? 'Opening Stock'
+            : formType === 'stockTransfer'
+              ? 'Stock Transfer'
             : formType === 'customer'
               ? 'Customer'
               : formType === 'role'
@@ -1538,17 +1615,19 @@ const FormModal: React.FC = () => {
         <div className="shrink-0 z-10 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
           <div>
             <h2 className="text-xl font-semibold text-gray-900">
-              {isOpeningStockView
+              {isDocumentView
                 ? `View ${formTypeLabel}`
-                : isOpeningStockEdit
+                : isDocumentEdit
                   ? `Edit ${formTypeLabel}`
                   : `${isEditMode ? 'Edit' : 'Create'} ${formTypeLabel}`}
             </h2>
             <p className="text-sm text-gray-500 mt-0.5">
-              {isOpeningStockView
-                ? 'Posted voucher details (read-only)'
-                : isOpeningStockEdit
-                  ? 'Update lines — stock and accounts adjust automatically on save'
+              {isDocumentView
+                ? 'Posted document details (read-only)'
+                : isDocumentEdit
+                  ? formType === 'stockTransfer'
+                    ? 'Update lines — inventory adjusts automatically on save (no accounting)'
+                    : 'Update lines — stock and accounts adjust automatically on save'
                   : 'Fill in the details below'}
             </p>
           </div>

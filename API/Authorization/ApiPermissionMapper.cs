@@ -29,6 +29,7 @@ public static class ApiPermissionMapper
         ["Suppliers"] = PermissionModules.Suppliers,
         ["Purchase"] = PermissionModules.Purchase,
         ["opening-stock"] = PermissionModules.OpeningStock,
+        ["stock-transfer"] = PermissionModules.StockTransfer,
         ["Stock"] = PermissionModules.Stock,
         ["Sales"] = PermissionModules.Sales,
         ["Customers"] = PermissionModules.Customers,
