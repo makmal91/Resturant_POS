@@ -47,11 +47,18 @@ const mapVoucherRow = (row: Record<string, unknown>): OpeningStockVoucherDto => 
       : null,
 });
 
+const toDateInputValue = (value: unknown) => {
+  const raw = safeString(value);
+  if (!raw) return '';
+  if (raw.includes('T')) return raw.split('T')[0].slice(0, 10);
+  return raw.slice(0, 10);
+};
+
 const mapDetailToFormData = (data: Record<string, unknown>) => {
   const lines = (data.lines ?? data.Lines ?? []) as Record<string, unknown>[];
   return {
     voucherNo: safeString(data.voucherNo ?? data.VoucherNo),
-    voucherDate: safeString(data.voucherDate ?? data.VoucherDate),
+    voucherDate: toDateInputValue(data.voucherDate ?? data.VoucherDate),
     description: safeString(data.description ?? data.Description),
     warehouseId: Number(data.warehouseId ?? data.WarehouseId ?? 0),
     branchId: Number(data.branchId ?? data.BranchId ?? 0),

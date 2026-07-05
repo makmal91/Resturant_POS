@@ -208,6 +208,13 @@ const rowsToFormLines = (rows: ItemRow[]): OpeningStockLineFormData[] =>
 
 const lineKey = (productId: number, variantId: number | null) => `${productId}:${variantId ?? 0}`;
 
+const toDateInputValue = (value: unknown) => {
+  const raw = safeString(value);
+  if (!raw) return new Date().toISOString().slice(0, 10);
+  if (raw.includes('T')) return raw.split('T')[0].slice(0, 10);
+  return raw.slice(0, 10);
+};
+
 const OpeningStockForm: React.FC<OpeningStockFormProps> = ({
   initialData,
   warehouses = [],
@@ -233,7 +240,7 @@ const OpeningStockForm: React.FC<OpeningStockFormProps> = ({
 
   const [voucherNo, setVoucherNo] = useState(safeString(initialData?.voucherNo));
   const [voucherDate, setVoucherDate] = useState(
-    safeString(initialData?.voucherDate) || new Date().toISOString().slice(0, 10),
+    () => toDateInputValue(initialData?.voucherDate),
   );
   const [description, setDescription] = useState(safeString(initialData?.description));
   const [warehouseId, setWarehouseId] = useState(Number(initialData?.warehouseId ?? 0));
@@ -261,7 +268,7 @@ const OpeningStockForm: React.FC<OpeningStockFormProps> = ({
   useEffect(() => {
     setRows(buildRowsFromInitial(initialData?.lines));
     setVoucherNo(safeString(initialData?.voucherNo));
-    setVoucherDate(safeString(initialData?.voucherDate) || new Date().toISOString().slice(0, 10));
+    setVoucherDate(toDateInputValue(initialData?.voucherDate));
     setDescription(safeString(initialData?.description));
     setWarehouseId(Number(initialData?.warehouseId ?? 0));
     setErrors({});
@@ -630,15 +637,29 @@ const OpeningStockForm: React.FC<OpeningStockFormProps> = ({
             </div>
           )}
 
-          <FormInput
-            label="Date"
-            name="voucherDate"
-            type="date"
-            value={voucherDate}
-            onChange={(e) => setVoucherDate(e.target.value)}
-            disabled={isViewMode}
-            required
-          />
+          {isViewMode ? (
+            <div className="mb-5">
+              <label className="mb-2 block text-sm font-medium text-gray-800">Date</label>
+              <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900">
+                {voucherDate
+                  ? new Date(`${voucherDate}T00:00:00`).toLocaleDateString(undefined, {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
+                    })
+                  : '—'}
+              </div>
+            </div>
+          ) : (
+            <FormInput
+              label="Date"
+              name="voucherDate"
+              type="date"
+              value={voucherDate}
+              onChange={(e) => setVoucherDate(e.target.value)}
+              required
+            />
+          )}
 
           <FormSelect
             label="Warehouse"
