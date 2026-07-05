@@ -77,9 +77,10 @@ public class AccountLedgerRepository : IAccountLedgerRepository
 
         var query = ApplyDateRange(BaseLineQuery(ledgerAccountIds, branchId, auditView), fromDate, toDate);
 
+        // Chronological: business date, then posting time, then stable id tie-break.
         var orderedQuery = groupByChain && auditView
-            ? query.OrderBy(t => t.OriginalGroupId ?? t.GroupId).ThenBy(t => t.Date).ThenBy(t => t.CreatedAt).ThenBy(t => t.Id)
-            : query.OrderBy(t => t.Date).ThenBy(t => t.CreatedAt).ThenBy(t => t.Id);
+            ? query.OrderBy(t => t.OriginalGroupId ?? t.GroupId).ThenBy(t => t.Date.Date).ThenBy(t => t.CreatedAt).ThenBy(t => t.Id)
+            : query.OrderBy(t => t.Date.Date).ThenBy(t => t.CreatedAt).ThenBy(t => t.Id);
 
         var offset = Math.Max(0, (page - 1) * pageSize);
 
@@ -132,7 +133,7 @@ public class AccountLedgerRepository : IAccountLedgerRepository
             entries.Add(new AccountLedgerEntryDto
             {
                 Id = row.Id,
-                Date = row.Date,
+                Date = row.Date.Date,
                 ReferenceType = row.TransactionType.ToString(),
                 ReferenceId = row.ReferenceId,
                 Description = row.Description ?? string.Empty,
@@ -240,4 +241,4 @@ public class AccountLedgerRepository : IAccountLedgerRepository
                 g => string.Join(", ", g.Select(x => x.Name).Distinct().OrderBy(n => n)));
     }
 }
-
+

@@ -17,14 +17,15 @@ import {
 const PAGE_SIZE_OPTIONS = [25, 50, 100, 250];
 
 const formatDate = (value: string) => {
-  const d = new Date(value);
-  return Number.isNaN(d.getTime())
-    ? '—'
-    : d.toLocaleDateString(undefined, {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-      });
+  if (!value) return '—';
+  const datePart = value.includes('T') ? value.split('T')[0] : value.slice(0, 10);
+  const [year, month, day] = datePart.split('-').map(Number);
+  if (!year || !month || !day) return '—';
+  return new Date(year, month - 1, day).toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
 };
 
 export default function AccountLedgerPage() {
@@ -201,7 +202,7 @@ export default function AccountLedgerPage() {
       },
       {
         key: 'debit',
-        header: 'Debit (In)',
+        header: 'Debit',
         sortable: false,
         align: 'right',
         render: (value: number) => (
@@ -212,7 +213,7 @@ export default function AccountLedgerPage() {
       },
       {
         key: 'credit',
-        header: 'Credit (Out)',
+        header: 'Credit',
         sortable: false,
         align: 'right',
         render: (value: number) => (

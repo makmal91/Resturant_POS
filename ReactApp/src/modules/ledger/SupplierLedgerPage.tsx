@@ -176,18 +176,18 @@ export default function SupplierLedgerPage() {
       },
       {
         key: 'debit',
-        header: 'In',
+        header: 'Debit',
         sortable: false,
         render: (value: number) => (
-          <span className="tabular-nums text-green-600">{value > 0 ? fmt(value) : '—'}</span>
+          <span className="tabular-nums text-gray-900">{value > 0 ? fmt(value) : '—'}</span>
         ),
       },
       {
         key: 'credit',
-        header: 'Out',
+        header: 'Credit',
         sortable: false,
         render: (value: number) => (
-          <span className="tabular-nums text-red-600">{value > 0 ? fmt(value) : '—'}</span>
+          <span className="tabular-nums text-gray-900">{value > 0 ? fmt(value) : '—'}</span>
         ),
       },
       {
@@ -206,8 +206,8 @@ export default function SupplierLedgerPage() {
       label: 'Total',
       values: {
         description: 'Total',
-        debit: <span className="tabular-nums font-bold text-green-600">{fmt(totalDebit)}</span>,
-        credit: <span className="tabular-nums font-bold text-red-600">{fmt(totalCredit)}</span>,
+        debit: <span className="tabular-nums font-bold text-gray-900">{fmt(totalDebit)}</span>,
+        credit: <span className="tabular-nums font-bold text-gray-900">{fmt(totalCredit)}</span>,
         runningBalance: formatPayableBalance(periodClosingBalance, fmt),
       },
     };

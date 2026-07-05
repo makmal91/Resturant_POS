@@ -108,7 +108,7 @@ public class AccountingService : IAccountingService
 
         var transactions = entries.Select(e => new GlTransaction
         {
-            Date = e.Date ?? journalDate,
+            Date = (e.Date ?? journalDate).Date,
             AccountId = e.AccountId,
             BranchId = e.BranchId,
             DebitAmount = e.DebitAmount,
@@ -121,6 +121,7 @@ public class AccountingService : IAccountingService
             OriginalGroupId = e.OriginalGroupId ?? groupId,
             IsActive = e.IsActive,
             IsReversal = e.IsReversal,
+            CreatedAt = DateTime.UtcNow,
         }).ToList();
 
         await _repository.AddRangeAsync(transactions);

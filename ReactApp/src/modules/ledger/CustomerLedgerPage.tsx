@@ -164,19 +164,19 @@ export default function CustomerLedgerPage() {
         ),
       },
       {
-        key: 'in',
-        header: 'In',
+        key: 'debit',
+        header: 'Debit',
         sortable: false,
         render: (_: unknown, row: PartyLedgerEntry) => (
-          <span className="tabular-nums text-green-600">{row.credit > 0 ? fmt(row.credit) : '—'}</span>
+          <span className="tabular-nums text-gray-900">{row.debit > 0 ? fmt(row.debit) : '—'}</span>
         ),
       },
       {
-        key: 'out',
-        header: 'Out',
+        key: 'credit',
+        header: 'Credit',
         sortable: false,
         render: (_: unknown, row: PartyLedgerEntry) => (
-          <span className="tabular-nums text-red-600">{row.debit > 0 ? fmt(row.debit) : '—'}</span>
+          <span className="tabular-nums text-gray-900">{row.credit > 0 ? fmt(row.credit) : '—'}</span>
         ),
       },
       {
@@ -195,8 +195,8 @@ export default function CustomerLedgerPage() {
       label: 'Total',
       values: {
         description: 'Total',
-        in: <span className="tabular-nums font-bold text-green-600">{fmt(totalCredit)}</span>,
-        out: <span className="tabular-nums font-bold text-red-600">{fmt(totalDebit)}</span>,
+        debit: <span className="tabular-nums font-bold text-gray-900">{fmt(totalDebit)}</span>,
+        credit: <span className="tabular-nums font-bold text-gray-900">{fmt(totalCredit)}</span>,
         runningBalance: <span className="tabular-nums font-bold text-blue-800">{fmt(periodClosingBalance)}</span>,
       },
     };

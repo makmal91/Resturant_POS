@@ -39,8 +39,8 @@ export const partyLedgerExportColumns: GridExportColumn<PartyLedgerEntry>[] = [
   { key: 'date', header: 'Date', format: date },
   { key: 'type', header: 'Type', format: (v) => LEDGER_TYPE_LABELS[String(v)] ?? String(v ?? '') },
   { key: 'description', header: 'Description' },
-  { key: 'credit', header: 'In', format: (v) => (Number(v) > 0 ? money(v) : '') },
-  { key: 'debit', header: 'Out', format: (v) => (Number(v) > 0 ? money(v) : '') },
+  { key: 'debit', header: 'Debit', format: (v) => (Number(v) > 0 ? money(v) : '') },
+  { key: 'credit', header: 'Credit', format: (v) => (Number(v) > 0 ? money(v) : '') },
   { key: 'runningBalance', header: 'Running Balance', format: money },
 ];
 
@@ -48,8 +48,8 @@ export const supplierLedgerExportColumns: GridExportColumn<PartyLedgerEntry>[] =
   { key: 'date', header: 'Date', format: date },
   { key: 'type', header: 'Type', format: (v) => LEDGER_TYPE_LABELS[String(v)] ?? String(v ?? '') },
   { key: 'description', header: 'Description' },
-  { key: 'debit', header: 'In', format: (v) => (Number(v) > 0 ? money(v) : '') },
-  { key: 'credit', header: 'Out', format: (v) => (Number(v) > 0 ? money(v) : '') },
+  { key: 'debit', header: 'Debit', format: (v) => (Number(v) > 0 ? money(v) : '') },
+  { key: 'credit', header: 'Credit', format: (v) => (Number(v) > 0 ? money(v) : '') },
   { key: 'runningBalance', header: 'Running Balance', format: money },
 ];
 
