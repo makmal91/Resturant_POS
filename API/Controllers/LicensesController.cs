@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using POSSystem.API.Extensions;
 using POSSystem.Application.License.Interfaces;
 using POSSystem.Domain;
 
@@ -79,6 +80,7 @@ public sealed class LicensesController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
+            await HttpContextExceptionLogging.LogAsync(HttpContext, ex);
             return BadRequest(new { message = ex.Message });
         }
     }

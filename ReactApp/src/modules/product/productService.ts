@@ -6,14 +6,14 @@ export interface ProductUnitPayload {
   id?: number;
   unitId?: number | null;
   unitName: string;
+  /** Stock-only conversion: base units contained in 1 of this unit. Not used for pricing. */
   conversionFactor: number;
   isBaseUnit: boolean;
+  /** Pre-selected on the POS when the product is picked manually. Exactly one per product. */
+  isDefaultSaleUnit?: boolean;
   costPrice?: number | null;
   sellingPrice?: number | null;
   wholesalePrice?: number | null;
-  isPriceOverridden?: boolean;
-  calculatedSellingPrice?: number | null;
-  calculatedWholesalePrice?: number | null;
 }
 
 export interface ProductVariantPayload {
@@ -136,8 +136,8 @@ export interface ProductListResponse {
   pageSize: number;
 }
 
-/** Derives per-unit prices from base prices (respects auto pricing toggle and overrides). */
-export { recalculateUnitPrices, calculateAutoUnitPrice, toBaseQuantity } from './unitPricing';
+/** Converts an entered quantity to base-unit stock (stock movement only). */
+export { toBaseQuantity } from './unitPricing';
 
 const branchRequestConfig = (branchId: number) => ({
   headers: { 'X-Branch-Id': String(branchId) },
@@ -210,27 +210,6 @@ export const productService = {
       params: { branchId },
       ...branchRequestConfig(branchId),
     }),
-
-  getUnitPricing: (id: number, branchId: number) =>
-    apiClient.get(`/products/${id}/unit-pricing`, {
-      params: { branchId },
-      ...branchRequestConfig(branchId),
-    }),
-
-  calculateUnitPrice: (
-    id: number,
-    branchId: number,
-    body: { productUnitId: number; pricingType?: 'Retail' | 'Wholesale'; baseSellingPrice?: number },
-  ) =>
-    apiClient.post(`/products/${id}/calculate-unit-price`, { branchId, ...body }, branchRequestConfig(branchId)),
-
-  saveUnitPriceOverride: (
-    id: number,
-    unitId: number,
-    branchId: number,
-    body: { customSellingPrice: number; customWholesalePrice?: number; isOverride: boolean },
-  ) =>
-    apiClient.put(`/products/${id}/units/${unitId}/price-override`, { branchId, ...body }, branchRequestConfig(branchId)),
 };
 
 const normalizePayload = (data: ProductPayload, branchId: number) => ({
@@ -245,7 +224,7 @@ const normalizePayload = (data: ProductPayload, branchId: number) => ({
   costPrice: Number(data.costPrice ?? 0),
   sellingPrice: Number(data.sellingPrice ?? 0),
   wholesalePrice: Number(data.wholesalePrice ?? 0),
-  useAutoUnitPricing: data.useAutoUnitPricing !== false,
+  useAutoUnitPricing: false,
   isVariantEnabled: data.isVariantEnabled,
   isDiscountAllowed: data.isDiscountAllowed,
   discountType: data.isDiscountAllowed ? data.discountType : null,
@@ -266,7 +245,17 @@ const normalizePayload = (data: ProductPayload, branchId: number) => ({
       }))
     : [],
   branchId,
-  units: data.units ?? [],
+  units: (data.units ?? []).map((unit) => ({
+    id: unit.id,
+    unitId: unit.unitId ?? null,
+    unitName: unit.unitName,
+    conversionFactor: Number(unit.conversionFactor ?? 1),
+    isBaseUnit: Boolean(unit.isBaseUnit),
+    isDefaultSaleUnit: Boolean(unit.isDefaultSaleUnit),
+    costPrice: unit.costPrice != null ? Number(unit.costPrice) : null,
+    sellingPrice: unit.sellingPrice != null ? Number(unit.sellingPrice) : null,
+    wholesalePrice: unit.wholesalePrice != null ? Number(unit.wholesalePrice) : null,
+  })),
   variants: data.isVariantEnabled ? data.variants ?? [] : [],
   barcodes: data.barcodes ?? [],
 });

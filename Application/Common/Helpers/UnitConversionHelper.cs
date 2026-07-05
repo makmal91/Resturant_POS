@@ -2,12 +2,15 @@ namespace POSSystem.Application.Common.Helpers;
 
 /// <summary>
 /// Unit conversion for stock and display.
-/// ConversionFactor = number of smaller (child) units in 1 base unit.
-/// Example: 1 Pipe = 20 Feet → Feet factor = 20; 20 Feet sold → 1 base unit deducted.
+/// The BASE unit is always the SMALLEST sellable unit and stock is stored in it.
+/// ConversionFactor = number of BASE units contained in 1 of this unit (base unit = 1).
+/// Example: base = PCS, 1 Package = 3 PCS → Package factor = 3;
+/// selling/buying 1 Package moves 3 base units (PCS).
 /// </summary>
 public static class UnitConversionHelper
 {
-    /// <summary>Converts entered quantity to base-unit stock quantity.</summary>
+    /// <summary>Converts an entered quantity (in the given unit) to base-unit stock quantity.
+    /// baseQty = quantity × factor (1 Package × 3 = 3 base PCS).</summary>
     public static decimal ToBaseQuantity(decimal quantity, decimal conversionFactor)
     {
         if (quantity <= 0)
@@ -16,21 +19,22 @@ public static class UnitConversionHelper
         if (conversionFactor <= 0)
             throw new InvalidOperationException("ConversionFactor must be greater than zero.");
 
-        return quantity / conversionFactor;
+        return quantity * conversionFactor;
     }
 
-    /// <summary>Converts base-unit stock to equivalent quantity in another unit.</summary>
+    /// <summary>Converts base-unit stock to the equivalent quantity in another unit.
+    /// unitQty = baseQuantity ÷ factor (3 base PCS ÷ 3 = 1 Package).</summary>
     public static decimal FromBaseQuantity(decimal baseQuantity, decimal conversionFactor)
     {
         if (conversionFactor <= 0)
             throw new InvalidOperationException("ConversionFactor must be greater than zero.");
 
-        return baseQuantity * conversionFactor;
+        return baseQuantity / conversionFactor;
     }
 
     /// <summary>
-    /// Expresses base-unit stock in every product unit (qty = baseStock × factor; base factor = 1).
-    /// Example: 100 Pipe, Feet factor 20 → Pipe 100, Feet 2000.
+    /// Expresses base-unit stock in every product unit (qty = baseStock ÷ factor; base factor = 1).
+    /// Example: 100 PCS (base), Package factor 3 → PCS 100, Package 33.33.
     /// </summary>
     public static List<StockUnitDisplay> ConvertStockToAllUnits(
         decimal baseStock,
@@ -53,7 +57,7 @@ public static class UnitConversionHelper
                 {
                     UnitId = u.UnitId,
                     UnitName = u.UnitName,
-                    Quantity = u.IsBaseUnit ? baseStock : baseStock * factor,
+                    Quantity = u.IsBaseUnit ? baseStock : baseStock / factor,
                     ConversionFactor = factor,
                     IsBaseUnit = u.IsBaseUnit,
                     IsRemainder = false
@@ -96,60 +100,61 @@ public static class UnitConversionHelper
     }
 
     /// <summary>
-    /// Breaks stock (in base units) into whole base units plus remainder in the primary child unit.
-    /// Example: 2.5 Pipe (base), Feet factor 20 → 2 Pipe + 10 Feet.
+    /// Breaks base-unit stock into whole units of the largest pack plus a base-unit remainder.
+    /// Example: 7 PCS (base), Package factor 3 → 2 Package + 1 PCS.
     /// </summary>
     public static List<StockUnitDisplay> BreakDownStock(
         decimal stockInBaseUnit,
         IEnumerable<StockUnitDisplayInput> units)
     {
         var unitList = units
-            .Where(u => u.ConversionFactor > 0)
+            .Where(u => u.IsBaseUnit || u.ConversionFactor > 0)
             .ToList();
 
         var baseUnit = unitList.FirstOrDefault(u => u.IsBaseUnit) ?? unitList.FirstOrDefault();
         if (baseUnit == null)
             return [];
 
-        var result = new List<StockUnitDisplay>();
-        var wholeBase = Math.Floor(stockInBaseUnit);
-        var fractionalBase = stockInBaseUnit - wholeBase;
-
-        if (wholeBase > 0)
-        {
-            result.Add(new StockUnitDisplay
-            {
-                UnitId = baseUnit.UnitId,
-                UnitName = baseUnit.UnitName,
-                Quantity = wholeBase,
-                ConversionFactor = 1m,
-                IsBaseUnit = true,
-                IsRemainder = false
-            });
-        }
-
-        var primaryChild = unitList
-            .Where(u => !u.IsBaseUnit)
+        // Largest pack = highest number of base units per unit.
+        var largestPack = unitList
+            .Where(u => !u.IsBaseUnit && u.ConversionFactor > 1)
             .OrderByDescending(u => u.ConversionFactor)
             .FirstOrDefault();
 
-        if (primaryChild != null && fractionalBase > 0)
+        var result = new List<StockUnitDisplay>();
+
+        if (largestPack != null)
         {
-            var childQty = fractionalBase * primaryChild.ConversionFactor;
-            if (childQty > 0)
+            var wholePacks = Math.Floor(stockInBaseUnit / largestPack.ConversionFactor);
+            var remainderBase = stockInBaseUnit - wholePacks * largestPack.ConversionFactor;
+
+            if (wholePacks > 0)
             {
                 result.Add(new StockUnitDisplay
                 {
-                    UnitId = primaryChild.UnitId,
-                    UnitName = primaryChild.UnitName,
-                    Quantity = childQty,
-                    ConversionFactor = primaryChild.ConversionFactor,
+                    UnitId = largestPack.UnitId,
+                    UnitName = largestPack.UnitName,
+                    Quantity = wholePacks,
+                    ConversionFactor = largestPack.ConversionFactor,
                     IsBaseUnit = false,
-                    IsRemainder = true
+                    IsRemainder = false
+                });
+            }
+
+            if (remainderBase > 0 || wholePacks == 0)
+            {
+                result.Add(new StockUnitDisplay
+                {
+                    UnitId = baseUnit.UnitId,
+                    UnitName = baseUnit.UnitName,
+                    Quantity = remainderBase,
+                    ConversionFactor = 1m,
+                    IsBaseUnit = true,
+                    IsRemainder = wholePacks > 0
                 });
             }
         }
-        else if (wholeBase == 0 && stockInBaseUnit > 0)
+        else
         {
             result.Add(new StockUnitDisplay
             {

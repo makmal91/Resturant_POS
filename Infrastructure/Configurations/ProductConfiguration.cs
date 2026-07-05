@@ -92,6 +92,7 @@ public class ProductUnitConfiguration : IEntityTypeConfiguration<ProductUnit>
         builder.Property(u => u.SellingPrice).HasPrecision(18, 2);
         builder.Property(u => u.WholesalePrice).HasPrecision(18, 2);
         builder.Property(u => u.IsPriceOverridden).HasDefaultValue(false);
+        builder.Property(u => u.IsDefaultSaleUnit).HasDefaultValue(false);
         builder.HasIndex(u => new { u.ProductId, u.UnitName }).HasDatabaseName("idx_productunit_product_name");
         builder.HasIndex(u => u.UnitId).HasDatabaseName("idx_productunit_unit_id");
 

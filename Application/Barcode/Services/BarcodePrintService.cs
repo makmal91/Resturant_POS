@@ -12,16 +12,13 @@ public class BarcodePrintService : IBarcodePrintService
 {
     private readonly IBarcodePrintRepository _repository;
     private readonly IProductRepository _productRepository;
-    private readonly IUnitPricingService _unitPricingService;
 
     public BarcodePrintService(
         IBarcodePrintRepository repository,
-        IProductRepository productRepository,
-        IUnitPricingService unitPricingService)
+        IProductRepository productRepository)
     {
         _repository = repository;
         _productRepository = productRepository;
-        _unitPricingService = unitPricingService;
     }
 
     public async Task<PagedResultDto<BarcodePrintProductDto>> SearchItemsAsync(BarcodePrintSearchRequestDto request)
@@ -64,14 +61,10 @@ public class BarcodePrintService : IBarcodePrintService
                 UnitName = u.UnitName,
                 ConversionFactor = u.ConversionFactor,
                 IsBaseUnit = u.IsBaseUnit,
-                IsPriceOverridden = u.IsPriceOverridden,
+                IsDefaultSaleUnit = u.IsDefaultSaleUnit,
                 CostPrice = u.CostPrice,
                 SellingPrice = u.SellingPrice,
-                WholesalePrice = u.WholesalePrice,
-                CalculatedSellingPrice = _unitPricingService.CalculateAutoPrice(
-                    product.SellingPrice, u.ConversionFactor, u.IsBaseUnit),
-                CalculatedWholesalePrice = _unitPricingService.CalculateAutoPrice(
-                    product.WholesalePrice, u.ConversionFactor, u.IsBaseUnit)
+                WholesalePrice = u.WholesalePrice
             }).ToList(),
             Variants = variants.Select(v => new ProductVariantDto
             {

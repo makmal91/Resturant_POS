@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using POSSystem.API.Extensions;
 using POSSystem.Application.Auth.Exceptions;
 using POSSystem.Application.Common.Constants;
 using POSSystem.Application.Modules.DTOs;
@@ -32,6 +33,7 @@ public class RolePermissionsController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
+            await HttpContextExceptionLogging.LogAsync(HttpContext, ex);
             return NotFound(new { message = ex.Message });
         }
     }
@@ -50,10 +52,12 @@ public class RolePermissionsController : ControllerBase
         }
         catch (PermissionEscalationException ex)
         {
+            await HttpContextExceptionLogging.LogAsync(HttpContext, ex);
             return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
         }
         catch (InvalidOperationException ex)
         {
+            await HttpContextExceptionLogging.LogAsync(HttpContext, ex);
             return BadRequest(new { message = ex.Message });
         }
     }

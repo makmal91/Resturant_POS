@@ -55,6 +55,9 @@ public class ProductUnit : BaseEntity
     /// <summary>Number of base units contained in 1 of this unit. Base unit must be 1.</summary>
     public decimal ConversionFactor { get; set; } = 1;
     public bool IsBaseUnit { get; set; }
+    /// <summary>When true, this unit is pre-selected on the POS when the product is picked manually.
+    /// Only one unit per product may be the default sale unit.</summary>
+    public bool IsDefaultSaleUnit { get; set; }
     public decimal? CostPrice { get; set; }
     public decimal? SellingPrice { get; set; }
     public decimal? WholesalePrice { get; set; }

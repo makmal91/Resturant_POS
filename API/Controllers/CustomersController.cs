@@ -94,7 +94,11 @@ public class CustomersController : ControllerBase
             var created = await _customerService.CreateAsync(dto);
             return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
         }
-        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+        catch (InvalidOperationException ex)
+        {
+            await HttpContextExceptionLogging.LogAsync(HttpContext, ex);
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     /// <summary>Quick-create a customer from POS screen (minimal fields).</summary>
@@ -109,7 +113,11 @@ public class CustomersController : ControllerBase
             var created = await _customerService.QuickCreateAsync(dto);
             return Ok(created);
         }
-        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+        catch (InvalidOperationException ex)
+        {
+            await HttpContextExceptionLogging.LogAsync(HttpContext, ex);
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     /// <summary>Update a customer.</summary>
@@ -124,7 +132,11 @@ public class CustomersController : ControllerBase
             var updated = await _customerService.UpdateAsync(id, dto);
             return updated == null ? NotFound() : Ok(updated);
         }
-        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+        catch (InvalidOperationException ex)
+        {
+            await HttpContextExceptionLogging.LogAsync(HttpContext, ex);
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     /// <summary>Soft-delete a customer (walk-in customer is protected).</summary>
@@ -137,6 +149,10 @@ public class CustomersController : ControllerBase
                 id, this.ResolveBusinessId(businessId), this.ResolveBranchId(branchId));
             return NoContent();
         }
-        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+        catch (InvalidOperationException ex)
+        {
+            await HttpContextExceptionLogging.LogAsync(HttpContext, ex);
+            return BadRequest(new { message = ex.Message });
+        }
     }
 }

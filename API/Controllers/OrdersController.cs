@@ -34,6 +34,7 @@ public class OrdersController : ControllerBase
         }
         catch (Exception ex)
         {
+            await HttpContextExceptionLogging.LogAsync(HttpContext, ex);
             return BadRequest(ex.Message);
         }
     }
@@ -53,6 +54,7 @@ public class OrdersController : ControllerBase
         }
         catch (Exception ex)
         {
+            await HttpContextExceptionLogging.LogAsync(HttpContext, ex);
             return BadRequest(ex.Message);
         }
     }
@@ -72,6 +74,7 @@ public class OrdersController : ControllerBase
         }
         catch (Exception ex)
         {
+            await HttpContextExceptionLogging.LogAsync(HttpContext, ex);
             return BadRequest(ex.Message);
         }
     }
@@ -91,6 +94,7 @@ public class OrdersController : ControllerBase
         }
         catch (Exception ex)
         {
+            await HttpContextExceptionLogging.LogAsync(HttpContext, ex);
             return BadRequest(ex.Message);
         }
     }

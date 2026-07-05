@@ -73,6 +73,7 @@ public class BranchesController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
+            await HttpContextExceptionLogging.LogAsync(HttpContext, ex);
             if (ex.Message.Contains("already exists", StringComparison.OrdinalIgnoreCase))
                 return Conflict(new { message = ex.Message });
 
@@ -81,6 +82,7 @@ public class BranchesController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error while creating branch");
+            await HttpContextExceptionLogging.LogAsync(HttpContext, ex);
             return StatusCode(500, new { message = "Internal server error while creating branch", detail = ex.Message });
         }
     }
@@ -102,6 +104,7 @@ public class BranchesController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
+            await HttpContextExceptionLogging.LogAsync(HttpContext, ex);
             if (ex.Message.Contains("already exists", StringComparison.OrdinalIgnoreCase))
                 return Conflict(new { message = ex.Message });
 
@@ -110,6 +113,7 @@ public class BranchesController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error while updating branch {BranchId}", id);
+            await HttpContextExceptionLogging.LogAsync(HttpContext, ex);
             return StatusCode(500, new { message = "Internal server error while updating branch", detail = ex.Message });
         }
     }
@@ -129,6 +133,7 @@ public class BranchesController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error while deleting branch {BranchId}", id);
+            await HttpContextExceptionLogging.LogAsync(HttpContext, ex);
             return StatusCode(500, new { message = "Internal server error while deleting branch", detail = ex.Message });
         }
     }

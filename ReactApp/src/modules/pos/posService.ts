@@ -8,11 +8,9 @@ export interface PosProductUnit {
   unitName: string;
   sellingPrice: number;
   wholesalePrice: number;
-  calculatedSellingPrice?: number;
-  calculatedWholesalePrice?: number;
   conversionFactor: number;
   isBaseUnit: boolean;
-  isPriceOverridden?: boolean;
+  isDefaultSaleUnit?: boolean;
 }
 
 export interface PosProductVariant {
@@ -388,7 +386,7 @@ export const resolveSaleUnitPrice = (
   return productRetail + (variant?.additionalPrice ?? 0);
 };
 
-/** Picks unit: preferred → matched → base → first valid. Skips units with invalid factor. */
+/** Picks unit: preferred → matched (barcode) → default sale unit → base → first valid. */
 export const resolveCartUnitId = (
   units: PosProductUnit[],
   preferredUnitId?: number | null,
@@ -402,9 +400,10 @@ export const resolveCartUnitId = (
   if (preferredUnitId != null && isValid(preferredUnitId)) return preferredUnitId;
   if (matchedUnitId != null && isValid(matchedUnitId)) return matchedUnitId;
 
-  const base = units.find((u) => u.isBaseUnit && u.conversionFactor > 0)
+  const fallback = units.find((u) => u.isDefaultSaleUnit && u.conversionFactor > 0)
+    ?? units.find((u) => u.isBaseUnit && u.conversionFactor > 0)
     ?? units.find((u) => u.conversionFactor > 0);
-  return base?.unitId ?? units[0]?.unitId ?? 0;
+  return fallback?.unitId ?? units[0]?.unitId ?? 0;
 };
 
 export const applyUnitToCartItem = (
@@ -440,8 +439,8 @@ export const applyUnitToCartItem = (
     conversionFactor: unit.conversionFactor > 0 ? unit.conversionFactor : 1,
     unitPrice,
     calculatedUnitPrice: pricingType === 'Wholesale'
-      ? (unit.calculatedWholesalePrice ?? unit.wholesalePrice)
-      : (unit.calculatedSellingPrice ?? unit.sellingPrice),
+      ? unit.wholesalePrice
+      : unit.sellingPrice,
     isManualPriceOverride: false,
     lineTotal: 0,
   };
@@ -459,7 +458,7 @@ export const lookupToCartItem = (
   const unitId = resolveCartUnitId(
     lookup.availableUnits,
     preferredUnitId,
-    lookup.matchedUnitId ?? lookup.availableUnits.find((u) => u.isBaseUnit)?.unitId,
+    lookup.matchedUnitId,
   );
   const unit = lookup.availableUnits.find((u) => u.unitId === unitId);
   const unitName = unit?.unitName ?? lookup.matchedUnitName ?? '';
@@ -494,8 +493,8 @@ export const lookupToCartItem = (
     quantity: 1,
     unitPrice: basePrice,
     calculatedUnitPrice: pricingType === 'Wholesale'
-      ? (unit?.calculatedWholesalePrice ?? unit?.wholesalePrice ?? basePrice)
-      : (unit?.calculatedSellingPrice ?? unit?.sellingPrice ?? basePrice),
+      ? (unit?.wholesalePrice ?? basePrice)
+      : (unit?.sellingPrice ?? basePrice),
     isManualPriceOverride: false,
     discountPercent: lookup.isDiscountAllowed && lookup.discountType === 'Percentage' ? lookup.discountValue : 0,
     discountAmount: lookup.isDiscountAllowed && lookup.discountType === 'Fixed' ? lookup.discountValue : 0,
@@ -520,6 +519,8 @@ export const groupRowToLookup = (
   pricingType: 'Retail' | 'Wholesale'
 ): PosProductLookup => {
   const baseUnit = group.units.find((u) => u.isBaseUnit) ?? group.units[0];
+  // Manual product selection pre-selects the default sale unit (falls back to base).
+  const defaultUnit = group.units.find((u) => u.isDefaultSaleUnit) ?? baseUnit;
   const variantLookup = variant
     ? group.variants.find((v) => v.variantId === variant.variantId) ?? variant
     : null;
@@ -540,9 +541,9 @@ export const groupRowToLookup = (
     barcode: variant?.barcode ?? '',
     retailPrice: productRetail,
     wholesalePrice: productWholesale,
-    matchedUnitId: baseUnit?.unitId ?? null,
-    matchedUnitName: baseUnit?.unitName ?? '',
-    matchedUnitConversionFactor: baseUnit?.conversionFactor ?? 1,
+    matchedUnitId: defaultUnit?.unitId ?? null,
+    matchedUnitName: defaultUnit?.unitName ?? '',
+    matchedUnitConversionFactor: defaultUnit?.conversionFactor ?? 1,
     matchedVariantId: variant?.variantId ?? null,
     matchedVariantName: variant?.variantName ?? null,
     matchedVariantSize: variant?.size ?? null,

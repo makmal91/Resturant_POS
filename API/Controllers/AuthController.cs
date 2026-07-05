@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using POSSystem.API.Extensions;
 using POSSystem.Application.Auth.DTOs;
 using POSSystem.Application.Auth.Interfaces;
 
@@ -37,6 +38,7 @@ public class AuthController : ControllerBase
         catch (InvalidOperationException ex)
         {
             _logger.LogWarning("Login rejected for user {Username}: {Message}", username, ex.Message);
+            await HttpContextExceptionLogging.LogAsync(HttpContext, ex);
             return BadRequest(new { message = ex.Message });
         }
     }

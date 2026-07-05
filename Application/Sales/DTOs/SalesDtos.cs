@@ -40,11 +40,9 @@ public class PosProductUnitDto
     public string UnitName { get; set; } = string.Empty;
     public decimal SellingPrice { get; set; }
     public decimal WholesalePrice { get; set; }
-    public decimal CalculatedSellingPrice { get; set; }
-    public decimal CalculatedWholesalePrice { get; set; }
     public decimal ConversionFactor { get; set; }
     public bool IsBaseUnit { get; set; }
-    public bool IsPriceOverridden { get; set; }
+    public bool IsDefaultSaleUnit { get; set; }
 }
 
 public class PosProductVariantDto

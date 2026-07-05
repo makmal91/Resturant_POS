@@ -26,13 +26,16 @@ public class ExceptionMiddleware
         catch (Exception ex)
         {
             _logger.LogError(ex, "An unhandled exception occurred.");
-            await exceptionLogService.LogAsync(
-                ex,
-                GetUserId(context),
-                GetBranchId(context),
-                context.Request.Headers["x-module"].FirstOrDefault(),
-                context.Request.Headers["x-form"].FirstOrDefault(),
-                context.Request.Headers["x-action"].FirstOrDefault());
+            if (context.Items.ContainsKey("ExceptionLogged") != true)
+            {
+                await exceptionLogService.LogAsync(
+                    ex,
+                    GetUserId(context),
+                    GetBranchId(context),
+                    context.Request.Headers["x-module"].FirstOrDefault(),
+                    context.Request.Headers["x-form"].FirstOrDefault(),
+                    context.Request.Headers["x-action"].FirstOrDefault());
+            }
             await HandleExceptionAsync(context, ex);
         }
     }

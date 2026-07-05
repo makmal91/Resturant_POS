@@ -4,6 +4,7 @@ using POSSystem.Application.Product.Interfaces;
 using POSSystem.Domain;
 using PurchaseEntity = POSSystem.Domain.Purchase;
 using ExpenseEntity = POSSystem.Domain.Expense;
+using ProductEntity = POSSystem.Domain.Product;
 
 namespace POSSystem.Application.Accounting.Services;
 
@@ -217,6 +218,30 @@ public class AccountingIntegrationService : IAccountingIntegrationService
 
         AddLine(entries, debitAccountId, branchId, expense.Amount, 0, groupId, expense.Id, description, GlTransactionType.Expense, expense.ExpenseDate, ledgerChainId);
         AddLine(entries, cashAccountId, branchId, 0, expense.Amount, groupId, expense.Id, description, GlTransactionType.Expense, expense.ExpenseDate, ledgerChainId);
+
+        await _accounting.CreateDoubleEntryAsync(entries);
+    }
+
+    public async Task PostOpeningStockAsync(ProductEntity product, decimal amount, int businessId, int branchId)
+    {
+        if (amount <= 0)
+            return;
+
+        if (await _accountingRepository.ExistsForReferenceAsync(product.Id, GlTransactionType.OpeningBalance))
+            return;
+
+        var accounts = await _glAccounts.ResolvePostingAccountsAsync();
+        var groupId = Guid.NewGuid();
+        var ledgerChainId = groupId;
+        var description = $"Opening Stock — {product.ProductName.Trim()} [{product.ProductCode.Trim()}]";
+        var date = DateTime.UtcNow;
+        var entries = new List<AccountingTransactionDto>();
+        var roundedAmount = Math.Round(amount, 2, MidpointRounding.AwayFromZero);
+
+        AddLine(entries, accounts.Inventory, branchId, roundedAmount, 0, groupId, product.Id, description,
+            GlTransactionType.OpeningBalance, date, ledgerChainId);
+        AddLine(entries, accounts.OwnerCapital, branchId, 0, roundedAmount, groupId, product.Id, description,
+            GlTransactionType.OpeningBalance, date, ledgerChainId);
 
         await _accounting.CreateDoubleEntryAsync(entries);
     }

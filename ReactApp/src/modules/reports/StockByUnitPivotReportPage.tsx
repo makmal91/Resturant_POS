@@ -252,7 +252,7 @@ const StockByUnitPivotReportPage: React.FC = () => {
         <div>
           <h1 className="mb-2 text-3xl font-bold text-gray-900">Stock By Unit Report</h1>
           <p className="text-gray-600">
-            Pivot view: one row per product with dynamic unit columns (stock = base stock × conversion factor).
+            Pivot view: one row per product with dynamic unit columns (stock = base stock ÷ conversion factor).
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 self-start print:hidden">

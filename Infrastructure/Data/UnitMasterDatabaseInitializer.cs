@@ -17,6 +17,7 @@ public static class UnitMasterDatabaseInitializer
                     [Id] INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
                     [Name] NVARCHAR(100) NOT NULL,
                     [Code] NVARCHAR(20) NOT NULL CONSTRAINT [DF_Units_Code] DEFAULT N'',
+                    [Description] NVARCHAR(500) NOT NULL CONSTRAINT [DF_Units_Description] DEFAULT N'',
                     [DefaultConversionFactor] DECIMAL(18,4) NOT NULL CONSTRAINT [DF_Units_DefaultConversionFactor] DEFAULT 1,
                     [Status] BIT NOT NULL CONSTRAINT [DF_Units_Status] DEFAULT 1,
                     [BusinessId] INT NOT NULL CONSTRAINT [DF_Units_BusinessId] DEFAULT 1,
@@ -37,6 +38,7 @@ public static class UnitMasterDatabaseInitializer
                     [Id] INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
                     [Name] NVARCHAR(100) NOT NULL,
                     [Code] NVARCHAR(20) NOT NULL CONSTRAINT [DF_Units_Code] DEFAULT N'',
+                    [Description] NVARCHAR(500) NOT NULL CONSTRAINT [DF_Units_Description] DEFAULT N'',
                     [DefaultConversionFactor] DECIMAL(18,4) NOT NULL CONSTRAINT [DF_Units_DefaultConversionFactor] DEFAULT 1,
                     [Status] BIT NOT NULL CONSTRAINT [DF_Units_Status] DEFAULT 1,
                     [BusinessId] INT NOT NULL CONSTRAINT [DF_Units_BusinessId] DEFAULT 1,
@@ -86,6 +88,17 @@ public static class UnitMasterDatabaseInitializer
                     ELSE
                         ALTER TABLE [dbo].[Units] ADD [DefaultConversionFactor] DECIMAL(18,4) NOT NULL
                             CONSTRAINT [DF_Units_DefaultConversionFactor] DEFAULT 1;
+               END
+
+               -- Legacy Description column: ensure empty default so inserts without it succeed
+               IF COL_LENGTH(N'dbo.Units', N'Description') IS NOT NULL
+               BEGIN
+                    UPDATE [dbo].[Units] SET [Description] = N'' WHERE [Description] IS NULL;
+                    IF NOT EXISTS (
+                        SELECT 1 FROM sys.default_constraints dc
+                        INNER JOIN sys.columns c ON c.default_object_id = dc.object_id
+                        WHERE dc.parent_object_id = OBJECT_ID(N'dbo.Units') AND c.name = N'Description')
+                        ALTER TABLE [dbo].[Units] ADD CONSTRAINT [DF_Units_Description] DEFAULT N'' FOR [Description];
                END
             END
             """,
@@ -161,8 +174,8 @@ public static class UnitMasterDatabaseInitializer
                               AND [Name] = {unit.Item1}
                               AND [IsDeleted] = 0)
                         BEGIN
-                            INSERT INTO [Units] ([Name], [Code], [DefaultConversionFactor], [Status], [BusinessId], [BranchId], [CreatedDate], [IsDeleted])
-                            VALUES ({unit.Item1}, {unit.Item2}, {unit.Item3}, 1, {branch.BusinessId}, {branch.Id}, GETUTCDATE(), 0);
+                            INSERT INTO [Units] ([Name], [Code], [Description], [DefaultConversionFactor], [Status], [BusinessId], [BranchId], [CreatedDate], [IsDeleted])
+                            VALUES ({unit.Item1}, {unit.Item2}, N'', {unit.Item3}, 1, {branch.BusinessId}, {branch.Id}, GETUTCDATE(), 0);
                         END
                         """);
                 }

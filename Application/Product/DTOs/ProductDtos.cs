@@ -116,14 +116,14 @@ public class ProductUnitWriteDto
     public int? Id { get; set; }
     public int? UnitId { get; set; }
     public string UnitName { get; set; } = string.Empty;
+    /// <summary>Stock-only conversion: base units contained in 1 of this unit. Not used for pricing.</summary>
     public decimal ConversionFactor { get; set; } = 1;
     public bool IsBaseUnit { get; set; }
+    /// <summary>Pre-selected on the POS when the product is picked manually. Exactly one per product.</summary>
+    public bool IsDefaultSaleUnit { get; set; }
     public decimal? CostPrice { get; set; }
     public decimal? SellingPrice { get; set; }
     public decimal? WholesalePrice { get; set; }
-    public bool IsPriceOverridden { get; set; }
-    public decimal? CalculatedSellingPrice { get; set; }
-    public decimal? CalculatedWholesalePrice { get; set; }
 }
 
 public class ProductUnitDto : ProductUnitWriteDto

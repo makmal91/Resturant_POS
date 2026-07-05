@@ -44,6 +44,7 @@ public class PosRegistersController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
+            await HttpContextExceptionLogging.LogAsync(HttpContext, ex);
             return BadRequest(new { message = ex.Message });
         }
     }
@@ -61,6 +62,7 @@ public class PosRegistersController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
+            await HttpContextExceptionLogging.LogAsync(HttpContext, ex);
             return BadRequest(new { message = ex.Message });
         }
     }
@@ -77,6 +79,7 @@ public class PosRegistersController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
+            await HttpContextExceptionLogging.LogAsync(HttpContext, ex);
             return BadRequest(new { message = ex.Message });
         }
     }
@@ -94,6 +97,7 @@ public class PosRegistersController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
+            await HttpContextExceptionLogging.LogAsync(HttpContext, ex);
             return BadRequest(new { message = ex.Message });
         }
     }
@@ -110,6 +114,7 @@ public class PosRegistersController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
+            await HttpContextExceptionLogging.LogAsync(HttpContext, ex);
             return BadRequest(new { message = ex.Message });
         }
     }
@@ -127,6 +132,7 @@ public class PosRegistersController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
+            await HttpContextExceptionLogging.LogAsync(HttpContext, ex);
             return BadRequest(new { message = ex.Message });
         }
     }

@@ -106,9 +106,10 @@ export const resolveUnitPrice = (
   unit: ProductUnitPayload,
   variant?: ProductVariantPayload | null,
 ): number => {
-  const base = unit.isPriceOverridden && unit.sellingPrice != null
+  // Each unit stores its own manual sale price; fall back to the product price.
+  const base = unit.sellingPrice != null
     ? Number(unit.sellingPrice)
-    : Number(unit.calculatedSellingPrice ?? details.sellingPrice);
+    : Number(details.sellingPrice);
 
   if (variant?.sellingPriceOverride != null) return Number(variant.sellingPriceOverride);
   return base + Number(variant?.additionalPrice ?? 0);

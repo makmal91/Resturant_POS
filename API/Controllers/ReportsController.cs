@@ -477,7 +477,7 @@ public class ReportsController : ControllerBase
     }
 
     /// <summary>
-    /// Pivot-style stock report: one row per product, dynamic columns per unit (baseStock × factor).
+    /// Pivot-style stock report: one row per product, dynamic columns per unit (baseStock ÷ factor).
     /// </summary>
     [HttpGet("stock-by-unit-pivot")]
     [RequirePermission(PermissionModules.StockReports, PermissionActions.View)]
@@ -625,8 +625,10 @@ public class ReportsController : ControllerBase
                 var colKey = unitKeyByName[unitName];
                 if (unitLookup.TryGetValue(unitName, out var unit))
                 {
+                    // factor = base units contained in 1 of this unit, so express base
+                    // stock in this unit by dividing (e.g. 9 PCS ÷ Pack factor 5 = 1.8 Pack).
                     var factor = unit.IsBaseUnit ? 1m : unit.ConversionFactor;
-                    row[colKey] = factor > 0 ? baseStock * factor : (decimal?)null;
+                    row[colKey] = factor > 0 ? baseStock / factor : (decimal?)null;
                 }
                 else
                 {

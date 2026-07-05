@@ -152,6 +152,8 @@ public static class ProductManagementDatabaseInitializer
             SyncLegacyProductsBaseUnitSchemaSql(),
             SyncUnitPricingSchemaSql(),
             BackfillMultiUnitDataSql(),
+            SyncDefaultSaleUnitSchemaSql(),
+            SeedDefaultSaleUnitSql(),
             SyncLegacyProductImagesSchemaSql(),
             SyncLegacyProductBarcodesSchemaSql(),
             """
@@ -413,6 +415,74 @@ public static class ProductManagementDatabaseInitializer
             SET [DefaultConversionFactor] = ROUND(1.0 / [DefaultConversionFactor], 4)
             WHERE [IsDeleted] = 0
               AND [DefaultConversionFactor] > 0 AND [DefaultConversionFactor] < 1;
+        END
+        """;
+
+    // NOTE: Adding the IsDefaultSaleUnit column and referencing it must happen in SEPARATE
+    // batches. SQL Server compiles a whole batch before executing it, so an ALTER TABLE ADD
+    // followed by a statement that reads the new column in the same batch throws a compile-time
+    // "Invalid column name" and aborts the entire batch (column never gets added). The default
+    // seeding lives in SeedDefaultSaleUnitSql(), executed as a later batch.
+    private static string SyncDefaultSaleUnitSchemaSql() => """
+        IF OBJECT_ID(N'[dbo].[ProductUnits]', N'U') IS NOT NULL
+        BEGIN
+            IF COL_LENGTH(N'dbo.ProductUnits', N'IsDefaultSaleUnit') IS NULL
+                ALTER TABLE [dbo].[ProductUnits] ADD [IsDefaultSaleUnit] BIT NOT NULL
+                    CONSTRAINT [DF_ProductUnits_IsDefaultSaleUnit] DEFAULT 0;
+
+            -- Prices are now fully manual per unit. Backfill any NULL prices from the
+            -- previous auto-pricing formula (base price ÷ conversion factor) so existing
+            -- products keep their effective prices when auto-calculation is removed.
+            UPDATE pu
+            SET pu.[CostPrice] = CASE WHEN pu.[IsBaseUnit] = 1 THEN p.[CostPrice]
+                                      ELSE ROUND(p.[CostPrice] / NULLIF(pu.[ConversionFactor], 0), 2) END
+            FROM [dbo].[ProductUnits] pu
+            INNER JOIN [dbo].[Products] p ON p.[Id] = pu.[ProductId]
+            WHERE pu.[IsDeleted] = 0 AND pu.[CostPrice] IS NULL;
+
+            UPDATE pu
+            SET pu.[SellingPrice] = CASE WHEN pu.[IsBaseUnit] = 1 THEN p.[SellingPrice]
+                                         ELSE ROUND(p.[SellingPrice] / NULLIF(pu.[ConversionFactor], 0), 2) END
+            FROM [dbo].[ProductUnits] pu
+            INNER JOIN [dbo].[Products] p ON p.[Id] = pu.[ProductId]
+            WHERE pu.[IsDeleted] = 0 AND pu.[SellingPrice] IS NULL;
+
+            UPDATE pu
+            SET pu.[WholesalePrice] = CASE WHEN pu.[IsBaseUnit] = 1 THEN p.[WholesalePrice]
+                                           ELSE ROUND(p.[WholesalePrice] / NULLIF(pu.[ConversionFactor], 0), 2) END
+            FROM [dbo].[ProductUnits] pu
+            INNER JOIN [dbo].[Products] p ON p.[Id] = pu.[ProductId]
+            WHERE pu.[IsDeleted] = 0 AND pu.[WholesalePrice] IS NULL;
+        END
+        """;
+
+    // Seeds exactly one default sale unit per product. Runs as its own batch AFTER the column
+    // exists (see note on SyncDefaultSaleUnitSchemaSql). Guarded so it no-ops if the column is
+    // somehow still missing.
+    private static string SeedDefaultSaleUnitSql() => """
+        IF OBJECT_ID(N'[dbo].[ProductUnits]', N'U') IS NOT NULL
+           AND COL_LENGTH(N'dbo.ProductUnits', N'IsDefaultSaleUnit') IS NOT NULL
+        BEGIN
+            -- Prefer the existing base unit as the default sale unit.
+            UPDATE pu
+            SET pu.[IsDefaultSaleUnit] = 1
+            FROM [dbo].[ProductUnits] pu
+            WHERE pu.[IsBaseUnit] = 1 AND pu.[IsDeleted] = 0
+              AND NOT EXISTS (
+                  SELECT 1 FROM [dbo].[ProductUnits] d
+                  WHERE d.[ProductId] = pu.[ProductId] AND d.[IsDeleted] = 0 AND d.[IsDefaultSaleUnit] = 1);
+
+            -- Products with no base unit flagged: fall back to the lowest ProductUnit id.
+            UPDATE pu
+            SET pu.[IsDefaultSaleUnit] = 1
+            FROM [dbo].[ProductUnits] pu
+            WHERE pu.[IsDeleted] = 0
+              AND pu.[Id] = (
+                  SELECT MIN(d.[Id]) FROM [dbo].[ProductUnits] d
+                  WHERE d.[ProductId] = pu.[ProductId] AND d.[IsDeleted] = 0)
+              AND NOT EXISTS (
+                  SELECT 1 FROM [dbo].[ProductUnits] d2
+                  WHERE d2.[ProductId] = pu.[ProductId] AND d2.[IsDeleted] = 0 AND d2.[IsDefaultSaleUnit] = 1);
         END
         """;
 

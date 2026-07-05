@@ -361,12 +361,15 @@ public class PurchaseService : IPurchaseService
 
     private static decimal ResolveUnitCostPrice(Domain.Product product, ProductUnit unit, ProductVariant? variant)
     {
+        // A manual per-unit cost wins.
         if (unit.CostPrice.HasValue && unit.CostPrice.Value >= 0)
             return unit.CostPrice.Value;
 
-        var baseCost = variant?.CostPriceOverride ?? product.CostPrice;
-        var factor = unit.ConversionFactor > 0 ? unit.ConversionFactor : 1m;
-        return Math.Round(baseCost / factor, 2, MidpointRounding.AwayFromZero);
+        // Otherwise derive from the base (per smallest unit) cost, scaled by the conversion
+        // factor so a larger pack costs factor× the base unit (e.g. 1 Package = 3 × PCS cost).
+        var perBaseCost = variant?.CostPriceOverride ?? product.CostPrice;
+        var factor = unit.IsBaseUnit ? 1m : (unit.ConversionFactor > 0 ? unit.ConversionFactor : 1m);
+        return perBaseCost * factor;
     }
 
     private static StockLedger CreatePurchaseStockLedgerEntry(

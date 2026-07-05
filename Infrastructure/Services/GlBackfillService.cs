@@ -133,5 +133,50 @@ public class GlBackfillService
                 _logger.LogWarning(ex, "Skipped GL backfill for payment {PaymentId}.", payment.Id);
             }
         }
+
+        var openingStockProducts = await _db.StockLedgerEntries
+            .AsNoTracking()
+            .Where(e => !e.IsDeleted && e.Type == StockLedgerType.Opening)
+            .Select(e => new { e.ProductId, e.BusinessId, e.BranchId })
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        foreach (var row in openingStockProducts)
+        {
+            if (await _accountingRepository.ExistsForReferenceAsync(row.ProductId, GlTransactionType.OpeningBalance))
+                continue;
+
+            var product = await _db.Products
+                .AsNoTracking()
+                .FirstOrDefaultAsync(
+                    p => p.Id == row.ProductId && p.BusinessId == row.BusinessId && p.BranchId == row.BranchId && !p.IsDeleted,
+                    cancellationToken);
+
+            if (product == null)
+                continue;
+
+            var openingEntries = await _db.StockLedgerEntries
+                .AsNoTracking()
+                .Where(e => !e.IsDeleted
+                            && e.ProductId == row.ProductId
+                            && e.BusinessId == row.BusinessId
+                            && e.BranchId == row.BranchId
+                            && e.Type == StockLedgerType.Opening)
+                .ToListAsync(cancellationToken);
+
+            var amount = Math.Round(openingEntries.Sum(e => e.TotalAmount), 2, MidpointRounding.AwayFromZero);
+            if (amount <= 0)
+                continue;
+
+            try
+            {
+                await _integration.PostOpeningStockAsync(product, amount, row.BusinessId, row.BranchId);
+                _logger.LogInformation("Backfilled GL opening stock journal for product {ProductId}.", product.Id);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Skipped GL backfill for opening stock on product {ProductId}.", product.Id);
+            }
+        }
     }
 }

@@ -13,6 +13,7 @@ public class MeasurementUnitConfiguration : IEntityTypeConfiguration<Measurement
 
         builder.Property(u => u.Name).IsRequired().HasMaxLength(100);
         builder.Property(u => u.Code).HasMaxLength(20);
+        builder.Property(u => u.Description).IsRequired().HasMaxLength(500).HasDefaultValue(string.Empty);
         builder.Property(u => u.DefaultConversionFactor).HasPrecision(18, 4).HasDefaultValue(1m);
         builder.Property(u => u.Status).HasDefaultValue(true);
 

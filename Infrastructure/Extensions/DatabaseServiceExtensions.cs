@@ -26,6 +26,14 @@ public static class DatabaseServiceExtensions
         if (string.IsNullOrWhiteSpace(connectionString))
             throw new ArgumentException("Connection string cannot be null or empty.", nameof(connectionString));
 
+        services.AddDbContextFactory<POSDbContext>(options =>
+            options.UseSqlServer(
+                connectionString,
+                sqlOptions => sqlOptions.EnableRetryOnFailure(
+                    maxRetryCount: 5,
+                    maxRetryDelay: TimeSpan.FromSeconds(10),
+                    errorNumbersToAdd: null)));
+
         services.AddDbContext<POSDbContext>(options =>
             options.UseSqlServer(
                 connectionString,

@@ -139,6 +139,7 @@ public class ExpensesController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
+            await HttpContextExceptionLogging.LogAsync(HttpContext, ex);
             return BadRequest(new { message = ex.Message });
         }
     }
@@ -171,6 +172,7 @@ public class ExpensesController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
+            await HttpContextExceptionLogging.LogAsync(HttpContext, ex);
             return ex.Message == "Expense not found."
                 ? NotFound(new { message = ex.Message })
                 : BadRequest(new { message = ex.Message });
@@ -190,6 +192,7 @@ public class ExpensesController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
+            await HttpContextExceptionLogging.LogAsync(HttpContext, ex);
             return ex.Message == "Expense not found."
                 ? NotFound(new { message = ex.Message })
                 : BadRequest(new { message = ex.Message });

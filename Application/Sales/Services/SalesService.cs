@@ -597,22 +597,15 @@ public class SalesService : ISalesService
 
     private PosProductUnitDto MapPosProductUnitDto(ProductEntity product, ProductUnit unit)
     {
-        var calcRetail = _unitPricingService.CalculateAutoPrice(
-            product.SellingPrice, unit.ConversionFactor, unit.IsBaseUnit);
-        var calcWholesale = _unitPricingService.CalculateAutoPrice(
-            product.WholesalePrice, unit.ConversionFactor, unit.IsBaseUnit);
-
         return new PosProductUnitDto
         {
             UnitId = unit.Id,
             UnitName = unit.UnitName,
             SellingPrice = _unitPricingService.GetEffectiveSellingPrice(product, unit, null, PricingType.Retail),
             WholesalePrice = _unitPricingService.GetEffectiveWholesalePrice(product, unit),
-            CalculatedSellingPrice = calcRetail,
-            CalculatedWholesalePrice = calcWholesale,
             ConversionFactor = unit.ConversionFactor,
             IsBaseUnit = unit.IsBaseUnit,
-            IsPriceOverridden = unit.IsPriceOverridden
+            IsDefaultSaleUnit = unit.IsDefaultSaleUnit
         };
     }
 
@@ -623,9 +616,13 @@ public class SalesService : ISalesService
             ? product.Variants.FirstOrDefault(v => v.Id == matchedBarcode.ProductVariantId)
             : null;
 
+        // Barcode-matched unit wins; otherwise pre-select the product's default sale unit
+        // (falls back to the base unit, then the first available unit).
         var matchedUnit = matchedBarcode?.ProductUnitId.HasValue == true
             ? product.Units.FirstOrDefault(u => u.Id == matchedBarcode.ProductUnitId)
-            : product.Units.FirstOrDefault(u => u.IsBaseUnit);
+            : product.Units.FirstOrDefault(u => u.IsDefaultSaleUnit && !u.IsDeleted)
+                ?? product.Units.FirstOrDefault(u => u.IsBaseUnit && !u.IsDeleted)
+                ?? product.Units.FirstOrDefault(u => !u.IsDeleted);
 
         var baseUnit = product.Units.FirstOrDefault(u => u.IsBaseUnit && !u.IsDeleted)
             ?? product.Units.FirstOrDefault(u => !u.IsDeleted);

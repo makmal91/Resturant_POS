@@ -1,22 +1,24 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using POSSystem.Application.Common.Interfaces;
-using POSSystem.Domain;
 using POSSystem.Infrastructure.Data;
 
 namespace POSSystem.Infrastructure.Services;
 
 public class ExceptionLogService : IExceptionLogService
 {
-    private readonly POSDbContext _context;
+    private readonly IDbContextFactory<POSDbContext> _contextFactory;
     private readonly ILogger<ExceptionLogService> _logger;
 
-    public ExceptionLogService(POSDbContext context, ILogger<ExceptionLogService> logger)
+    public ExceptionLogService(
+        IDbContextFactory<POSDbContext> contextFactory,
+        ILogger<ExceptionLogService> logger)
     {
-        _context = context;
+        _contextFactory = contextFactory;
         _logger = logger;
     }
 
-    public async Task LogAsync(
+    public Task LogAsync(
         Exception ex,
         long? userId,
         long? branchId,
@@ -24,31 +26,7 @@ public class ExceptionLogService : IExceptionLogService
         string? formName,
         string? actionName)
     {
-        try
-        {
-            var log = new ExceptionLog
-            {
-                UserId = userId,
-                BranchId = branchId,
-                Module = string.IsNullOrWhiteSpace(module) ? "Unknown" : module.Trim(),
-                FormName = string.IsNullOrWhiteSpace(formName) ? null : formName.Trim(),
-                ActionName = string.IsNullOrWhiteSpace(actionName) ? null : actionName.Trim(),
-                ExceptionMessage = ex.Message,
-                StackTrace = ex.StackTrace,
-                InnerException = ex.InnerException?.Message,
-                CreatedAt = DateTime.UtcNow
-            };
-
-            _context.ExceptionLogs.Add(log);
-            await _context.SaveChangesAsync();
-        }
-        catch (Exception logEx)
-        {
-            _logger.LogCritical(
-                logEx,
-                "Failed to persist exception log. Original error: {OriginalMessage}. " +
-                "Ensure EF migrations are applied (ExceptionLogs table).",
-                ex.Message);
-        }
+        var entry = ExceptionLogPersister.CreateEntry(ex, userId, branchId, module, formName, actionName);
+        return ExceptionLogPersister.TryWriteAsync(_contextFactory, entry, _logger);
     }
 }
