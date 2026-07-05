@@ -1,4 +1,3 @@
-using POSSystem.Application.Accounting.Interfaces;
 using POSSystem.Application.Auth.Interfaces;
 using POSSystem.Application.Common.DTOs;
 using POSSystem.Application.Common.Constants;
@@ -6,6 +5,8 @@ using POSSystem.Application.Common.Helpers;
 using POSSystem.Application.Common.Interfaces;
 using POSSystem.Application.Product.DTOs;
 using POSSystem.Application.Product.Interfaces;
+using POSSystem.Application.OpeningStock.DTOs;
+using POSSystem.Application.OpeningStock.Interfaces;
 using POSSystem.Application.Stock.Interfaces;
 using POSSystem.Application.Unit.Interfaces;
 using POSSystem.Application.Warehouse.Interfaces;
@@ -23,7 +24,7 @@ public class ProductService : IProductService
     private readonly ILowStockAlertService _lowStockAlertService;
     private readonly IUnitRepository _unitRepository;
     private readonly IFeaturePermissionService _featurePermission;
-    private readonly IAccountingIntegrationService _accountingIntegration;
+    private readonly IOpeningStockService _openingStockService;
 
     public ProductService(
         IProductRepository repository,
@@ -33,7 +34,7 @@ public class ProductService : IProductService
         ILowStockAlertService lowStockAlertService,
         IUnitRepository unitRepository,
         IFeaturePermissionService featurePermission,
-        IAccountingIntegrationService accountingIntegration)
+        IOpeningStockService openingStockService)
     {
         _repository = repository;
         _codeGenerator = codeGenerator;
@@ -42,7 +43,7 @@ public class ProductService : IProductService
         _lowStockAlertService = lowStockAlertService;
         _unitRepository = unitRepository;
         _featurePermission = featurePermission;
-        _accountingIntegration = accountingIntegration;
+        _openingStockService = openingStockService;
     }
 
     public async Task<PagedResultDto<ProductListDto>> SearchProductsAsync(ProductSearchRequestDto request)
@@ -382,6 +383,9 @@ public class ProductService : IProductService
         if (dto.OpeningStock < 0)
             throw new InvalidOperationException("OpeningStock cannot be negative.");
 
+        if (dto.OpeningStockCostPrice < 0)
+            throw new InvalidOperationException("Opening stock cost price cannot be negative.");
+
         if (dto.OpeningStockVariantWise)
         {
             if (!dto.IsVariantEnabled || dto.Variants.Count == 0)
@@ -416,18 +420,19 @@ public class ProductService : IProductService
         var warehouseId = await ResolveOpeningStockWarehouseIdAsync(
             dto.OpeningStockWarehouseId, dto.BusinessId, dto.BranchId);
 
-        var stockChanges = new List<StockChangeItem>();
-        var now = DateTime.UtcNow;
-        var baseUnit = product.Units.FirstOrDefault(u => u.IsBaseUnit && !u.IsDeleted);
-        decimal totalOpeningAmount = 0;
+        var baseUnit = product.Units.FirstOrDefault(u => u.IsBaseUnit && !u.IsDeleted)
+            ?? product.Units.FirstOrDefault(u => !u.IsDeleted)
+            ?? throw new InvalidOperationException("A base unit is required to record opening stock.");
+
+        var defaultUnitCost = dto.OpeningStockCostPrice > 0
+            ? dto.OpeningStockCostPrice
+            : (baseUnit.CostPrice ?? product.CostPrice);
+
+        var lines = new List<OpeningStockLineWriteDto>();
 
         if (product.OpeningStockVariantWise)
         {
-            var lines = dto.OpeningStockByVariant.Where(l => l.Quantity > 0).ToList();
-            if (lines.Count == 0)
-                return;
-
-            foreach (var line in lines)
+            foreach (var line in dto.OpeningStockByVariant.Where(l => l.Quantity > 0))
             {
                 var variant = product.Variants
                     .FirstOrDefault(v => !v.IsDeleted
@@ -435,68 +440,50 @@ public class ProductService : IProductService
                     ?? throw new InvalidOperationException(
                         $"Variant '{line.VariantName}' was not found for opening stock.");
 
-                var unitCost = variant.CostPriceOverride ?? product.CostPrice;
-                var lineAmount = line.Quantity * unitCost;
-                totalOpeningAmount += lineAmount;
+                var lineCost = line.CostPrice > 0
+                    ? line.CostPrice
+                    : (variant.CostPriceOverride ?? defaultUnitCost);
 
-                await _stockLedgerRepository.AddAsync(new StockLedger
+                lines.Add(new OpeningStockLineWriteDto
                 {
                     ProductId = product.Id,
                     VariantId = variant.Id,
-                    WarehouseId = warehouseId,
-                    Type = StockLedgerType.Opening,
-                    ReferenceId = product.Id,
-                    QuantityInBaseUnit = line.Quantity,
-                    UnitId = baseUnit?.Id,
-                    UnitQuantity = line.Quantity,
-                    UnitPrice = unitCost,
-                    TotalAmount = lineAmount,
-                    Date = now,
-                    Remarks = $"Opening Stock — Product: {product.ProductCode} | Variant: {variant.VariantName}",
-                    BusinessId = dto.BusinessId,
-                    BranchId = dto.BranchId
+                    UnitId = baseUnit.Id,
+                    Quantity = line.Quantity,
+                    CostPrice = lineCost,
                 });
-
-                stockChanges.Add(new StockChangeItem(product.Id, variant.Id, warehouseId));
             }
         }
         else if (dto.OpeningStock > 0)
         {
-            totalOpeningAmount = dto.OpeningStock * product.CostPrice;
-
-            await _stockLedgerRepository.AddAsync(new StockLedger
+            lines.Add(new OpeningStockLineWriteDto
             {
                 ProductId = product.Id,
-                VariantId = null,
-                WarehouseId = warehouseId,
-                Type = StockLedgerType.Opening,
-                ReferenceId = product.Id,
-                QuantityInBaseUnit = dto.OpeningStock,
-                UnitId = baseUnit?.Id,
-                UnitQuantity = dto.OpeningStock,
-                UnitPrice = product.CostPrice,
-                TotalAmount = totalOpeningAmount,
-                Date = now,
-                Remarks = $"Opening Stock — Product: {product.ProductCode}",
-                BusinessId = dto.BusinessId,
-                BranchId = dto.BranchId
+                UnitId = baseUnit.Id,
+                Quantity = dto.OpeningStock,
+                CostPrice = defaultUnitCost,
             });
-
-            stockChanges.Add(new StockChangeItem(product.Id, null, warehouseId));
         }
         else
         {
             return;
         }
 
-        await _stockLedgerRepository.SaveChangesAsync();
+        if (lines.Count == 0)
+            return;
 
-        totalOpeningAmount = Math.Round(totalOpeningAmount, 2, MidpointRounding.AwayFromZero);
-        if (totalOpeningAmount > 0)
-            await _accountingIntegration.PostOpeningStockAsync(product, totalOpeningAmount, dto.BusinessId, dto.BranchId);
+        if (lines.Any(l => l.CostPrice < 0))
+            throw new InvalidOperationException("Opening stock cost price cannot be negative.");
 
-        await _lowStockAlertService.EvaluateAfterStockChangeAsync(
-            dto.BusinessId, dto.BranchId, stockChanges);
+        await _openingStockService.CreateAsync(new CreateOpeningStockVoucherDto
+        {
+            BusinessId = dto.BusinessId,
+            BranchId = dto.BranchId,
+            VoucherDate = DateTime.UtcNow,
+            Description = $"{product.ProductName.Trim()} — [{product.ProductCode.Trim()}]",
+            WarehouseId = warehouseId,
+            Lines = lines,
+        });
     }
 
     private async Task<int> ResolveOpeningStockWarehouseIdAsync(int? requestedWarehouseId, int businessId, int branchId)

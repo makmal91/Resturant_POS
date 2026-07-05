@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   ProductBarcodePayload,
   ProductDetail,
@@ -223,6 +224,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
     enableLowStockAlert: false,
     lowStockAlertLevel: null,
     openingStock: 0,
+    openingStockCostPrice: 0,
     openingStockWarehouseId: null,
     openingStockVariantWise: false,
     openingStockByVariant: [],
@@ -322,6 +324,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
   const buildVariantOpeningLines = (
     variants: ProductVariantPayload[],
     existing: ProductOpeningStockLine[] = [],
+    defaultCost = 0,
   ): ProductOpeningStockLine[] =>
     variants
       .filter((variant) => variant.variantName.trim())
@@ -330,44 +333,61 @@ const ProductForm: React.FC<ProductFormProps> = ({
         const prev = existing.find(
           (line) => line.variantName.toLowerCase() === name.toLowerCase(),
         );
+        const autoCost = Number(variant.costPriceOverride ?? defaultCost);
         return {
           variantName: name,
           variantId: variant.id ?? null,
           quantity: prev?.quantity ?? 0,
+          costPrice: prev?.costPrice ?? prev?.unitPrice ?? autoCost,
         };
       });
 
-  const getVariantUnitCost = (variantName: string) => {
+  const baseUnitCost = useMemo(() => {
+    const base = formData.units.find((unit) => unit.isBaseUnit) ?? formData.units[0];
+    if (base?.costPrice != null) return Number(base.costPrice);
+    return Number(formData.costPrice ?? 0);
+  }, [formData.units, formData.costPrice]);
+
+  useEffect(() => {
+    if (initialData) return;
+    setFormData((prev) => ({
+      ...prev,
+      openingStockCostPrice: baseUnitCost,
+    }));
+  }, [baseUnitCost, initialData]);
+
+  const getVariantUnitCost = (variantName: string, line?: ProductOpeningStockLine) => {
+    if (line?.costPrice != null && line.costPrice >= 0) return Number(line.costPrice);
     const variant = activeVariants.find(
       (v) => v.variantName.trim().toLowerCase() === variantName.trim().toLowerCase(),
     );
-    return Number(variant?.costPriceOverride ?? formData.costPrice ?? 0);
+    return Number(variant?.costPriceOverride ?? formData.openingStockCostPrice ?? formData.costPrice ?? 0);
   };
 
   const variantOpeningLines = useMemo(() => {
     if (!formData.openingStockVariantWise || !canUseVariantWiseOpening) return [];
-    return buildVariantOpeningLines(activeVariants, formData.openingStockByVariant ?? []);
-  }, [activeVariants, canUseVariantWiseOpening, formData.openingStockByVariant, formData.openingStockVariantWise]);
+    return buildVariantOpeningLines(activeVariants, formData.openingStockByVariant ?? [], baseUnitCost);
+  }, [activeVariants, baseUnitCost, canUseVariantWiseOpening, formData.openingStockByVariant, formData.openingStockVariantWise]);
 
   const openingStockQty = formData.openingStockVariantWise && canUseVariantWiseOpening
     ? variantOpeningLines.reduce((sum, line) => sum + Number(line.quantity ?? 0), 0)
     : Number(formData.openingStock ?? 0);
 
-  const openingStockUnitCost = Number(formData.costPrice ?? 0);
+  const openingStockUnitCost = Number(formData.openingStockCostPrice ?? baseUnitCost);
 
   const openingStockTotal = useMemo(() => {
     if (formData.openingStockVariantWise && canUseVariantWiseOpening) {
       return variantOpeningLines.reduce(
-        (sum, line) => sum + Number(line.quantity ?? 0) * getVariantUnitCost(line.variantName),
+        (sum, line) => sum + Number(line.quantity ?? 0) * getVariantUnitCost(line.variantName, line),
         0,
       );
     }
     return Math.max(0, openingStockQty) * Math.max(0, openingStockUnitCost);
-  }, [canUseVariantWiseOpening, formData.costPrice, formData.openingStockVariantWise, openingStockQty, openingStockUnitCost, variantOpeningLines]);
+  }, [canUseVariantWiseOpening, formData.openingStockVariantWise, openingStockQty, openingStockUnitCost, variantOpeningLines]);
 
   const updateVariantOpeningQty = (variantName: string, quantity: number) => {
     setFormData((prev) => {
-      const lines = buildVariantOpeningLines(activeVariants, prev.openingStockByVariant ?? []);
+      const lines = buildVariantOpeningLines(activeVariants, prev.openingStockByVariant ?? [], baseUnitCost);
       return {
         ...prev,
         openingStockByVariant: lines.map((line) =>
@@ -376,6 +396,18 @@ const ProductForm: React.FC<ProductFormProps> = ({
         openingStock: lines.reduce(
           (sum, line) => sum + (line.variantName === variantName ? quantity : line.quantity),
           0,
+        ),
+      };
+    });
+  };
+
+  const updateVariantOpeningCost = (variantName: string, costPrice: number) => {
+    setFormData((prev) => {
+      const lines = buildVariantOpeningLines(activeVariants, prev.openingStockByVariant ?? [], baseUnitCost);
+      return {
+        ...prev,
+        openingStockByVariant: lines.map((line) =>
+          line.variantName === variantName ? { ...line, costPrice } : line,
         ),
       };
     });
@@ -394,6 +426,14 @@ const ProductForm: React.FC<ProductFormProps> = ({
       <div className="rounded-lg border border-gray-200 bg-white p-4">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <h4 className="text-sm font-semibold text-gray-800">Opening Stock</h4>
+          {readOnly && (
+            <Link
+              to="/opening-stock"
+              className="text-xs font-medium text-blue-600 hover:text-blue-800 hover:underline"
+            >
+              Edit via Opening Stock Voucher →
+            </Link>
+          )}
           {!readOnly && formData.isVariantEnabled && (
             <div className="flex flex-col items-end gap-1">
               <label className={`flex items-center gap-2 text-sm ${canUseVariantWiseOpening ? 'text-gray-700' : 'text-gray-400'}`}>
@@ -430,6 +470,12 @@ const ProductForm: React.FC<ProductFormProps> = ({
           )}
         </div>
 
+        {!readOnly && openingStockQty > 0 && openingStockUnitCost === 0 && (
+          <p className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            Opening stock cost is zero. Inventory will be recorded; accounting value may be zero until you enter a cost.
+          </p>
+        )}
+
         <div className="overflow-x-auto">
           <table className="min-w-[720px] w-full table-fixed divide-y divide-gray-200 text-sm">
             <thead className="bg-gray-50">
@@ -448,8 +494,8 @@ const ProductForm: React.FC<ProductFormProps> = ({
                 displayVariantLines.length > 0 ? (
                   displayVariantLines.map((line) => {
                   const unitCost = readOnly
-                    ? Number(line.unitPrice ?? getVariantUnitCost(line.variantName))
-                    : getVariantUnitCost(line.variantName);
+                    ? Number(line.unitPrice ?? line.costPrice ?? getVariantUnitCost(line.variantName, line))
+                    : getVariantUnitCost(line.variantName, line);
                   const lineTotal = Number(line.quantity ?? 0) * unitCost;
                   return (
                     <tr key={line.variantName}>
@@ -468,7 +514,21 @@ const ProductForm: React.FC<ProductFormProps> = ({
                           />
                         )}
                       </td>
-                      <td className="px-3 py-3 align-middle">{unitCost.toFixed(2)}</td>
+                      <td className="px-3 py-3 align-middle">
+                        {readOnly ? (
+                          <span>{unitCost.toFixed(2)}</span>
+                        ) : (
+                          <input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            value={unitCost}
+                            onChange={(event) => updateVariantOpeningCost(line.variantName, Number(event.target.value || 0))}
+                            className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
+                            title="Auto-filled from variant/product cost — editable"
+                          />
+                        )}
+                      </td>
                       <td className="px-3 py-3 align-middle font-semibold text-gray-900">{lineTotal.toFixed(2)}</td>
                       {!readOnly && <td className="px-3 py-3 align-middle text-gray-400">—</td>}
                     </tr>
@@ -511,9 +571,10 @@ const ProductForm: React.FC<ProductFormProps> = ({
                         value={openingStockUnitCost}
                         onChange={(event) => setFormData((prev) => ({
                           ...prev,
-                          costPrice: Number(event.target.value || 0),
+                          openingStockCostPrice: Number(event.target.value || 0),
                         }))}
                         className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
+                        title="Auto-filled from base unit cost — editable"
                       />
                     )}
                   </td>
@@ -789,6 +850,9 @@ const ProductForm: React.FC<ProductFormProps> = ({
             ? variantOpeningLines.reduce((sum, line) => sum + Number(line.quantity ?? 0), 0)
             : Number(formData.openingStock ?? 0))
           : 0,
+        openingStockCostPrice: stockFeatureEnabled && !initialData
+          ? Number(formData.openingStockCostPrice ?? baseUnitCost)
+          : 0,
         openingStockWarehouseId: stockFeatureEnabled && !initialData ? (formData.openingStockWarehouseId ? Number(formData.openingStockWarehouseId) : null) : null,
         openingStockVariantWise: stockFeatureEnabled && Boolean(formData.openingStockVariantWise && canUseVariantWiseOpening),
         openingStockByVariant: stockFeatureEnabled && formData.openingStockVariantWise && canUseVariantWiseOpening
@@ -796,6 +860,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
               variantName: line.variantName,
               variantId: line.variantId ?? null,
               quantity: Number(line.quantity ?? 0),
+              costPrice: getVariantUnitCost(line.variantName, line),
             }))
           : [],
         units: unitFeatureEnabled

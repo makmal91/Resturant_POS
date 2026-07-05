@@ -33,6 +33,7 @@ using POSSystem.Application.License.Options;
 using POSSystem.Application.Payments.Interfaces;
 using POSSystem.Application.Expense.Interfaces;
 using POSSystem.Application.Reports.Interfaces;
+using POSSystem.Application.OpeningStock.Options;
 using POSSystem.Application.StockAdjustment.Options;
 using POSSystem.Infrastructure.License;
 using POSSystem.Infrastructure.Repositories;
@@ -47,6 +48,7 @@ public static class ServiceRegistration
     {
         services.Configure<LicenseOptions>(configuration.GetSection(LicenseOptions.SectionName));
         services.Configure<StockAdjustmentOptions>(configuration.GetSection(StockAdjustmentOptions.SectionName));
+        services.Configure<OpeningStockOptions>(configuration.GetSection(OpeningStockOptions.SectionName));
         services.AddSingleton<ILicenseService, LicenseService>();
         services.AddScoped<ILicenseUsageProvider, LicenseUsageProvider>();
 

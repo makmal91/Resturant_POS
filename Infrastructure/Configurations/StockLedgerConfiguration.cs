@@ -18,6 +18,9 @@ public class StockLedgerConfiguration : IEntityTypeConfiguration<StockLedger>
         builder.Property(s => s.Remarks).HasMaxLength(500);
         builder.Property(s => s.Date).HasDefaultValueSql("GETUTCDATE()");
 
+        builder.HasIndex(s => new { s.VoucherId, s.Type })
+            .HasDatabaseName("idx_ledger_voucher_type");
+
         builder.HasIndex(s => new { s.BusinessId, s.BranchId, s.ProductId, s.WarehouseId })
             .HasDatabaseName("idx_ledger_business_branch_product_warehouse");
 

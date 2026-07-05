@@ -1,5 +1,7 @@
 using POSSystem.Application.Accounting.Interfaces;
+using Microsoft.Extensions.Options;
 using POSSystem.Application.Auth.Interfaces;
+using POSSystem.Application.OpeningStock.Options;
 using POSSystem.Application.Common.Constants;
 using POSSystem.Application.Common.DTOs;
 using POSSystem.Application.Common.Helpers;
@@ -22,6 +24,7 @@ public class OpeningStockService : IOpeningStockService
     private readonly ICodeGeneratorService _codeGenerator;
     private readonly IAccountingIntegrationService _accountingIntegration;
     private readonly IFeaturePermissionService _featurePermission;
+    private readonly OpeningStockOptions _options;
 
     public OpeningStockService(
         IOpeningStockRepository repository,
@@ -30,7 +33,8 @@ public class OpeningStockService : IOpeningStockService
         ILowStockAlertService lowStockAlertService,
         ICodeGeneratorService codeGenerator,
         IAccountingIntegrationService accountingIntegration,
-        IFeaturePermissionService featurePermission)
+        IFeaturePermissionService featurePermission,
+        IOptions<OpeningStockOptions> options)
     {
         _repository = repository;
         _productRepository = productRepository;
@@ -39,6 +43,7 @@ public class OpeningStockService : IOpeningStockService
         _codeGenerator = codeGenerator;
         _accountingIntegration = accountingIntegration;
         _featurePermission = featurePermission;
+        _options = options.Value;
     }
 
     public async Task<PagedResultDto<OpeningStockVoucherDto>> GetPagedAsync(
@@ -100,7 +105,8 @@ public class OpeningStockService : IOpeningStockService
                 voucher, lines, dto.WarehouseId, dto.BusinessId, dto.BranchId);
 
             await _stockLedgerRepository.SaveChangesAsync();
-            await _accountingIntegration.PostOpeningStockVoucherAsync(voucher, totalAmount);
+            if (_options.EnableOpeningStockAccounting)
+                await _accountingIntegration.PostOpeningStockVoucherAsync(voucher, totalAmount);
 
             created = voucher;
 
@@ -124,10 +130,13 @@ public class OpeningStockService : IOpeningStockService
 
         await _stockLedgerRepository.RunInSerializableTransactionAsync(async () =>
         {
-            await _accountingIntegration.ReverseTransactionAsync(
-                id,
-                GlTransactionType.OpeningStockVoucher,
-                $"Edit — {entity.VoucherNo}");
+            if (_options.EnableOpeningStockAccounting)
+            {
+                await _accountingIntegration.ReverseTransactionAsync(
+                    id,
+                    GlTransactionType.OpeningStockVoucher,
+                    $"Edit — {entity.VoucherNo}");
+            }
 
             var stockChanges = await ReverseStockForVoucherAsync(
                 entity, dto.BusinessId, dto.BranchId, $"Edit — {entity.VoucherNo}");
@@ -172,7 +181,8 @@ public class OpeningStockService : IOpeningStockService
                 entity, newLines, dto.WarehouseId, dto.BusinessId, dto.BranchId));
 
             await _stockLedgerRepository.SaveChangesAsync();
-            await _accountingIntegration.PostOpeningStockVoucherAsync(entity, totalAmount);
+            if (_options.EnableOpeningStockAccounting)
+                await _accountingIntegration.PostOpeningStockVoucherAsync(entity, totalAmount);
 
             await _lowStockAlertService.EvaluateAfterStockChangeAsync(
                 dto.BusinessId, dto.BranchId, stockChanges);
@@ -196,10 +206,13 @@ public class OpeningStockService : IOpeningStockService
         await _stockLedgerRepository.RunInSerializableTransactionAsync(async () =>
         {
             var reasonSuffix = string.IsNullOrWhiteSpace(dto.Reason) ? string.Empty : $" | {dto.Reason.Trim()}";
-            await _accountingIntegration.ReverseTransactionAsync(
-                id,
-                GlTransactionType.OpeningStockVoucher,
-                $"Reverse — {entity.VoucherNo}{reasonSuffix}");
+            if (_options.EnableOpeningStockAccounting)
+            {
+                await _accountingIntegration.ReverseTransactionAsync(
+                    id,
+                    GlTransactionType.OpeningStockVoucher,
+                    $"Reverse — {entity.VoucherNo}{reasonSuffix}");
+            }
 
             var stockChanges = await ReverseStockForVoucherAsync(
                 entity, dto.BusinessId, dto.BranchId, $"Reverse of Opening Stock — Voucher: {entity.VoucherNo}{reasonSuffix}");
@@ -255,8 +268,8 @@ public class OpeningStockService : IOpeningStockService
             if (line.Quantity <= 0)
                 throw new InvalidOperationException("Quantity must be greater than zero.");
 
-            if (line.CostPrice <= 0)
-                throw new InvalidOperationException("Cost price must be greater than zero.");
+            if (line.CostPrice < 0)
+                throw new InvalidOperationException("Cost price cannot be negative.");
         }
     }
 
@@ -291,8 +304,8 @@ public class OpeningStockService : IOpeningStockService
             if (line.Quantity <= 0)
                 throw new InvalidOperationException("Quantity must be greater than zero.");
 
-            if (line.CostPrice <= 0)
-                throw new InvalidOperationException("Cost price must be greater than zero.");
+            if (line.CostPrice < 0)
+                throw new InvalidOperationException("Cost price cannot be negative.");
         }
     }
 
@@ -324,8 +337,8 @@ public class OpeningStockService : IOpeningStockService
                 : string.Empty;
 
             var remarks = string.IsNullOrWhiteSpace(variantName)
-                ? $"Opening Stock — Voucher: {voucher.VoucherNo} | Product: {product.ProductCode}"
-                : $"Opening Stock — Voucher: {voucher.VoucherNo} | Product: {product.ProductCode} | Variant: {variantName}";
+                ? $"Opening Stock — {voucher.VoucherNo} {product.ProductName.Trim()} — [{product.ProductCode.Trim()}]"
+                : $"Opening Stock — {voucher.VoucherNo} {product.ProductName.Trim()} ({variantName}) — [{product.ProductCode.Trim()}]";
 
             await _stockLedgerRepository.AddAsync(new StockLedger
             {
@@ -334,6 +347,7 @@ public class OpeningStockService : IOpeningStockService
                 WarehouseId = warehouseId,
                 Type = StockLedgerType.Opening,
                 ReferenceId = voucher.Id,
+                VoucherId = voucher.Id,
                 QuantityInBaseUnit = line.Quantity,
                 UnitId = line.UnitId,
                 UnitQuantity = line.UnitQuantity,
@@ -404,6 +418,7 @@ public class OpeningStockService : IOpeningStockService
                 WarehouseId = group.Key.WarehouseId,
                 Type = StockLedgerType.OpeningReversal,
                 ReferenceId = voucher.Id,
+                VoucherId = voucher.Id,
                 QuantityInBaseUnit = -netQty,
                 UnitId = template.UnitId,
                 UnitQuantity = unitQty,

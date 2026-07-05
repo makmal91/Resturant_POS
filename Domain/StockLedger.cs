@@ -7,6 +7,8 @@ public class StockLedger : BaseEntity
     public int WarehouseId { get; set; }
     public StockLedgerType Type { get; set; }
     public int? ReferenceId { get; set; }
+    /// <summary>Opening stock / stock voucher that created this ledger row (when applicable).</summary>
+    public int? VoucherId { get; set; }
     public decimal QuantityInBaseUnit { get; set; }
     public int? UnitId { get; set; }
     public decimal? UnitQuantity { get; set; }

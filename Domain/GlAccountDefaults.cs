@@ -34,6 +34,7 @@ public static class GlAccountDefaults
 
     // Equity
     public const string OwnerCapital = "Owner Capital";
+    public const string OpeningStock = "Opening Stock";
     public const string RetainedEarnings = "Retained Earnings";
     public const string Drawings = "Drawings";
 
@@ -92,6 +93,7 @@ public static class GlAccountDefaults
         new(Equity, AccountType.Equity,
         [
             new(OwnerCapital, AccountType.Equity),
+            new(OpeningStock, AccountType.Equity),
             new(RetainedEarnings, AccountType.Equity),
             new(Drawings, AccountType.Equity),
         ]),

@@ -66,6 +66,7 @@ public class ProductOpeningStockWriteDto
     public string VariantName { get; set; } = string.Empty;
     public int? VariantId { get; set; }
     public decimal Quantity { get; set; }
+    public decimal CostPrice { get; set; }
 }
 
 public class ProductOpeningStockDto : ProductOpeningStockWriteDto
@@ -101,6 +102,7 @@ public class CreateProductDto
     public bool EnableLowStockAlert { get; set; }
     public decimal? LowStockAlertLevel { get; set; }
     public decimal OpeningStock { get; set; }
+    public decimal OpeningStockCostPrice { get; set; }
     public int? OpeningStockWarehouseId { get; set; }
     public bool OpeningStockVariantWise { get; set; }
     public List<ProductOpeningStockWriteDto> OpeningStockByVariant { get; set; } = new();

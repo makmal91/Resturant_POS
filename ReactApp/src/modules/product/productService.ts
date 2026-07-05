@@ -50,6 +50,7 @@ export interface ProductOpeningStockLine {
   variantName: string;
   variantId?: number | null;
   quantity: number;
+  costPrice?: number;
   unitPrice?: number;
   totalAmount?: number;
 }
@@ -80,6 +81,7 @@ export interface ProductPayload {
   enableLowStockAlert?: boolean;
   lowStockAlertLevel?: number | null;
   openingStock?: number;
+  openingStockCostPrice?: number;
   openingStockWarehouseId?: number | null;
   openingStockVariantWise?: boolean;
   openingStockByVariant?: ProductOpeningStockLine[];

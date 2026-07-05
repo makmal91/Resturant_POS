@@ -241,7 +241,7 @@ public class AccountingIntegrationService : IAccountingIntegrationService
 
         AddLine(entries, accounts.Inventory, branchId, roundedAmount, 0, groupId, product.Id, description,
             GlTransactionType.OpeningBalance, date, ledgerChainId);
-        AddLine(entries, accounts.OwnerCapital, branchId, 0, roundedAmount, groupId, product.Id, description,
+        AddLine(entries, accounts.OpeningStock, branchId, 0, roundedAmount, groupId, product.Id, description,
             GlTransactionType.OpeningBalance, date, ledgerChainId);
 
         await _accounting.CreateDoubleEntryAsync(entries);
@@ -258,9 +258,7 @@ public class AccountingIntegrationService : IAccountingIntegrationService
         var accounts = await _glAccounts.ResolvePostingAccountsAsync();
         var groupId = Guid.NewGuid();
         var ledgerChainId = groupId;
-        var description = $"Opening Stock — {voucher.VoucherNo}";
-        if (!string.IsNullOrWhiteSpace(voucher.Description))
-            description = $"{description} — {voucher.Description.Trim()}";
+        var description = FormatOpeningStockVoucherDescription(voucher);
 
         var date = voucher.VoucherDate;
         var branchId = voucher.BranchId;
@@ -269,7 +267,7 @@ public class AccountingIntegrationService : IAccountingIntegrationService
 
         AddLine(entries, accounts.Inventory, branchId, roundedAmount, 0, groupId, voucher.Id, description,
             GlTransactionType.OpeningStockVoucher, date, ledgerChainId);
-        AddLine(entries, accounts.OwnerCapital, branchId, 0, roundedAmount, groupId, voucher.Id, description,
+        AddLine(entries, accounts.OpeningStock, branchId, 0, roundedAmount, groupId, voucher.Id, description,
             GlTransactionType.OpeningStockVoucher, date, ledgerChainId);
 
         await _accounting.CreateDoubleEntryAsync(entries);
@@ -452,5 +450,13 @@ public class AccountingIntegrationService : IAccountingIntegrationService
         line.OriginalGroupId = ledgerChainId;
         line.IsActive = true;
         entries.Add(line);
+    }
+
+    private static string FormatOpeningStockVoucherDescription(OpeningStockVoucher voucher)
+    {
+        var header = $"Opening Stock — {voucher.VoucherNo}";
+        if (string.IsNullOrWhiteSpace(voucher.Description))
+            return header;
+        return $"{header} {voucher.Description.Trim()}";
     }
 }

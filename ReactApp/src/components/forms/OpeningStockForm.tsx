@@ -232,9 +232,8 @@ const OpeningStockForm: React.FC<OpeningStockFormProps> = ({
     const parts = ['minmax(180px,2fr)'];
     if (variantFeatureEnabled) parts.push('minmax(100px,1.1fr)');
     if (unitFeatureEnabled) parts.push('minmax(110px,1.2fr)');
-    parts.push('88px', '72px', '88px');
-    if (isViewMode) parts.push('80px', '88px');
-    else parts.push('44px');
+    parts.push('88px', '72px', '88px', '80px', '88px');
+    if (!isViewMode) parts.push('44px');
     return parts.join(' ');
   }, [variantFeatureEnabled, unitFeatureEnabled, isViewMode]);
 
@@ -505,7 +504,7 @@ const OpeningStockForm: React.FC<OpeningStockFormProps> = ({
           }
         }
 
-        if ('unitId' in field || 'variantId' in field) {
+        if (('unitId' in field || 'variantId' in field) && !('costPrice' in field)) {
           updated.costPrice = resolveUnitCostPrice(
             updated.productCostPrice,
             updated.units,
@@ -580,8 +579,8 @@ const OpeningStockForm: React.FC<OpeningStockFormProps> = ({
       if (Number(row.quantity) <= 0) {
         nextRowErrors[row.key] = 'Quantity must be greater than 0';
       }
-      if (Number(row.costPrice) <= 0) {
-        nextRowErrors[row.key] = 'Cost price missing — update product master';
+      if (Number(row.costPrice) < 0) {
+        nextRowErrors[row.key] = 'Cost price cannot be negative';
       }
     });
 
@@ -605,7 +604,10 @@ const OpeningStockForm: React.FC<OpeningStockFormProps> = ({
     });
   };
 
-  const minGridWidth = isViewMode ? '920px' : '760px';
+  const minGridWidth = '920px';
+  const hasZeroCostWarning = !isViewMode && rows.some(
+    (row) => row.productId > 0 && Number(row.quantity) > 0 && Number(row.costPrice) === 0,
+  );
 
   return (
     <form onSubmit={handleSubmit} className="flex h-full min-h-0 flex-col">
@@ -716,6 +718,12 @@ const OpeningStockForm: React.FC<OpeningStockFormProps> = ({
           )}
         </div>
 
+        {hasZeroCostWarning && (
+          <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            Some lines have zero cost. Stock will post but accounting value may be zero until you enter a cost.
+          </div>
+        )}
+
         {errors.items && (
           <div className="mb-3 flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
             {errors.items}
@@ -733,14 +741,9 @@ const OpeningStockForm: React.FC<OpeningStockFormProps> = ({
             <div>Base Unit</div>
             <div className="text-right">Qty</div>
             <div className="text-right">Base Qty</div>
-            {isViewMode ? (
-              <>
-                <div className="text-right">Cost</div>
-                <div className="text-right">Amount</div>
-              </>
-            ) : (
-              <div className="text-center">Act</div>
-            )}
+            <div className="text-right">Cost</div>
+            <div className="text-right">Amount</div>
+            {!isViewMode && <div className="text-center">Act</div>}
           </div>
 
           <div className="min-h-0 flex-1 divide-y divide-gray-100 overflow-y-auto overflow-x-auto">
@@ -952,18 +955,39 @@ const OpeningStockForm: React.FC<OpeningStockFormProps> = ({
                     </span>
                   </div>
 
-                  {isViewMode ? (
-                    <>
-                      <div className="px-1 text-right text-sm text-gray-700">
+                  <div className="px-1">
+                    {isViewMode ? (
+                      <p className="text-right text-sm text-gray-700">
                         {symbol}
                         {row.costPrice.toFixed(2)}
-                      </div>
-                      <div className="px-1 text-right text-sm font-semibold">
+                      </p>
+                    ) : (
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={row.costPrice || ''}
+                        placeholder="0.00"
+                        disabled={row.productId <= 0}
+                        title="Auto-filled from base unit cost — editable"
+                        onChange={(e) => updateRow(row.key, { costPrice: parseFloat(e.target.value) || 0 })}
+                        className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-right text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
+                      />
+                    )}
+                  </div>
+
+                  <div className="px-1 text-right text-sm font-semibold text-gray-800">
+                    {row.productId > 0 ? (
+                      <>
                         {symbol}
                         {row.totalAmount.toFixed(2)}
-                      </div>
-                    </>
-                  ) : (
+                      </>
+                    ) : (
+                      <span className="text-gray-300">—</span>
+                    )}
+                  </div>
+
+                  {!isViewMode && (
                     <div className="flex justify-center px-1">
                       {row.productId > 0 || rows.length > 1 ? (
                         <button

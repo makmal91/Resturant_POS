@@ -116,6 +116,32 @@ public static class OpeningStockDatabaseInitializer
             IF OBJECT_ID(N'[dbo].[OpeningStockVouchers]', N'U') IS NOT NULL
                AND COL_LENGTH(N'[dbo].[OpeningStockVouchers]', N'ReversalVoucherId') IS NULL
                 ALTER TABLE [dbo].[OpeningStockVouchers] ADD [ReversalVoucherId] INT NULL;
+            """,
+            """
+            IF OBJECT_ID(N'[dbo].[StockLedger]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[dbo].[StockLedger]', N'VoucherId') IS NULL
+                ALTER TABLE [dbo].[StockLedger] ADD [VoucherId] INT NULL;
+            """,
+            """
+            IF OBJECT_ID(N'[dbo].[StockLedger]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[dbo].[StockLedger]', N'VoucherId') IS NOT NULL
+               AND NOT EXISTS (
+                    SELECT 1 FROM sys.indexes
+                    WHERE name = N'idx_ledger_voucher_type'
+                      AND object_id = OBJECT_ID(N'[dbo].[StockLedger]'))
+                CREATE INDEX [idx_ledger_voucher_type] ON [dbo].[StockLedger]([VoucherId], [Type]);
+            """,
+            """
+            IF OBJECT_ID(N'[dbo].[StockLedger]', N'U') IS NOT NULL
+               AND OBJECT_ID(N'[dbo].[OpeningStockVouchers]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[dbo].[StockLedger]', N'VoucherId') IS NOT NULL
+                UPDATE sl
+                SET sl.[VoucherId] = sl.[ReferenceId]
+                FROM [dbo].[StockLedger] sl
+                INNER JOIN [dbo].[OpeningStockVouchers] osv ON osv.[Id] = sl.[ReferenceId]
+                WHERE sl.[VoucherId] IS NULL
+                  AND sl.[Type] IN (10, 11)
+                  AND sl.[IsDeleted] = 0;
             """
         };
 

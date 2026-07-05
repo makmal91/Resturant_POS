@@ -151,6 +151,7 @@ public static class PurchaseWarehouseInitializer
                     [WarehouseId] INT NOT NULL,
                     [Type] INT NOT NULL,
                     [ReferenceId] INT NULL,
+                    [VoucherId] INT NULL,
                     [QuantityInBaseUnit] DECIMAL(18,4) NOT NULL,
                     [UnitPrice] DECIMAL(18,2) NOT NULL CONSTRAINT [DF_StockLedger_UnitPrice] DEFAULT 0,
                     [TotalAmount] DECIMAL(18,2) NOT NULL CONSTRAINT [DF_StockLedger_TotalAmount] DEFAULT 0,
@@ -352,6 +353,26 @@ public static class PurchaseWarehouseInitializer
                 ALTER TABLE [dbo].[StockLedger]
                     ADD CONSTRAINT [FK_StockLedger_ProductUnits_UnitId]
                     FOREIGN KEY ([UnitId]) REFERENCES [dbo].[ProductUnits]([Id]);
+
+            IF COL_LENGTH(N'dbo.StockLedger', N'VoucherId') IS NULL
+                ALTER TABLE [dbo].[StockLedger] ADD [VoucherId] INT NULL;
+
+            IF COL_LENGTH(N'dbo.StockLedger', N'VoucherId') IS NOT NULL
+               AND NOT EXISTS (
+                    SELECT 1 FROM sys.indexes
+                    WHERE name = N'idx_ledger_voucher_type'
+                      AND object_id = OBJECT_ID(N'[dbo].[StockLedger]'))
+                CREATE INDEX [idx_ledger_voucher_type] ON [dbo].[StockLedger]([VoucherId], [Type]);
+
+            IF OBJECT_ID(N'[dbo].[OpeningStockVouchers]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'dbo.StockLedger', N'VoucherId') IS NOT NULL
+                UPDATE sl
+                SET sl.[VoucherId] = sl.[ReferenceId]
+                FROM [dbo].[StockLedger] sl
+                INNER JOIN [dbo].[OpeningStockVouchers] osv ON osv.[Id] = sl.[ReferenceId]
+                WHERE sl.[VoucherId] IS NULL
+                  AND sl.[Type] IN (10, 11)
+                  AND sl.[IsDeleted] = 0;
         END
         """;
 }
