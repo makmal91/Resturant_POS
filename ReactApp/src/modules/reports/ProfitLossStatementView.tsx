@@ -65,6 +65,7 @@ export default function ProfitLossStatementView({
   const { summary, expenseLines, branchName } = statement;
   const label = periodLabel ?? formatPeriodLabel(statement.fromDate, statement.toDate);
   const netPositive = summary.totalNetProfit >= 0;
+  const salesRevenue = summary.totalRevenue - (summary.stockAdjustmentGain ?? 0);
 
   return (
     <div className="profit-loss-statement rounded-xl border border-gray-200 bg-white shadow-sm">
@@ -85,7 +86,10 @@ export default function ProfitLossStatementView({
                 Income
               </td>
             </tr>
-            <LineRow label="Sales Revenue" amount={summary.totalRevenue} indent />
+            <LineRow label="Sales Revenue" amount={salesRevenue} indent />
+            {(summary.stockAdjustmentGain ?? 0) > 0 && (
+              <LineRow label="Stock Adjustment (Gain)" amount={summary.stockAdjustmentGain ?? 0} indent />
+            )}
             {summary.totalDiscounts > 0 && (
               <LineRow label="Less: Discounts" amount={summary.totalDiscounts} indent negative />
             )}

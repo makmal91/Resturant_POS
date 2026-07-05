@@ -107,6 +107,8 @@ export interface ProfitLossReportSummary {
   totalExpenses: number;
   totalNetProfit: number;
   totalSalesCount: number;
+  stockAdjustmentGain?: number;
+  stockAdjustmentLoss?: number;
 }
 
 export interface ProfitLossReportPagedResponse extends ReportPagedResponse<ProfitLossRow> {

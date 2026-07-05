@@ -394,7 +394,8 @@ public class ReportRepository : IReportRepository
         var (pageNumber, pageSize) = filter.Normalize();
         var (from, toExclusive) = filter.ResolveDateRange();
 
-        var rows = await BuildProfitLossDailyRowsAsync(filter, from, toExclusive);
+        var adjustmentByDay = await GetStockAdjustmentByDayAsync(filter, from, toExclusive);
+        var rows = await BuildProfitLossDailyRowsAsync(filter, from, toExclusive, adjustmentByDay);
         rows = ApplyProfitLossGroupBy(rows, filter.GroupBy);
 
         if (!string.IsNullOrWhiteSpace(filter.Search))
@@ -407,6 +408,8 @@ public class ReportRepository : IReportRepository
         rows = ApplyProfitLossSort(rows, filter.SortColumn, filter.IsDescending());
 
         var summary = BuildProfitLossSummary(rows);
+        summary.StockAdjustmentGain = adjustmentByDay.Values.Sum(x => x.Gain);
+        summary.StockAdjustmentLoss = adjustmentByDay.Values.Sum(x => x.Loss);
 
         var totalRecords = rows.Count;
         var paged = rows
@@ -431,7 +434,8 @@ public class ReportRepository : IReportRepository
         var (from, toExclusive) = filter.ResolveDateRange();
         var toInclusive = toExclusive.AddDays(-1);
 
-        var rows = await BuildProfitLossDailyRowsAsync(filter, from, toExclusive);
+        var adjustmentByDay = await GetStockAdjustmentByDayAsync(filter, from, toExclusive);
+        var rows = await BuildProfitLossDailyRowsAsync(filter, from, toExclusive, adjustmentByDay);
         var summary = BuildProfitLossSummary(rows);
 
         var expenseQuery = _db.Expenses
@@ -452,9 +456,28 @@ public class ReportRepository : IReportRepository
                 CategoryName = g.Key.CategoryName,
                 Amount = g.Sum(x => x.Amount),
             })
+            .ToListAsync();
+
+        var stockAdjustmentLoss = adjustmentByDay.Values.Sum(x => x.Loss);
+        var stockAdjustmentGain = adjustmentByDay.Values.Sum(x => x.Gain);
+
+        if (stockAdjustmentLoss > 0)
+        {
+            expenseLines.Add(new ProfitLossExpenseLineDto
+            {
+                CategoryId = 0,
+                CategoryName = "Stock Adjustment (Loss)",
+                Amount = stockAdjustmentLoss,
+            });
+        }
+
+        expenseLines = expenseLines
             .OrderByDescending(x => x.Amount)
             .ThenBy(x => x.CategoryName)
-            .ToListAsync();
+            .ToList();
+
+        summary.StockAdjustmentGain = stockAdjustmentGain;
+        summary.StockAdjustmentLoss = stockAdjustmentLoss;
 
         var branchName = filter.BranchId > 0
             ? await _db.Branches.AsNoTracking()
@@ -475,7 +498,8 @@ public class ReportRepository : IReportRepository
     }
 
     private async Task<List<ProfitLossRowDto>> BuildProfitLossDailyRowsAsync(
-        ReportFilterDto filter, DateTime from, DateTime toExclusive)
+        ReportFilterDto filter, DateTime from, DateTime toExclusive,
+        Dictionary<DateTime, (decimal Gain, decimal Loss)>? adjustmentByDay = null)
     {
         var salesQuery = _db.SaleInvoices
             .AsNoTracking()
@@ -591,7 +615,84 @@ public class ReportRepository : IReportRepository
                 }))
             .ToList();
 
+        adjustmentByDay ??= await GetStockAdjustmentByDayAsync(filter, from, toExclusive);
+        MergeStockAdjustmentsIntoProfitLossRows(rows, adjustmentByDay);
+
         return rows;
+    }
+
+    private async Task<Dictionary<DateTime, (decimal Gain, decimal Loss)>> GetStockAdjustmentByDayAsync(
+        ReportFilterDto filter, DateTime from, DateTime toExclusive)
+    {
+        var query = _db.StockAdjustmentLines
+            .AsNoTracking()
+            .Where(l => !l.IsDeleted
+                     && l.StockAdjustment.BusinessId == filter.BusinessId
+                     && !l.StockAdjustment.IsDeleted
+                     && !l.StockAdjustment.IsReversed
+                     && l.StockAdjustment.AdjustmentDate >= from
+                     && l.StockAdjustment.AdjustmentDate < toExclusive);
+
+        if (filter.BranchId > 0)
+            query = query.Where(l => l.StockAdjustment.BranchId == filter.BranchId);
+
+        var lines = await query
+            .Select(l => new
+            {
+                Date = l.StockAdjustment.AdjustmentDate.Date,
+                l.BaseQuantity,
+                l.TotalCost,
+            })
+            .ToListAsync();
+
+        return lines
+            .GroupBy(l => l.Date)
+            .ToDictionary(
+                g => g.Key,
+                g => (
+                    Gain: g.Where(x => x.BaseQuantity > 0).Sum(x => x.TotalCost),
+                    Loss: g.Where(x => x.BaseQuantity < 0).Sum(x => x.TotalCost)));
+    }
+
+    private static void MergeStockAdjustmentsIntoProfitLossRows(
+        List<ProfitLossRowDto> rows,
+        Dictionary<DateTime, (decimal Gain, decimal Loss)> adjustmentByDay)
+    {
+        if (adjustmentByDay.Count == 0)
+            return;
+
+        var rowByDate = rows.ToDictionary(r => r.Date);
+
+        foreach (var (date, adj) in adjustmentByDay)
+        {
+            if (adj.Gain == 0 && adj.Loss == 0)
+                continue;
+
+            if (rowByDate.TryGetValue(date, out var row))
+            {
+                row.Revenue += adj.Gain;
+                row.Expenses += adj.Loss;
+                row.GrossProfit = row.Revenue - row.CostOfGoodsSold;
+                row.NetProfit = row.GrossProfit - row.Expenses;
+            }
+            else
+            {
+                rows.Add(new ProfitLossRowDto
+                {
+                    Date = date,
+                    Revenue = adj.Gain,
+                    Discounts = 0m,
+                    Tax = 0m,
+                    CostOfGoodsSold = 0m,
+                    GrossProfit = adj.Gain,
+                    Expenses = adj.Loss,
+                    NetProfit = adj.Gain - adj.Loss,
+                    SalesCount = 0,
+                });
+            }
+        }
+
+        rows.Sort((a, b) => a.Date.CompareTo(b.Date));
     }
 
     private static ProfitLossReportSummaryDto BuildProfitLossSummary(List<ProfitLossRowDto> rows) =>

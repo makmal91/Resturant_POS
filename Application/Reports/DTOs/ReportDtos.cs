@@ -151,6 +151,10 @@ public class ProfitLossReportSummaryDto
     public decimal TotalExpenses { get; set; }
     public decimal TotalNetProfit { get; set; }
     public int TotalSalesCount { get; set; }
+    /// <summary>Stock adjustment gain (increase) amounts included in <see cref="TotalRevenue"/>.</summary>
+    public decimal StockAdjustmentGain { get; set; }
+    /// <summary>Stock adjustment loss amounts included in <see cref="TotalExpenses"/>.</summary>
+    public decimal StockAdjustmentLoss { get; set; }
 }
 
 public class ProfitLossReportPagedResultDto : ReportPagedResultDto<ProfitLossRowDto>
