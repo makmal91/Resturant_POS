@@ -1045,7 +1045,9 @@ public class SalesService : ISalesService
         int invoiceId, int businessId, int branchId)
     {
         var entries = await _stockLedgerRepository.GetByReferenceAsync(
-            invoiceId, businessId, branchId);   // all types
+            invoiceId, businessId, branchId,
+            StockLedgerType.SaleEntry,
+            StockLedgerType.SaleReversal);
 
         return entries
             .OrderBy(e => e.Date)

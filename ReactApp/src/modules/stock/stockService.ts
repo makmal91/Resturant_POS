@@ -6,6 +6,7 @@ export type StockLedgerType =
   | 'PurchaseReturn'
   | 'SaleReturn'
   | 'Adjustment'
+  | 'AdjustmentReversal'
   | 'TransferOut'
   | 'TransferIn'
   | 'Opening'

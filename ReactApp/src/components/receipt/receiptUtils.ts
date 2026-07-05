@@ -1,6 +1,6 @@
 import type { SaleInvoiceDto, SaleInvoiceItemResult } from '../../modules/pos/posService';
 
-import { formatCurrency as formatCurrencyValue, getCurrencySymbol } from '../../utils/currencyHelper';
+import { BASE_CURRENCY, formatCurrency as formatCurrencyValue, getCurrencySymbol } from '../../utils/currencyHelper';
 
 export interface ReceiptBusinessInfo {
   id: number;
@@ -18,7 +18,7 @@ export interface ReceiptBusinessInfo {
 
 export type ReceiptLayout = 'thermal' | 'a4';
 
-export const formatReceiptCurrency = (value: number, currency = 'PKR'): string =>
+export const formatReceiptCurrency = (value: number, currency = BASE_CURRENCY): string =>
   formatCurrencyValue(value, currency);
 
 export { getCurrencySymbol };
@@ -28,6 +28,9 @@ export const formatReceiptNumber = (value: number): string =>
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value);
+
+/** Line-item amounts without currency code — keeps receipt columns aligned on thermal printers. */
+export const formatReceiptAmount = (value: number): string => formatReceiptNumber(value);
 
 export const formatReceiptDateTime = (value: string | null | undefined): string => {
   if (!value) return '—';

@@ -60,6 +60,9 @@ public class POSDbContext : DbContext
     public DbSet<OpeningStockVoucherLine> OpeningStockVoucherLines { get; set; } = null!;
     public DbSet<StockTransferVoucher> StockTransferVouchers { get; set; } = null!;
     public DbSet<StockTransferVoucherLine> StockTransferVoucherLines { get; set; } = null!;
+    public DbSet<AdjustmentType> AdjustmentTypes { get; set; } = null!;
+    public DbSet<StockAdjustment> StockAdjustments { get; set; } = null!;
+    public DbSet<StockAdjustmentLine> StockAdjustmentLines { get; set; } = null!;
     public DbSet<PurchaseItem> PurchaseItems { get; set; } = null!;
     public DbSet<StockLedger> StockLedgerEntries { get; set; } = null!;
     public DbSet<LowStockAlert> LowStockAlerts { get; set; } = null!;
@@ -140,6 +143,9 @@ public class POSDbContext : DbContext
         modelBuilder.ApplyConfiguration(new OpeningStockVoucherLineConfiguration());
         modelBuilder.ApplyConfiguration(new StockTransferVoucherConfiguration());
         modelBuilder.ApplyConfiguration(new StockTransferVoucherLineConfiguration());
+        modelBuilder.ApplyConfiguration(new AdjustmentTypeConfiguration());
+        modelBuilder.ApplyConfiguration(new StockAdjustmentConfiguration());
+        modelBuilder.ApplyConfiguration(new StockAdjustmentLineConfiguration());
         modelBuilder.ApplyConfiguration(new PurchaseItemConfiguration());
         modelBuilder.ApplyConfiguration(new StockLedgerConfiguration());
         modelBuilder.ApplyConfiguration(new SaleInvoiceConfiguration());

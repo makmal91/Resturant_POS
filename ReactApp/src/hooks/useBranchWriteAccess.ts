@@ -1,3 +1,4 @@
+import { useCallback, useMemo } from 'react'
 import { useBranchStore } from '../stores/useBranchStore'
 import { getCurrentBranchId, isAllBranchesMode } from '../services/branchContext'
 import { hasBranchContext } from '../types/permissions'
@@ -12,7 +13,7 @@ export const useBranchWriteAccess = () => {
     ? hasBranchSelection && getCurrentBranchId() !== null
     : hasBranchSelection && !isGlobalMode
 
-  const resolveEntityBranchId = (entityBranchId?: number | null): number => {
+  const resolveEntityBranchId = useCallback((entityBranchId?: number | null): number => {
     if (entityBranchId && entityBranchId > 0) {
       return entityBranchId
     }
@@ -23,9 +24,9 @@ export const useBranchWriteAccess = () => {
     }
 
     return 0
-  }
+  }, [selectedBranchId])
 
-  const getWriteBlockMessage = (): string | null => {
+  const getWriteBlockMessage = useCallback((): string | null => {
     if (!hasBranchSelection) {
       return 'Please select a branch from the header to continue.'
     }
@@ -39,16 +40,30 @@ export const useBranchWriteAccess = () => {
     }
 
     return null
-  }
+  }, [hasBranchSelection, isGlobalAdmin, isGlobalMode])
 
-  return {
-    selectedBranchId,
-    isGlobalAdmin,
-    hasBranchSelection,
-    isGlobalMode,
-    canWriteInView,
-    resolveEntityBranchId,
-    getWriteBlockMessage,
-    currentBranchId: getCurrentBranchId(),
-  }
+  const currentBranchId = getCurrentBranchId()
+
+  return useMemo(
+    () => ({
+      selectedBranchId,
+      isGlobalAdmin,
+      hasBranchSelection,
+      isGlobalMode,
+      canWriteInView,
+      resolveEntityBranchId,
+      getWriteBlockMessage,
+      currentBranchId,
+    }),
+    [
+      selectedBranchId,
+      isGlobalAdmin,
+      hasBranchSelection,
+      isGlobalMode,
+      canWriteInView,
+      resolveEntityBranchId,
+      getWriteBlockMessage,
+      currentBranchId,
+    ],
+  )
 }

@@ -5,6 +5,7 @@ using POSSystem.Domain;
 using PurchaseEntity = POSSystem.Domain.Purchase;
 using ExpenseEntity = POSSystem.Domain.Expense;
 using ProductEntity = POSSystem.Domain.Product;
+using StockAdjustmentEntity = POSSystem.Domain.StockAdjustment;
 
 namespace POSSystem.Application.Accounting.Services;
 
@@ -270,6 +271,51 @@ public class AccountingIntegrationService : IAccountingIntegrationService
             GlTransactionType.OpeningStockVoucher, date, ledgerChainId);
         AddLine(entries, accounts.OwnerCapital, branchId, 0, roundedAmount, groupId, voucher.Id, description,
             GlTransactionType.OpeningStockVoucher, date, ledgerChainId);
+
+        await _accounting.CreateDoubleEntryAsync(entries);
+    }
+
+    public async Task PostStockAdjustmentAsync(
+        StockAdjustmentEntity adjustment,
+        AdjustmentType adjustmentType,
+        decimal gainAmount,
+        decimal lossAmount)
+    {
+        if (gainAmount <= 0 && lossAmount <= 0)
+            return;
+
+        if (await _accountingRepository.ExistsForReferenceAsync(
+                adjustment.Id, GlTransactionType.StockAdjustmentVoucher))
+            return;
+
+        var accounts = await _glAccounts.ResolvePostingAccountsAsync();
+        var groupId = Guid.NewGuid();
+        var ledgerChainId = groupId;
+        var description = $"Stock Adjustment — {adjustment.AdjustmentNo} — {adjustmentType.Name}";
+        if (!string.IsNullOrWhiteSpace(adjustment.Remarks))
+            description = $"{description} — {adjustment.Remarks.Trim()}";
+
+        var date = adjustment.AdjustmentDate;
+        var branchId = adjustment.BranchId;
+        var entries = new List<AccountingTransactionDto>();
+
+        if (lossAmount > 0)
+        {
+            var amt = Math.Round(lossAmount, 2, MidpointRounding.AwayFromZero);
+            AddLine(entries, adjustmentType.ExpenseAccountId, branchId, amt, 0, groupId, adjustment.Id, description,
+                GlTransactionType.StockAdjustmentVoucher, date, ledgerChainId);
+            AddLine(entries, accounts.Inventory, branchId, 0, amt, groupId, adjustment.Id, description,
+                GlTransactionType.StockAdjustmentVoucher, date, ledgerChainId);
+        }
+
+        if (gainAmount > 0)
+        {
+            var amt = Math.Round(gainAmount, 2, MidpointRounding.AwayFromZero);
+            AddLine(entries, accounts.Inventory, branchId, amt, 0, groupId, adjustment.Id, description,
+                GlTransactionType.StockAdjustmentVoucher, date, ledgerChainId);
+            AddLine(entries, adjustmentType.IncomeAccountId, branchId, 0, amt, groupId, adjustment.Id, description,
+                GlTransactionType.StockAdjustmentVoucher, date, ledgerChainId);
+        }
 
         await _accounting.CreateDoubleEntryAsync(entries);
     }

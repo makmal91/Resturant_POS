@@ -28,6 +28,8 @@ import WarehousePage from './modules/warehouse/WarehousePage';
 import PurchasePage from './modules/purchase/PurchasePage';
 import OpeningStockPage from './modules/opening-stock/OpeningStockPage';
 import StockTransferPage from './modules/stock-transfer/StockTransferPage';
+import StockAdjustmentPage from './modules/stock-adjustment/StockAdjustmentPage';
+import StockAdjustmentReportPage from './modules/stock-adjustment/StockAdjustmentReportPage';
 import StockLedgerPage from './modules/stock/StockLedgerPage';
 import SaleInvoicesPage from './modules/sales/SaleInvoicesPage';
 import CashFlowDashboardPage from './modules/cashflow/CashFlowDashboardPage';
@@ -91,7 +93,9 @@ export const routeRegistry: RouteDefinition[] = [
   { path: '/purchase', label: 'Purchase', component: PurchasePage, module: 'Purchase' },
   { path: '/opening-stock', label: 'Opening Stock', component: OpeningStockPage, module: 'Opening Stock', feature: 'product.stock.enable' },
   { path: '/stock-transfer', label: 'Stock Transfer', component: StockTransferPage, module: 'Stock Transfer', feature: 'product.stock.enable' },
+  { path: '/stock-adjustment', label: 'Stock Adjustment', component: StockAdjustmentPage, module: 'Stock Adjustment', feature: 'product.stock.enable' },
   { path: '/stock', label: 'Stock', component: StockLedgerPage, module: 'Stock', feature: 'product.stock.enable' },
+  { path: '/reports/stock-adjustment', label: 'Stock Adjustment Report', component: StockAdjustmentReportPage, module: 'Stock Adjustment', feature: 'product.stock.enable' },
   { path: '/reports/sales', label: 'Sales Report', component: SalesReportPage, module: 'Sales Reports' },
   { path: '/reports/product-wise-sales', label: 'Product Wise Sales', component: ProductWiseSalesReportPage, module: 'Product Wise Sales Report' },
   { path: '/reports/purchases', label: 'Purchase Report', component: PurchaseReportPage, module: 'Purchase Reports' },

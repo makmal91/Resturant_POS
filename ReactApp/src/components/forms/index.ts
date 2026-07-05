@@ -18,6 +18,7 @@ export { default as SupplierForm } from './SupplierForm';
 export { default as PurchaseForm } from './PurchaseForm';
 export { default as OpeningStockForm } from './OpeningStockForm';
 export { default as StockTransferForm } from './StockTransferForm';
+export { default as StockAdjustmentForm } from './StockAdjustmentForm';
 export { default as CustomerForm } from './CustomerForm';
 export { default as RoleForm } from './RoleForm';
 export { default as CashTransactionForm } from './CashTransactionForm';

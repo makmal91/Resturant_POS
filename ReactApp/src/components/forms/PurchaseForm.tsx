@@ -686,8 +686,8 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       </div>
 
       {/* Line Items — only this section scrolls */}
-      <div className="flex min-h-0 flex-1 flex-col px-6 py-4">
-          <div className="mb-3 flex items-center justify-between">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-6 py-4">
+          <div className="mb-3 flex shrink-0 items-center justify-between">
             <div>
               <h3 className="text-sm font-semibold text-gray-800">Line Items</h3>
               {itemCount > 0 && (

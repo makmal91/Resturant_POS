@@ -1,4 +1,4 @@
-import apiClient from './api';
+import { BASE_CURRENCY } from '../utils/currencyHelper';
 import { BusinessService } from './apiService';
 import { sidebarService } from './menuService';
 import type { ReceiptBusinessInfo } from '../components/receipt/receiptUtils';
@@ -10,7 +10,7 @@ const normalizeBusiness = (raw: Record<string, unknown>): ReceiptBusinessInfo =>
   address: String(raw.address ?? raw.Address ?? ''),
   phone: String(raw.phone ?? raw.Phone ?? ''),
   email: String(raw.email ?? raw.Email ?? ''),
-  currency: String(raw.currency ?? raw.Currency ?? 'USD') || 'USD',
+  currency: String(raw.currency ?? raw.Currency ?? BASE_CURRENCY) || BASE_CURRENCY,
   taxNumber: String(raw.taxNumber ?? raw.TaxNumber ?? ''),
   hasLogo: Boolean(raw.hasLogo ?? raw.HasLogo ?? false),
   slogan: raw.slogan != null || raw.Slogan != null
@@ -34,7 +34,7 @@ const buildFallbackBusiness = (businessId: number, name = ''): ReceiptBusinessIn
   address: '',
   phone: '',
   email: '',
-  currency: 'USD',
+  currency: BASE_CURRENCY,
   taxNumber: '',
   hasLogo: false,
   slogan: null,

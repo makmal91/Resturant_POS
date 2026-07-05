@@ -115,6 +115,7 @@ public static class DatabaseBootstrapper
             ("PartyLedger", PartyLedgerInitializer.EnsureSchemaAsync),
             ("InvoicePayment", InvoicePaymentInitializer.EnsureSchemaAsync),
             ("Accounting", AccountingDatabaseInitializer.EnsureSchemaAsync),
+            ("StockAdjustment", StockAdjustmentDatabaseInitializer.EnsureSchemaAsync),
             ("PosRegister", async (ctx, log) =>
             {
                 await PosRegisterDatabaseInitializer.EnsureSchemaAsync(ctx, log);

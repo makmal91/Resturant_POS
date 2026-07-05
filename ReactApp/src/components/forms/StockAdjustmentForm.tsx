@@ -8,9 +8,14 @@ import { useHasFeature } from '../../hooks/useFeature';
 import { FEATURE_KEYS } from '../../types/featurePermissions';
 import apiClient from '../../services/api';
 import { safeString } from '../../utils/safeValues';
+import { stockService } from '../../modules/stock/stockService';
 import { toBaseQuantity } from '../../modules/product/unitPricing';
+import ProductStockHint from './ProductStockHint';
+import { parseCurrentStockQuantity, lineTableCellClass, lineTableGridClass, lineTableHeaderClass, lineTableScrollWrapClass, lineTableStickyHeaderClass } from './formStockHelpers';
 
-export interface OpeningStockLineFormData {
+export type AdjustmentDirection = 'increase' | 'decrease';
+
+export interface StockAdjustmentLineFormData {
   productId: number;
   productName: string;
   productCode: string;
@@ -19,20 +24,22 @@ export interface OpeningStockLineFormData {
   variantName?: string;
   unitId: number;
   unitName?: string;
+  direction: AdjustmentDirection;
   quantity: number;
   conversionFactor?: number;
   convertedQuantity?: number;
   costPrice: number;
 }
 
-export interface OpeningStockFormData {
-  voucherNo: string;
-  voucherDate: string;
-  description: string;
+export interface StockAdjustmentFormData {
+  adjustmentNo: string;
+  adjustmentDate: string;
+  remarks: string;
   warehouseId: number;
+  adjustmentTypeId: number;
   branchId: number;
   id?: number;
-  lines: OpeningStockLineFormData[];
+  lines: StockAdjustmentLineFormData[];
 }
 
 interface LookupOption {
@@ -70,6 +77,7 @@ interface ItemRow {
   variantId: number | null;
   unitId: number;
   unitName: string;
+  direction: AdjustmentDirection;
   quantity: number;
   conversionFactor: number;
   costPrice: number;
@@ -79,17 +87,20 @@ interface ItemRow {
   isVariantEnabled: boolean;
   productCostPrice: number;
   metaLoading: boolean;
+  availableStock: number | null;
+  availableLoading: boolean;
 }
 
-interface OpeningStockFormProps {
+interface StockAdjustmentFormProps {
   initialData?: Partial<
-    OpeningStockFormData & {
+    StockAdjustmentFormData & {
       readOnly?: boolean;
-      lines?: OpeningStockLineFormData[];
+      lines?: StockAdjustmentLineFormData[];
     }
   > | null;
   warehouses?: LookupOption[];
-  onSubmit: (data: OpeningStockFormData) => void;
+  adjustmentTypes?: LookupOption[];
+  onSubmit: (data: StockAdjustmentFormData) => void;
   isLoading?: boolean;
 }
 
@@ -132,12 +143,24 @@ const resolveUnitCostPrice = (
   return baseCost * factor;
 };
 
-const formatQty = (value: number) => (value % 1 === 0 ? value.toFixed(0) : value.toFixed(3));
+const formatQty = (value: number) => {
+  const abs = Math.abs(value);
+  const formatted = abs % 1 === 0 ? abs.toFixed(0) : abs.toFixed(3);
+  return value < 0 ? `−${formatted}` : formatted;
+};
 
 const unitOptionLabel = (unit: UnitOption, baseUnitName: string) => {
   if (unit.isBaseUnit) return `${unit.unitName} (Base)`;
   if (baseUnitName) return `${unit.unitName} (${formatQty(unit.conversionFactor)} ${baseUnitName})`;
   return `${unit.unitName} (×${formatQty(unit.conversionFactor)})`;
+};
+
+const signedUnitQty = (direction: AdjustmentDirection, quantity: number) =>
+  direction === 'decrease' ? -Math.abs(quantity) : Math.abs(quantity);
+
+const signedBaseQty = (direction: AdjustmentDirection, quantity: number, conversionFactor: number) => {
+  const base = toBaseQuantity(Math.abs(quantity), conversionFactor);
+  return direction === 'decrease' ? -base : base;
 };
 
 const emptyRow = (): ItemRow => ({
@@ -149,6 +172,7 @@ const emptyRow = (): ItemRow => ({
   variantId: null,
   unitId: 0,
   unitName: '',
+  direction: 'increase',
   quantity: 0,
   conversionFactor: 1,
   costPrice: 0,
@@ -158,13 +182,29 @@ const emptyRow = (): ItemRow => ({
   isVariantEnabled: false,
   productCostPrice: 0,
   metaLoading: false,
+  availableStock: null,
+  availableLoading: false,
 });
 
-const buildRowsFromInitial = (lines?: OpeningStockLineFormData[]): ItemRow[] => {
+const parseLineQuantity = (line: StockAdjustmentLineFormData) => {
+  if (line.direction) {
+    return {
+      direction: line.direction,
+      quantity: Math.abs(Number(line.quantity ?? 0)),
+    };
+  }
+  const raw = Number(line.quantity ?? 0);
+  return {
+    direction: (raw < 0 ? 'decrease' : 'increase') as AdjustmentDirection,
+    quantity: Math.abs(raw),
+  };
+};
+
+const buildRowsFromInitial = (lines?: StockAdjustmentLineFormData[]): ItemRow[] => {
   if (!lines?.length) return [emptyRow()];
   return lines.map((line) => {
+    const { direction, quantity } = parseLineQuantity(line);
     const conversionFactor = Number(line.conversionFactor ?? 1) || 1;
-    const unitQty = Number(line.quantity ?? 0);
     const costPrice = Number(line.costPrice ?? 0);
     return {
       key: crypto.randomUUID(),
@@ -175,36 +215,43 @@ const buildRowsFromInitial = (lines?: OpeningStockLineFormData[]): ItemRow[] => 
       variantId: line.variantId ?? null,
       unitId: Number(line.unitId ?? 0),
       unitName: safeString(line.unitName),
-      quantity: unitQty,
+      direction,
+      quantity,
       conversionFactor,
       costPrice,
-      totalAmount: unitQty * costPrice,
+      totalAmount: quantity * costPrice,
       units: [],
       variants: [],
       isVariantEnabled: Boolean(line.variantId),
       productCostPrice: costPrice,
       metaLoading: false,
+      availableStock: null,
+      availableLoading: false,
     };
   });
 };
 
-const rowsToFormLines = (rows: ItemRow[]): OpeningStockLineFormData[] =>
+const rowsToFormLines = (rows: ItemRow[]): StockAdjustmentLineFormData[] =>
   rows
     .filter((row) => row.productId > 0 && row.unitId > 0)
-    .map((row) => ({
-      productId: row.productId,
-      productName: row.productName,
-      productCode: row.productCode,
-      baseUnitName: row.baseUnitName,
-      variantId: row.variantId,
-      variantName: row.variants.find((v) => v.id === row.variantId)?.variantName ?? '',
-      unitId: row.unitId,
-      unitName: row.unitName,
-      quantity: row.quantity,
-      conversionFactor: row.conversionFactor,
-      convertedQuantity: toBaseQuantity(row.quantity, row.conversionFactor),
-      costPrice: row.costPrice,
-    }));
+    .map((row) => {
+      const signedQty = signedUnitQty(row.direction, row.quantity);
+      return {
+        productId: row.productId,
+        productName: row.productName,
+        productCode: row.productCode,
+        baseUnitName: row.baseUnitName,
+        variantId: row.variantId,
+        variantName: row.variants.find((v) => v.id === row.variantId)?.variantName ?? '',
+        unitId: row.unitId,
+        unitName: row.unitName,
+        direction: row.direction,
+        quantity: signedQty,
+        conversionFactor: row.conversionFactor,
+        convertedQuantity: signedBaseQty(row.direction, row.quantity, row.conversionFactor),
+        costPrice: row.costPrice,
+      };
+    });
 
 const lineKey = (productId: number, variantId: number | null) => `${productId}:${variantId ?? 0}`;
 
@@ -215,9 +262,10 @@ const toDateInputValue = (value: unknown) => {
   return raw.slice(0, 10);
 };
 
-const OpeningStockForm: React.FC<OpeningStockFormProps> = ({
+const StockAdjustmentForm: React.FC<StockAdjustmentFormProps> = ({
   initialData,
   warehouses = [],
+  adjustmentTypes = [],
   onSubmit,
   isLoading = false,
 }) => {
@@ -231,19 +279,17 @@ const OpeningStockForm: React.FC<OpeningStockFormProps> = ({
   const lineGridColumns = useMemo(() => {
     const parts = ['minmax(180px,2fr)'];
     if (variantFeatureEnabled) parts.push('minmax(100px,1.1fr)');
-    if (unitFeatureEnabled) parts.push('minmax(110px,1.2fr)');
-    parts.push('88px', '72px', '88px');
-    if (isViewMode) parts.push('80px', '88px');
-    else parts.push('44px');
+    if (unitFeatureEnabled) parts.push('minmax(120px,1.1fr)');
+    parts.push('minmax(100px,auto)', 'minmax(88px,auto)', 'minmax(88px,auto)', 'minmax(96px,auto)', 'minmax(96px,auto)');
+    if (!isViewMode) parts.push('44px');
     return parts.join(' ');
   }, [variantFeatureEnabled, unitFeatureEnabled, isViewMode]);
 
-  const [voucherNo, setVoucherNo] = useState(safeString(initialData?.voucherNo));
-  const [voucherDate, setVoucherDate] = useState(
-    () => toDateInputValue(initialData?.voucherDate),
-  );
-  const [description, setDescription] = useState(safeString(initialData?.description));
+  const [adjustmentNo, setAdjustmentNo] = useState(safeString(initialData?.adjustmentNo));
+  const [adjustmentDate, setAdjustmentDate] = useState(() => toDateInputValue(initialData?.adjustmentDate));
+  const [remarks, setRemarks] = useState(safeString(initialData?.remarks));
   const [warehouseId, setWarehouseId] = useState(Number(initialData?.warehouseId ?? 0));
+  const [adjustmentTypeId, setAdjustmentTypeId] = useState(Number(initialData?.adjustmentTypeId ?? 0));
   const [rows, setRows] = useState<ItemRow[]>(() => buildRowsFromInitial(initialData?.lines));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
@@ -258,6 +304,8 @@ const OpeningStockForm: React.FC<OpeningStockFormProps> = ({
   const variantSelectRefs = useRef<Map<string, HTMLSelectElement>>(new Map());
   const unitSelectRefs = useRef<Map<string, HTMLSelectElement>>(new Map());
   const qtyInputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
 
   const closeSearch = useCallback(() => {
     setSearchRowKey(null);
@@ -265,12 +313,69 @@ const OpeningStockForm: React.FC<OpeningStockFormProps> = ({
     setSearchResults([]);
   }, []);
 
+  const initialSignedBaseQtyByLine = useMemo(() => {
+    const map = new Map<string, number>();
+    initialData?.lines?.forEach((line) => {
+      const pid = Number(line.productId ?? 0);
+      if (pid <= 0) return;
+      const vid = line.variantId ?? null;
+      const { direction, quantity } = parseLineQuantity(line);
+      const baseQty = signedBaseQty(
+        direction,
+        quantity,
+        Number(line.conversionFactor ?? 1) || 1,
+      );
+      map.set(lineKey(pid, vid), baseQty);
+    });
+    return map;
+  }, [initialData?.lines]);
+
+  const fetchAvailableStock = useCallback(
+    async (productId: number, variantId: number | null): Promise<number | null> => {
+      if (resolvedBranchId <= 0 || warehouseId <= 0 || productId <= 0) return null;
+      try {
+        const res = await stockService.getCurrentStock(
+          resolvedBranchId,
+          productId,
+          warehouseId,
+          variantId ?? undefined,
+        );
+        const qty = parseCurrentStockQuantity(res.data);
+        const key = lineKey(productId, variantId);
+        const priorSigned = isEditMode ? initialSignedBaseQtyByLine.get(key) ?? 0 : 0;
+        const restore = priorSigned < 0 ? Math.abs(priorSigned) : 0;
+        return qty + restore;
+      } catch {
+        return null;
+      }
+    },
+    [initialSignedBaseQtyByLine, isEditMode, resolvedBranchId, warehouseId],
+  );
+
+  const refreshRowStock = useCallback(
+    async (rowKey: string, productId: number, variantId: number | null) => {
+      setRows((prev) =>
+        prev.map((row) =>
+          row.key === rowKey ? { ...row, availableLoading: true, availableStock: null } : row,
+        ),
+      );
+      const available = await fetchAvailableStock(productId, variantId);
+      setRows((prev) =>
+        prev.map((row) =>
+          row.key === rowKey ? { ...row, availableLoading: false, availableStock: available } : row,
+        ),
+      );
+    },
+    [fetchAvailableStock],
+  );
+
   useEffect(() => {
     setRows(buildRowsFromInitial(initialData?.lines));
-    setVoucherNo(safeString(initialData?.voucherNo));
-    setVoucherDate(toDateInputValue(initialData?.voucherDate));
-    setDescription(safeString(initialData?.description));
+    setAdjustmentNo(safeString(initialData?.adjustmentNo));
+    setAdjustmentDate(toDateInputValue(initialData?.adjustmentDate));
+    setRemarks(safeString(initialData?.remarks));
     setWarehouseId(Number(initialData?.warehouseId ?? 0));
+    setAdjustmentTypeId(Number(initialData?.adjustmentTypeId ?? 0));
     setErrors({});
     setRowErrors({});
     closeSearch();
@@ -392,6 +497,24 @@ const OpeningStockForm: React.FC<OpeningStockFormProps> = ({
     };
   }, [initialData?.lines, resolvedBranchId, isViewMode]);
 
+  const rowStockSignature = useMemo(
+    () =>
+      rows
+        .map((row) => `${row.key}:${row.productId}:${row.variantId ?? 'n'}:${row.metaLoading ? 1 : 0}`)
+        .join('|'),
+    [rows],
+  );
+
+  useEffect(() => {
+    if (warehouseId <= 0 || resolvedBranchId <= 0) return;
+
+    rowsRef.current.forEach((row) => {
+      if (row.productId <= 0 || row.metaLoading) return;
+      if (variantFeatureEnabled && row.isVariantEnabled && row.variants.length > 0 && !row.variantId) return;
+      void refreshRowStock(row.key, row.productId, row.variantId);
+    });
+  }, [rowStockSignature, warehouseId, resolvedBranchId, refreshRowStock, variantFeatureEnabled]);
+
   const openSearch = useCallback((rowKey: string) => {
     setSearchRowKey(rowKey);
     setSearchTerm('');
@@ -471,6 +594,7 @@ const OpeningStockForm: React.FC<OpeningStockFormProps> = ({
       variantId: selectedVariantId,
       unitId: selectedUnitId,
       unitName: selectedUnit?.unitName ?? '',
+      direction: 'increase',
       quantity: 0,
       conversionFactor,
       costPrice,
@@ -480,6 +604,8 @@ const OpeningStockForm: React.FC<OpeningStockFormProps> = ({
       isVariantEnabled,
       productCostPrice,
       metaLoading: false,
+      availableStock: null,
+      availableLoading: false,
     };
 
     setRows((prev) => prev.map((row) => (row.key === targetKey ? nextRow : row)));
@@ -489,6 +615,9 @@ const OpeningStockForm: React.FC<OpeningStockFormProps> = ({
       return next;
     });
     focusNextField(targetKey, nextRow);
+    if (warehouseId > 0) {
+      void refreshRowStock(targetKey, product.id, selectedVariantId);
+    }
   };
 
   const updateRow = (key: string, field: Partial<ItemRow>) => {
@@ -515,7 +644,7 @@ const OpeningStockForm: React.FC<OpeningStockFormProps> = ({
           );
         }
 
-        updated.totalAmount = updated.quantity * updated.costPrice;
+        updated.totalAmount = Math.abs(updated.quantity) * updated.costPrice;
         return updated;
       }),
     );
@@ -525,6 +654,15 @@ const OpeningStockForm: React.FC<OpeningStockFormProps> = ({
       return next;
     });
     setErrors((prev) => ({ ...prev, items: '' }));
+
+    if ('variantId' in field || 'productId' in field) {
+      const row = rows.find((r) => r.key === key);
+      const productId = Number(field.productId ?? row?.productId ?? 0);
+      const variantId = field.variantId !== undefined ? field.variantId : row?.variantId ?? null;
+      if (productId > 0 && warehouseId > 0) {
+        void refreshRowStock(key, productId, variantId);
+      }
+    }
   };
 
   const addRow = () => {
@@ -555,6 +693,9 @@ const OpeningStockForm: React.FC<OpeningStockFormProps> = ({
     if (!warehouseId) {
       nextErrors.warehouseId = 'Warehouse is required.';
     }
+    if (!adjustmentTypeId) {
+      nextErrors.adjustmentTypeId = 'Adjustment type is required.';
+    }
 
     const filledRows = rows.filter((row) => row.productId > 0);
     if (filledRows.length === 0) {
@@ -583,6 +724,18 @@ const OpeningStockForm: React.FC<OpeningStockFormProps> = ({
       if (Number(row.costPrice) <= 0) {
         nextRowErrors[row.key] = 'Cost price missing — update product master';
       }
+
+      if (
+        row.direction === 'decrease' &&
+        row.availableStock != null &&
+        row.quantity > 0
+      ) {
+        const reqBase = toBaseQuantity(row.quantity, row.conversionFactor || 1);
+        if (reqBase > row.availableStock) {
+          const unitLabel = row.unitName || row.baseUnitName || 'base unit';
+          nextRowErrors[row.key] = `Insufficient stock for decrease (available in ${unitLabel})`;
+        }
+      }
     });
 
     setErrors(nextErrors);
@@ -596,22 +749,23 @@ const OpeningStockForm: React.FC<OpeningStockFormProps> = ({
 
     onSubmit({
       id: isEditMode ? Number(initialData?.id ?? 0) : undefined,
-      voucherNo: voucherNo.trim(),
-      voucherDate,
-      description: description.trim(),
+      adjustmentNo: adjustmentNo.trim(),
+      adjustmentDate,
+      remarks: remarks.trim(),
       warehouseId,
+      adjustmentTypeId,
       branchId: resolvedBranchId,
       lines: rowsToFormLines(rows),
     });
   };
 
-  const minGridWidth = isViewMode ? '920px' : '760px';
+  const minGridWidth = isViewMode ? '1000px' : '920px';
 
   return (
     <form onSubmit={handleSubmit} className="flex h-full min-h-0 flex-col">
       <div className="shrink-0 space-y-5 border-b border-gray-100 px-6 py-5">
         <p className="text-sm text-gray-500">
-          Enter stock in any unit — the system converts and stores everything in the base unit.
+          Record stock gains or losses. Decreases are saved as negative quantities and converted to base units.
         </p>
 
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
@@ -619,20 +773,20 @@ const OpeningStockForm: React.FC<OpeningStockFormProps> = ({
 
           {!isViewMode && !isEditMode ? (
             <CodeFieldWithGenerate
-              label="Voucher No"
-              name="voucherNo"
-              module={CODE_MODULES.OpeningStock}
+              label="Adjustment No"
+              name="adjustmentNo"
+              module={CODE_MODULES.StockAdjustment}
               branchId={resolvedBranchId}
-              value={voucherNo}
-              onChange={setVoucherNo}
+              value={adjustmentNo}
+              onChange={setAdjustmentNo}
               isEditMode={false}
               required
             />
           ) : (
             <div className="mb-5">
-              <label className="mb-2 block text-sm font-medium text-gray-800">Voucher No</label>
+              <label className="mb-2 block text-sm font-medium text-gray-800">Adjustment No</label>
               <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-semibold text-gray-900">
-                {voucherNo}
+                {adjustmentNo}
               </div>
             </div>
           )}
@@ -641,8 +795,8 @@ const OpeningStockForm: React.FC<OpeningStockFormProps> = ({
             <div className="mb-5">
               <label className="mb-2 block text-sm font-medium text-gray-800">Date</label>
               <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900">
-                {voucherDate
-                  ? new Date(`${voucherDate}T00:00:00`).toLocaleDateString(undefined, {
+                {adjustmentDate
+                  ? new Date(`${adjustmentDate}T00:00:00`).toLocaleDateString(undefined, {
                       year: 'numeric',
                       month: 'short',
                       day: 'numeric',
@@ -653,13 +807,30 @@ const OpeningStockForm: React.FC<OpeningStockFormProps> = ({
           ) : (
             <FormInput
               label="Date"
-              name="voucherDate"
+              name="adjustmentDate"
               type="date"
-              value={voucherDate}
-              onChange={(e) => setVoucherDate(e.target.value)}
+              value={adjustmentDate}
+              onChange={(e) => setAdjustmentDate(e.target.value)}
               required
             />
           )}
+
+          <FormSelect
+            label="Adjustment Type"
+            name="adjustmentTypeId"
+            value={String(adjustmentTypeId || '')}
+            onChange={(e) => {
+              setAdjustmentTypeId(Number(e.target.value || 0));
+              setErrors((prev) => ({ ...prev, adjustmentTypeId: '' }));
+            }}
+            options={[
+              { label: 'Select type', value: '' },
+              ...adjustmentTypes.map((t) => ({ label: t.name, value: String(t.id) })),
+            ]}
+            required
+            disabled={isViewMode}
+            error={errors.adjustmentTypeId}
+          />
 
           <FormSelect
             label="Warehouse"
@@ -681,12 +852,12 @@ const OpeningStockForm: React.FC<OpeningStockFormProps> = ({
           <div className="md:col-span-2">
             <FormTextarea
               label="Remarks"
-              name="description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              name="remarks"
+              value={remarks}
+              onChange={(e) => setRemarks(e.target.value)}
               disabled={isViewMode}
               rows={2}
-              placeholder="Optional notes for this voucher"
+              placeholder="Optional notes for this adjustment"
             />
           </div>
         </div>
@@ -695,7 +866,7 @@ const OpeningStockForm: React.FC<OpeningStockFormProps> = ({
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-6 py-4">
         <div className="mb-3 flex shrink-0 items-center justify-between">
           <div>
-            <h3 className="text-sm font-semibold text-gray-800">Stock Lines</h3>
+            <h3 className="text-sm font-semibold text-gray-800">Adjustment Lines</h3>
             {filledCount > 0 && (
               <p className="mt-0.5 text-xs text-gray-500">
                 {filledCount} {filledCount === 1 ? 'product' : 'products'} added
@@ -723,48 +894,50 @@ const OpeningStockForm: React.FC<OpeningStockFormProps> = ({
         )}
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
-          <div
-            className="shrink-0 grid gap-0 overflow-x-auto border-b border-gray-200 bg-gray-50 px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-gray-500"
-            style={{ gridTemplateColumns: lineGridColumns, minWidth: minGridWidth }}
-          >
-            <div>Product</div>
-            {variantFeatureEnabled && <div>Variant</div>}
-            {unitFeatureEnabled && <div>Unit</div>}
-            <div>Base Unit</div>
-            <div className="text-right">Qty</div>
-            <div className="text-right">Base Qty</div>
-            {isViewMode ? (
-              <>
-                <div className="text-right">Cost</div>
-                <div className="text-right">Amount</div>
-              </>
-            ) : (
-              <div className="text-center">Act</div>
-            )}
-          </div>
+          <div className={lineTableScrollWrapClass}>
+            <div style={{ minWidth: minGridWidth }}>
+              <div
+                className={`${lineTableStickyHeaderClass} ${lineTableGridClass}`}
+                style={{ gridTemplateColumns: lineGridColumns }}
+              >
+                <div className={lineTableHeaderClass('left')}>Product</div>
+                {variantFeatureEnabled && <div className={lineTableHeaderClass('left')}>Variant</div>}
+                {unitFeatureEnabled && <div className={lineTableHeaderClass('left')}>Unit</div>}
+                <div className={lineTableHeaderClass('left')}>Direction</div>
+                <div className={lineTableHeaderClass('right')}>Qty</div>
+                <div className={lineTableHeaderClass('right')}>Cost</div>
+                <div className={lineTableHeaderClass('right')}>Total</div>
+                <div className={lineTableHeaderClass('right')}>Base qty</div>
+                {!isViewMode && <div className={lineTableHeaderClass('center')}>Remove</div>}
+              </div>
 
-          <div className="min-h-0 flex-1 divide-y divide-gray-100 overflow-y-auto overflow-x-auto">
+              <div className="divide-y divide-gray-100">
             {rows.map((row, idx) => {
-              const baseQty =
-                row.conversionFactor > 0
-                  ? toBaseQuantity(row.quantity, row.conversionFactor)
-                  : row.quantity;
+              const baseQty = signedBaseQty(row.direction, row.quantity, row.conversionFactor);
               const rowError = rowErrors[row.key];
 
               return (
                 <div
                   key={row.key}
-                  className={`grid items-center gap-0 px-3 py-2 transition-colors ${
+                  className={`${lineTableGridClass} px-3 transition-colors ${
                     row.productId > 0 ? 'bg-white' : 'bg-gray-50/60'
                   } ${rowError ? 'ring-1 ring-inset ring-red-200' : ''}`}
-                  style={{ gridTemplateColumns: lineGridColumns, minWidth: minGridWidth }}
+                  style={{ gridTemplateColumns: lineGridColumns }}
                 >
-                  {/* Product */}
-                  <div className="pr-2">
+                  <div className={`${lineTableCellClass('left')} pr-1`}>
                     {isViewMode ? (
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium text-gray-900">{row.productName}</p>
                         <p className="text-xs text-gray-400">{row.productCode}</p>
+                        <ProductStockHint
+                          baseQuantity={row.availableStock}
+                          conversionFactor={row.conversionFactor}
+                          unitName={row.unitName}
+                          baseUnitName={row.baseUnitName}
+                          loading={row.availableLoading}
+                          hasWarehouse={warehouseId > 0}
+                          hasProduct={row.productId > 0}
+                        />
                       </div>
                     ) : searchRowKey === row.key ? (
                       <div className="relative" ref={searchDropdownRef}>
@@ -816,6 +989,21 @@ const OpeningStockForm: React.FC<OpeningStockFormProps> = ({
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium text-gray-900">{row.productName}</p>
                         <p className="text-xs text-gray-400">{row.productCode}</p>
+                        <ProductStockHint
+                          baseQuantity={row.availableStock}
+                          conversionFactor={row.conversionFactor}
+                          unitName={row.unitName}
+                          baseUnitName={row.baseUnitName}
+                          loading={row.availableLoading}
+                          hasWarehouse={warehouseId > 0}
+                          hasProduct
+                          warnExceeds={
+                            row.direction === 'decrease' &&
+                            row.availableStock != null &&
+                            row.quantity > 0 &&
+                            toBaseQuantity(row.quantity, row.conversionFactor || 1) > row.availableStock
+                          }
+                        />
                         <button
                           type="button"
                           onClick={() => openSearch(row.key)}
@@ -837,9 +1025,8 @@ const OpeningStockForm: React.FC<OpeningStockFormProps> = ({
                     {rowError && !isViewMode && <p className="mt-0.5 text-xs text-red-600">{rowError}</p>}
                   </div>
 
-                  {/* Variant */}
                   {variantFeatureEnabled && (
-                    <div className="px-1">
+                    <div className={lineTableCellClass('left')}>
                       {isViewMode ? (
                         <span className="text-sm text-gray-700">
                           {row.variants.find((v) => v.id === row.variantId)?.variantName || '—'}
@@ -876,9 +1063,8 @@ const OpeningStockForm: React.FC<OpeningStockFormProps> = ({
                     </div>
                   )}
 
-                  {/* Unit */}
                   {unitFeatureEnabled && (
-                    <div className="px-1">
+                    <div className={lineTableCellClass('left')}>
                       {isViewMode ? (
                         <span className="text-sm text-gray-700">{row.unitName || '—'}</span>
                       ) : row.units.length > 0 ? (
@@ -907,21 +1093,33 @@ const OpeningStockForm: React.FC<OpeningStockFormProps> = ({
                     </div>
                   )}
 
-                  {/* Base unit badge */}
-                  <div className="px-1">
-                    {row.baseUnitName ? (
-                      <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
-                        {row.baseUnitName}
+                  <div className={lineTableCellClass('left')}>
+                    {isViewMode ? (
+                      <span
+                        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
+                          row.direction === 'decrease' ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'
+                        }`}
+                      >
+                        {row.direction === 'decrease' ? 'Decrease' : 'Increase'}
                       </span>
                     ) : (
-                      <span className="text-gray-300">—</span>
+                      <select
+                        value={row.direction}
+                        onChange={(e) =>
+                          updateRow(row.key, { direction: e.target.value as AdjustmentDirection })
+                        }
+                        disabled={row.productId <= 0}
+                        className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
+                      >
+                        <option value="increase">Increase</option>
+                        <option value="decrease">Decrease</option>
+                      </select>
                     )}
                   </div>
 
-                  {/* Qty in selected unit */}
-                  <div className="px-1">
+                  <div className={lineTableCellClass('right')}>
                     {isViewMode ? (
-                      <p className="text-right text-sm">{formatQty(row.quantity)}</p>
+                      <p className="text-sm">{formatQty(row.quantity)}</p>
                     ) : (
                       <input
                         ref={(el) => {
@@ -940,31 +1138,45 @@ const OpeningStockForm: React.FC<OpeningStockFormProps> = ({
                     )}
                   </div>
 
-                  {/* Converted base qty */}
-                  <div className="px-1 text-right">
+                  <div className={`${lineTableCellClass('right')} text-sm text-gray-700`}>
+                    {row.productId > 0 ? (
+                      <>
+                        {symbol}
+                        {row.costPrice.toFixed(2)}
+                      </>
+                    ) : (
+                      '—'
+                    )}
+                  </div>
+
+                  <div className={`${lineTableCellClass('right')} text-sm font-semibold`}>
+                    {row.productId > 0 ? (
+                      <>
+                        {symbol}
+                        {row.totalAmount.toFixed(2)}
+                      </>
+                    ) : (
+                      '—'
+                    )}
+                  </div>
+
+                  <div className={lineTableCellClass('right')}>
                     <span
                       className={`inline-block min-w-[3rem] rounded-md px-2 py-1 text-sm font-semibold ${
-                        baseQty > 0 ? 'bg-emerald-50 text-emerald-800' : 'text-gray-300'
+                        baseQty > 0
+                          ? 'bg-emerald-50 text-emerald-800'
+                          : baseQty < 0
+                            ? 'bg-red-50 text-red-800'
+                            : 'text-gray-300'
                       }`}
                       title={row.baseUnitName ? `${formatQty(baseQty)} ${row.baseUnitName}` : undefined}
                     >
-                      {row.productId > 0 && baseQty > 0 ? formatQty(baseQty) : '—'}
+                      {row.productId > 0 && baseQty !== 0 ? formatQty(baseQty) : '—'}
                     </span>
                   </div>
 
-                  {isViewMode ? (
-                    <>
-                      <div className="px-1 text-right text-sm text-gray-700">
-                        {symbol}
-                        {row.costPrice.toFixed(2)}
-                      </div>
-                      <div className="px-1 text-right text-sm font-semibold">
-                        {symbol}
-                        {row.totalAmount.toFixed(2)}
-                      </div>
-                    </>
-                  ) : (
-                    <div className="flex justify-center px-1">
+                  {!isViewMode && (
+                    <div className={`${lineTableCellClass('center')} flex justify-center`}>
                       {row.productId > 0 || rows.length > 1 ? (
                         <button
                           type="button"
@@ -984,6 +1196,8 @@ const OpeningStockForm: React.FC<OpeningStockFormProps> = ({
                 </div>
               );
             })}
+              </div>
+            </div>
           </div>
 
           <div className="flex shrink-0 items-center justify-between rounded-b-lg border-t border-gray-200 bg-gray-50 px-4 py-3">
@@ -1005,7 +1219,7 @@ const OpeningStockForm: React.FC<OpeningStockFormProps> = ({
         <div className="flex shrink-0 items-center justify-end border-t border-gray-200 bg-white px-6 py-4">
           <FormButton
             type="submit"
-            label={isEditMode ? 'Update Voucher' : 'Save Voucher'}
+            label={isEditMode ? 'Update Adjustment' : 'Save Adjustment'}
             variant="primary"
             loading={isLoading}
           />
@@ -1015,4 +1229,4 @@ const OpeningStockForm: React.FC<OpeningStockFormProps> = ({
   );
 };
 
-export default OpeningStockForm;
+export default StockAdjustmentForm;

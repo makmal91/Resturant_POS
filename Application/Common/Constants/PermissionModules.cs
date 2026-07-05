@@ -36,6 +36,7 @@ public static class PermissionModules
     public const string Countries = "Countries";
     public const string Cities = "Cities";
     public const string StockTransfer = "Stock Transfer";
+    public const string StockAdjustment = "Stock Adjustment";
     public const string SalesReports = "Sales Reports";
     public const string ProductWiseSalesReport = "Product Wise Sales Report";
     public const string PurchaseReports = "Purchase Reports";
@@ -79,6 +80,7 @@ public static class PermissionModules
         Stock,
         OpeningStock,
         StockTransfer,
+        StockAdjustment,
         Sales,
         Customers,
         Expenses,

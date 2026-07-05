@@ -460,7 +460,9 @@ public class PurchaseService : IPurchaseService
         int purchaseId, int businessId, int branchId)
     {
         var entries = await _stockLedgerRepository.GetByReferenceAsync(
-            purchaseId, businessId, branchId);
+            purchaseId, businessId, branchId,
+            StockLedgerType.PurchaseEntry,
+            StockLedgerType.PurchaseReversal);
 
         return entries
             .OrderBy(e => e.Date)

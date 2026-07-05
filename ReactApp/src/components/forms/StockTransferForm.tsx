@@ -9,6 +9,8 @@ import apiClient from '../../services/api';
 import { stockService } from '../../modules/stock/stockService';
 import { safeString } from '../../utils/safeValues';
 import { toBaseQuantity } from '../../modules/product/unitPricing';
+import ProductStockHint from './ProductStockHint';
+import { parseCurrentStockQuantity, lineTableCellClass, lineTableGridClass, lineTableHeaderClass, lineTableScrollWrapClass, lineTableStickyHeaderClass } from './formStockHelpers';
 
 export interface StockTransferLineFormData {
   productId: number;
@@ -212,9 +214,9 @@ const StockTransferForm: React.FC<StockTransferFormProps> = ({
   const lineGridColumns = useMemo(() => {
     const parts = ['minmax(180px,2fr)'];
     if (variantFeatureEnabled) parts.push('minmax(100px,1.1fr)');
-    if (unitFeatureEnabled) parts.push('minmax(110px,1.2fr)');
-    parts.push('88px', '72px', '88px', '80px');
-    if (!isViewMode) parts.push('44px');
+    if (unitFeatureEnabled) parts.push('minmax(120px,1.1fr)');
+    parts.push('minmax(84px,auto)', 'minmax(92px,auto)', 'minmax(96px,auto)');
+    if (!isViewMode) parts.push('52px');
     return parts.join(' ');
   }, [variantFeatureEnabled, unitFeatureEnabled, isViewMode]);
 
@@ -237,6 +239,8 @@ const StockTransferForm: React.FC<StockTransferFormProps> = ({
   const variantSelectRefs = useRef<Map<string, HTMLSelectElement>>(new Map());
   const unitSelectRefs = useRef<Map<string, HTMLSelectElement>>(new Map());
   const qtyInputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
 
   const closeSearch = useCallback(() => {
     setSearchRowKey(null);
@@ -254,7 +258,7 @@ const StockTransferForm: React.FC<StockTransferFormProps> = ({
           fromWarehouseId,
           variantId ?? undefined,
         );
-        const qty = Number((res.data as { quantity?: number })?.quantity ?? 0);
+        const qty = parseCurrentStockQuantity(res.data);
         const key = lineKey(productId, variantId);
         const restore = isEditMode ? initialBaseQtyByLine.get(key) ?? 0 : 0;
         return qty + restore;
@@ -399,16 +403,23 @@ const StockTransferForm: React.FC<StockTransferFormProps> = ({
     };
   }, [initialData?.lines, resolvedBranchId, isViewMode]);
 
+  const rowStockSignature = useMemo(
+    () =>
+      rows
+        .map((row) => `${row.key}:${row.productId}:${row.variantId ?? 'n'}:${row.metaLoading ? 1 : 0}`)
+        .join('|'),
+    [rows],
+  );
+
   useEffect(() => {
     if (isViewMode || fromWarehouseId <= 0 || resolvedBranchId <= 0) return;
 
-    rows.forEach((row) => {
-      if (row.productId <= 0) return;
+    rowsRef.current.forEach((row) => {
+      if (row.productId <= 0 || row.metaLoading) return;
       if (variantFeatureEnabled && row.isVariantEnabled && row.variants.length > 0 && !row.variantId) return;
       void refreshRowStock(row.key, row.productId, row.variantId);
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fromWarehouseId, resolvedBranchId, isViewMode]);
+  }, [rowStockSignature, fromWarehouseId, resolvedBranchId, isViewMode, refreshRowStock, variantFeatureEnabled]);
 
   const openSearch = useCallback((rowKey: string) => {
     setSearchRowKey(rowKey);
@@ -624,7 +635,7 @@ const StockTransferForm: React.FC<StockTransferFormProps> = ({
     });
   };
 
-  const minGridWidth = isViewMode ? '920px' : '800px';
+  const minGridWidth = isViewMode ? '860px' : '800px';
 
   return (
     <form onSubmit={handleSubmit} className="flex h-full min-h-0 flex-col">
@@ -728,8 +739,8 @@ const StockTransferForm: React.FC<StockTransferFormProps> = ({
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col px-6 py-4">
-        <div className="mb-3 flex items-center justify-between">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-6 py-4">
+        <div className="mb-3 flex shrink-0 items-center justify-between">
           <div>
             <h3 className="text-sm font-semibold text-gray-800">Transfer Lines</h3>
             {filledCount > 0 && (
@@ -759,21 +770,22 @@ const StockTransferForm: React.FC<StockTransferFormProps> = ({
         )}
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
-          <div
-            className="shrink-0 grid gap-0 overflow-x-auto border-b border-gray-200 bg-gray-50 px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-gray-500"
-            style={{ gridTemplateColumns: lineGridColumns, minWidth: minGridWidth }}
-          >
-            <div>Product</div>
-            {variantFeatureEnabled && <div>Variant</div>}
-            {unitFeatureEnabled && <div>Unit</div>}
-            <div>Base Unit</div>
-            <div className="text-right">Qty</div>
-            <div className="text-right">Base Qty</div>
-            <div className="text-right">Available</div>
-            {!isViewMode && <div className="text-center">Act</div>}
-          </div>
+          <div className={lineTableScrollWrapClass}>
+            <div style={{ minWidth: minGridWidth }}>
+              <div
+                className={`${lineTableStickyHeaderClass} ${lineTableGridClass}`}
+                style={{ gridTemplateColumns: lineGridColumns }}
+              >
+                <div className={lineTableHeaderClass('left')}>Product</div>
+                {variantFeatureEnabled && <div className={lineTableHeaderClass('left')}>Variant</div>}
+                {unitFeatureEnabled && <div className={lineTableHeaderClass('left')}>Unit</div>}
+                <div className={lineTableHeaderClass('left')}>Base unit</div>
+                <div className={lineTableHeaderClass('right')}>Qty</div>
+                <div className={lineTableHeaderClass('right')}>Base qty</div>
+                {!isViewMode && <div className={lineTableHeaderClass('center')}>Remove</div>}
+              </div>
 
-          <div className="min-h-0 flex-1 divide-y divide-gray-100 overflow-y-auto overflow-x-auto">
+              <div className="divide-y divide-gray-100">
             {rows.map((row, idx) => {
               const baseQty =
                 row.conversionFactor > 0
@@ -784,16 +796,25 @@ const StockTransferForm: React.FC<StockTransferFormProps> = ({
               return (
                 <div
                   key={row.key}
-                  className={`grid items-center gap-0 px-3 py-2 transition-colors ${
+                  className={`${lineTableGridClass} px-3 transition-colors ${
                     row.productId > 0 ? 'bg-white' : 'bg-gray-50/60'
                   } ${rowError ? 'ring-1 ring-inset ring-red-200' : ''}`}
-                  style={{ gridTemplateColumns: lineGridColumns, minWidth: minGridWidth }}
+                  style={{ gridTemplateColumns: lineGridColumns }}
                 >
-                  <div className="pr-2">
+                  <div className={`${lineTableCellClass('left')} pr-1`}>
                     {isViewMode ? (
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium text-gray-900">{row.productName}</p>
                         <p className="text-xs text-gray-400">{row.productCode}</p>
+                        <ProductStockHint
+                          baseQuantity={row.availableStock}
+                          conversionFactor={row.conversionFactor}
+                          unitName={row.unitName}
+                          baseUnitName={row.baseUnitName}
+                          loading={row.availableLoading}
+                          hasWarehouse={fromWarehouseId > 0}
+                          hasProduct={row.productId > 0}
+                        />
                       </div>
                     ) : searchRowKey === row.key ? (
                       <div className="relative" ref={searchDropdownRef}>
@@ -845,6 +866,20 @@ const StockTransferForm: React.FC<StockTransferFormProps> = ({
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium text-gray-900">{row.productName}</p>
                         <p className="text-xs text-gray-400">{row.productCode}</p>
+                        <ProductStockHint
+                          baseQuantity={row.availableStock}
+                          conversionFactor={row.conversionFactor}
+                          unitName={row.unitName}
+                          baseUnitName={row.baseUnitName}
+                          loading={row.availableLoading}
+                          hasWarehouse={fromWarehouseId > 0}
+                          hasProduct
+                          warnExceeds={
+                            row.availableStock != null &&
+                            baseQty > 0 &&
+                            baseQty > row.availableStock
+                          }
+                        />
                         <button
                           type="button"
                           onClick={() => openSearch(row.key)}
@@ -867,7 +902,7 @@ const StockTransferForm: React.FC<StockTransferFormProps> = ({
                   </div>
 
                   {variantFeatureEnabled && (
-                    <div className="px-1">
+                    <div className={lineTableCellClass('left')}>
                       {isViewMode ? (
                         <span className="text-sm text-gray-700">
                           {row.variants.find((v) => v.id === row.variantId)?.variantName || '—'}
@@ -905,7 +940,7 @@ const StockTransferForm: React.FC<StockTransferFormProps> = ({
                   )}
 
                   {unitFeatureEnabled && (
-                    <div className="px-1">
+                    <div className={lineTableCellClass('left')}>
                       {isViewMode ? (
                         <span className="text-sm text-gray-700">{row.unitName || '—'}</span>
                       ) : row.units.length > 0 ? (
@@ -934,7 +969,7 @@ const StockTransferForm: React.FC<StockTransferFormProps> = ({
                     </div>
                   )}
 
-                  <div className="px-1">
+                  <div className={lineTableCellClass('left')}>
                     {row.baseUnitName ? (
                       <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
                         {row.baseUnitName}
@@ -944,7 +979,7 @@ const StockTransferForm: React.FC<StockTransferFormProps> = ({
                     )}
                   </div>
 
-                  <div className="px-1">
+                  <div className={lineTableCellClass('right')}>
                     {isViewMode ? (
                       <p className="text-right text-sm">{formatQty(row.quantity)}</p>
                     ) : (
@@ -965,7 +1000,7 @@ const StockTransferForm: React.FC<StockTransferFormProps> = ({
                     )}
                   </div>
 
-                  <div className="px-1 text-right">
+                  <div className={lineTableCellClass('right')}>
                     <span
                       className={`inline-block min-w-[3rem] rounded-md px-2 py-1 text-sm font-semibold ${
                         baseQty > 0 ? 'bg-emerald-50 text-emerald-800' : 'text-gray-300'
@@ -975,24 +1010,8 @@ const StockTransferForm: React.FC<StockTransferFormProps> = ({
                     </span>
                   </div>
 
-                  <div className="px-1 text-right text-sm text-gray-600">
-                    {isViewMode ? (
-                      '—'
-                    ) : row.availableLoading ? (
-                      <span className="text-xs text-gray-400">…</span>
-                    ) : row.availableStock != null ? (
-                      <span className={baseQty > row.availableStock ? 'font-medium text-red-600' : ''}>
-                        {formatQty(row.availableStock)}
-                      </span>
-                    ) : fromWarehouseId > 0 && row.productId > 0 ? (
-                      <span className="text-xs text-gray-400">—</span>
-                    ) : (
-                      <span className="text-gray-300">—</span>
-                    )}
-                  </div>
-
                   {!isViewMode && (
-                    <div className="flex justify-center px-1">
+                    <div className={`${lineTableCellClass('center')} flex justify-center`}>
                       {row.productId > 0 || rows.length > 1 ? (
                         <button
                           type="button"
@@ -1012,6 +1031,8 @@ const StockTransferForm: React.FC<StockTransferFormProps> = ({
                 </div>
               );
             })}
+              </div>
+            </div>
           </div>
 
           <div className="flex shrink-0 items-center justify-between rounded-b-lg border-t border-gray-200 bg-gray-50 px-4 py-3">

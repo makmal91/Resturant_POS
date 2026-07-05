@@ -1,5 +1,6 @@
 import React from 'react';
 import type { SaleInvoiceDto } from '../../modules/pos/posService';
+import { BASE_CURRENCY } from '../../utils/currencyHelper';
 import {
   barcode39Text,
   barcodeFontSize,
@@ -7,6 +8,7 @@ import {
   formatReceiptCurrency,
   formatReceiptDateCompact,
   formatReceiptDateTime,
+  formatReceiptAmount,
   formatReceiptNumber,
   getBalanceDue,
   getItemDiscount,
@@ -37,7 +39,7 @@ const ReceiptPrint: React.FC<ReceiptPrintProps> = ({
   className = '',
 }) => {
   const isVoided = invoice.status === 'Voided';
-  const currency = business.currency || 'USD';
+  const currency = business.currency || BASE_CURRENCY;
   const roundOff = computeRoundOff(invoice);
   const balanceDue = getBalanceDue(invoice);
   const cashierName = resolveCashierName(invoice, sessionCashierName);
@@ -143,7 +145,7 @@ const ReceiptPrint: React.FC<ReceiptPrintProps> = ({
       {/* Items */}
       <section className="receipt-section">
         <div className="receipt-items-head">
-          <span>Item</span>
+          <span className="receipt-col-item">Item</span>
           <span className="receipt-col-qty">Qty</span>
           <span className="receipt-col-price">Price</span>
           {layout === 'a4' && <span className="receipt-col-disc">Disc</span>}
@@ -160,7 +162,7 @@ const ReceiptPrint: React.FC<ReceiptPrintProps> = ({
               key={item.id}
               className={`receipt-item-row${isVoided ? ' receipt-item-row--voided' : ''}`}
             >
-              <div>
+              <div className="receipt-col-item">
                 <p className="receipt-item-name">{item.productName}</p>
                 {(sku || variantLabel) && (
                   <p className="receipt-item-sub">
@@ -170,17 +172,17 @@ const ReceiptPrint: React.FC<ReceiptPrintProps> = ({
                   </p>
                 )}
               </div>
-              <span className="receipt-item-qty receipt-col-qty">{formatReceiptNumber(item.quantity)}</span>
+              <span className="receipt-item-qty receipt-col-qty">{formatReceiptAmount(item.quantity)}</span>
               <span className="receipt-item-price receipt-col-price">
-                {formatReceiptCurrency(item.unitPrice, currency)}
+                {formatReceiptAmount(item.unitPrice)}
               </span>
               {layout === 'a4' && (
                 <span className="receipt-item-disc receipt-col-disc">
-                  {discount > 0 ? `−${formatReceiptCurrency(discount, currency)}` : '—'}
+                  {discount > 0 ? `−${formatReceiptAmount(discount)}` : '—'}
                 </span>
               )}
               <span className="receipt-item-total receipt-col-total">
-                {formatReceiptCurrency(item.lineTotal, currency)}
+                {formatReceiptAmount(item.lineTotal)}
               </span>
             </div>
           );
@@ -284,6 +286,11 @@ const ReceiptPrint: React.FC<ReceiptPrintProps> = ({
             </span>
           </div>
         )}
+
+        <div className="receipt-powered-by">
+          <p className="receipt-powered-by-title">Powered by AKHSoft</p>
+          <p className="receipt-powered-by-contact">akhsoft.com | 0307-1725577</p>
+        </div>
       </footer>
     </article>
   );

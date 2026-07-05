@@ -28,6 +28,7 @@ public class CodeGeneratorService : ICodeGeneratorService
         [CodeModuleNames.JournalVoucher]   = new("JV",  4, CodeResetType.Daily,   false),
         [CodeModuleNames.OpeningStock]     = new("OS",  5, CodeResetType.None,    false),
         [CodeModuleNames.StockTransfer]    = new("ST",  5, CodeResetType.None,    false),
+        [CodeModuleNames.StockAdjustment]  = new("SA",  5, CodeResetType.None,    false),
     };
 
     public CodeGeneratorService(POSDbContext context) => _context = context;
@@ -315,6 +316,13 @@ public class CodeGeneratorService : ICodeGeneratorService
                  SELECT ISNULL(MAX(TRY_CAST(SUBSTRING([TransferNo], {numberStart}, 20) AS bigint)), CAST(0 AS bigint)) AS [Value]
                  FROM [StockTransferVouchers]
                  WHERE [IsDeleted] = 0 AND [BranchId] = {branchId!.Value} AND [TransferNo] LIKE {config.Prefix + "-%"}
+                 """,
+
+            CodeModuleNames.StockAdjustment =>
+                $"""
+                 SELECT ISNULL(MAX(TRY_CAST(SUBSTRING([AdjustmentNo], {numberStart}, 20) AS bigint)), CAST(0 AS bigint)) AS [Value]
+                 FROM [StockAdjustments]
+                 WHERE [IsDeleted] = 0 AND [BranchId] = {branchId!.Value} AND [AdjustmentNo] LIKE {config.Prefix + "-%"}
                  """,
 
             _ => throw new InvalidOperationException($"Unknown code module '{moduleName}'.")

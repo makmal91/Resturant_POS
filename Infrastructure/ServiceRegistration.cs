@@ -18,6 +18,7 @@ using POSSystem.Application.Supplier.Interfaces;
 using POSSystem.Application.Purchase.Interfaces;
 using POSSystem.Application.OpeningStock.Interfaces;
 using POSSystem.Application.StockTransfer.Interfaces;
+using POSSystem.Application.StockAdjustment.Interfaces;
 using POSSystem.Application.Stock.Interfaces;
 using POSSystem.Application.Sales.Interfaces;
 using POSSystem.Application.Customer.Interfaces;
@@ -28,10 +29,11 @@ using POSSystem.Application.Barcode.Interfaces;
 using POSSystem.Application.CodeSequence.Interfaces;
 using POSSystem.Application.Common.Interfaces;
 using POSSystem.Application.License.Interfaces;
+using POSSystem.Application.License.Options;
 using POSSystem.Application.Payments.Interfaces;
 using POSSystem.Application.Expense.Interfaces;
 using POSSystem.Application.Reports.Interfaces;
-using POSSystem.Application.License.Options;
+using POSSystem.Application.StockAdjustment.Options;
 using POSSystem.Infrastructure.License;
 using POSSystem.Infrastructure.Repositories;
 using POSSystem.Infrastructure.Security;
@@ -44,6 +46,7 @@ public static class ServiceRegistration
     public static IServiceCollection AddInfrastructureServices(this IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<LicenseOptions>(configuration.GetSection(LicenseOptions.SectionName));
+        services.Configure<StockAdjustmentOptions>(configuration.GetSection(StockAdjustmentOptions.SectionName));
         services.AddSingleton<ILicenseService, LicenseService>();
         services.AddScoped<ILicenseUsageProvider, LicenseUsageProvider>();
 
@@ -70,6 +73,7 @@ public static class ServiceRegistration
         services.AddScoped<IPurchaseRepository, PurchaseRepository>();
         services.AddScoped<IOpeningStockRepository, OpeningStockRepository>();
         services.AddScoped<IStockTransferRepository, StockTransferRepository>();
+        services.AddScoped<IStockAdjustmentRepository, StockAdjustmentRepository>();
         services.AddScoped<IStockLedgerRepository, StockLedgerRepository>();
         services.AddScoped<ILowStockAlertRepository, LowStockAlertRepository>();
 

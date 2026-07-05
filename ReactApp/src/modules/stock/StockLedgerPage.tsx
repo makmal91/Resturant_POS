@@ -38,6 +38,7 @@ const TYPE_LABEL: Record<StockLedgerType, string> = {
   PurchaseReturn: 'Return In',
   SaleReturn:     'Return In',
   Adjustment:     'Adjustment',
+  AdjustmentReversal: 'Adjustment Reversal',
   TransferIn:     'Return In',
   TransferOut:    'Return Out',
   Opening:        'Opening',
@@ -52,6 +53,7 @@ const TYPE_BADGE: Record<StockLedgerType, 'success' | 'danger' | 'info' | 'warni
   PurchaseReturn: 'warning',
   SaleReturn:     'info',
   Adjustment:     'primary',
+  AdjustmentReversal: 'warning',
   TransferIn:     'info',
   TransferOut:    'warning',
   Opening:        'secondary',
@@ -70,6 +72,8 @@ const refPrefix = (type: StockLedgerType) => {
     case 'SaleReturn':     return 'SR';
     case 'TransferIn':
     case 'TransferOut':    return 'TRF';
+    case 'Adjustment':
+    case 'AdjustmentReversal': return 'SA';
     default:               return 'REF';
   }
 };
@@ -717,6 +721,7 @@ const StockLedgerPage: React.FC = () => {
                     <optgroup label="Other">
                       <option value="Opening">Opening</option>
                       <option value="Adjustment">Adjustment</option>
+                      <option value="AdjustmentReversal">Adjustment Reversal</option>
                     </optgroup>
                   </select>
                 </div>

@@ -533,6 +533,7 @@ public static class PermissionModuleSeeder
         new("Warehouses", PermissionModules.Warehouses, "Inventory Management", 2, "/warehouses", "W"),
         new("Stock Transfer", PermissionModules.StockTransfer, "Inventory Management", 3, "/stock-transfer", "Inv"),
         new("Opening Stock", PermissionModules.OpeningStock, "Inventory Management", 4, "/opening-stock", "OS"),
+        new("Stock Adjustment", PermissionModules.StockAdjustment, "Inventory Management", 5, "/stock-adjustment", "SA"),
 
         // Purchase Management
         new("Purchases", PermissionModules.Purchase, "Purchase Management", 1, "/purchase", "Pu"),

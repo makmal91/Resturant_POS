@@ -363,6 +363,8 @@ const SaleInvoicesPage: React.FC = () => {
     if (canModify) {
       list.push({
         label: 'Edit',
+        tooltip: 'Edit invoice items, quantities, discounts and payment',
+        iconOnly: true,
         onClick: handleEdit,
         icon: (
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -375,6 +377,8 @@ const SaleInvoicesPage: React.FC = () => {
 
     list.push({
       label: 'Receipt',
+      tooltip: 'View and print sales receipt',
+      iconOnly: true,
       onClick: (item) => { void handleViewReceipt(item); },
       icon: loadingDetail ? (
         <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -391,6 +395,8 @@ const SaleInvoicesPage: React.FC = () => {
 
     list.push({
       label: 'Ledger',
+      tooltip: 'View stock ledger entries for this sale only',
+      iconOnly: true,
       onClick: (item) => { void handleViewLedger(item); },
       icon: loadingLedger ? (
         <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -408,6 +414,8 @@ const SaleInvoicesPage: React.FC = () => {
     if (canModify) {
       list.push({
         label: 'Void',
+        tooltip: 'Void invoice and return sold stock to warehouse',
+        iconOnly: true,
         onClick: handleVoid,
         icon: voidingId ? (
           <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">

@@ -1,6 +1,6 @@
 import React, { useMemo, useEffect, useState } from 'react';
 import { useFormModal } from '../contexts/FormModalContext';
-import { BranchForm, BusinessForm, UserForm, MenuForm, InventoryForm, CategoryForm, SubCategoryForm, BrandForm, WarehouseForm, SupplierForm, PurchaseForm, OpeningStockForm, StockTransferForm, CustomerForm, RoleForm, CashTransactionForm, ReceivePaymentForm, PaySupplierForm, ExpenseForm, type CashTransactionFormData, type ReceivePaymentFormData, type PaySupplierFormData, type ExpenseFormData } from './forms';
+import { BranchForm, BusinessForm, UserForm, MenuForm, InventoryForm, CategoryForm, SubCategoryForm, BrandForm, WarehouseForm, SupplierForm, PurchaseForm, OpeningStockForm, StockTransferForm, StockAdjustmentForm, CustomerForm, RoleForm, CashTransactionForm, ReceivePaymentForm, PaySupplierForm, ExpenseForm, type CashTransactionFormData, type ReceivePaymentFormData, type PaySupplierFormData, type ExpenseFormData } from './forms';
 import { BranchService, BusinessService, MenuService, InventoryService } from '../services/apiService';
 import { getApiErrorMessage } from '../services/api';
 import { categoryService } from '../modules/category/categoryService';
@@ -11,6 +11,7 @@ import { supplierService } from '../modules/supplier/supplierService';
 import { purchaseService } from '../modules/purchase/purchaseService';
 import { openingStockService } from '../modules/opening-stock/openingStockService';
 import { stockTransferService } from '../modules/stock-transfer/stockTransferService';
+import { stockAdjustmentService } from '../modules/stock-adjustment/stockAdjustmentService';
 import { customerService as apiCustomerService } from '../modules/customer/customerService';
 import { userService, RoleListItem } from '../modules/user/userService';
 import { roleService } from '../services/roleService';
@@ -54,6 +55,7 @@ const FormModal: React.FC = () => {
   const [menuCategoriesError, setMenuCategoriesError] = useState<string | null>(null);
   const [purchaseSuppliers, setPurchaseSuppliers] = useState<LookupOption[]>([]);
   const [purchaseWarehouses, setPurchaseWarehouses] = useState<LookupOption[]>([]);
+  const [adjustmentTypes, setAdjustmentTypes] = useState<LookupOption[]>([]);
   const [isPurchaseMetaLoading, setIsPurchaseMetaLoading] = useState(false);
   const [ledgerCustomers, setLedgerCustomers] = useState<LookupOption[]>([]);
   const [ledgerSuppliers, setLedgerSuppliers] = useState<LookupOption[]>([]);
@@ -194,7 +196,7 @@ const FormModal: React.FC = () => {
     let isCancelled = false;
 
     const loadPurchaseMeta = async () => {
-      if (!isOpen || (formType !== 'purchase' && formType !== 'openingStock' && formType !== 'stockTransfer')) {
+      if (!isOpen || (formType !== 'purchase' && formType !== 'openingStock' && formType !== 'stockTransfer' && formType !== 'stockAdjustment')) {
         return;
       }
 
@@ -246,6 +248,47 @@ const FormModal: React.FC = () => {
     };
 
     void loadPurchaseMeta();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [isOpen, formType, editingData?.branchId, selectedBranchId]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadAdjustmentTypes = async () => {
+      if (!isOpen || formType !== 'stockAdjustment') {
+        return;
+      }
+
+      const branchId = Number(editingData?.branchId ?? selectedBranchId ?? -1);
+      if (!hasBranchContext(branchId)) {
+        setAdjustmentTypes([]);
+        return;
+      }
+
+      try {
+        const res = await stockAdjustmentService.getTypes(branchId);
+        if (!isCancelled) {
+          setAdjustmentTypes(
+            (Array.isArray(res.data) ? res.data : [])
+              .map((item) => ({
+                id: Number((item as { id?: number }).id ?? 0),
+                name: String((item as { name?: string }).name ?? ''),
+              }))
+              .filter((item) => item.id > 0),
+          );
+        }
+      } catch (err) {
+        if (!isCancelled) {
+          setAdjustmentTypes([]);
+          setError(getApiErrorMessage(err, 'Failed to load adjustment types.'));
+        }
+      }
+    };
+
+    void loadAdjustmentTypes();
 
     return () => {
       isCancelled = true;
@@ -1337,6 +1380,61 @@ const FormModal: React.FC = () => {
     }
   };
 
+  const handleStockAdjustmentSubmit = async (data: any) => {
+    setIsSubmitting(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    const branchId = Number(data?.branchId ?? 0);
+    const warehouseId = Number(data?.warehouseId ?? 0);
+    const adjustmentTypeId = Number(data?.adjustmentTypeId ?? 0);
+    const lines = Array.isArray(data?.lines) ? data.lines : [];
+
+    if (branchId <= 0 || warehouseId <= 0 || adjustmentTypeId <= 0) {
+      setError('Branch, warehouse, and adjustment type are required.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (lines.length === 0) {
+      setError('At least one product line is required.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    const payload = {
+      adjustmentDate: new Date(String(data?.adjustmentDate ?? new Date().toISOString())).toISOString(),
+      remarks: String(data?.remarks ?? '').trim(),
+      warehouseId,
+      adjustmentTypeId,
+      branchId,
+      lines: lines.map((line: any) => ({
+        productId: Number(line.productId ?? 0),
+        variantId: line.variantId != null ? Number(line.variantId) : null,
+        unitId: Number(line.unitId ?? 0),
+        quantity: Number(line.quantity ?? 0),
+        costPrice: Number(line.costPrice ?? 0),
+      })),
+    };
+
+    const adjustmentId = Number(data?.id ?? editingData?.id ?? 0);
+
+    try {
+      useBranchStore.getState().setSelectedBranchId(branchId);
+      if (adjustmentId > 0) {
+        await stockAdjustmentService.update(adjustmentId, branchId, payload);
+        closeWithSuccess('Stock adjustment updated successfully.');
+      } else {
+        await stockAdjustmentService.create(branchId, payload);
+        closeWithSuccess('Stock adjustment saved successfully.');
+      }
+    } catch (err: any) {
+      setError(getApiErrorMessage(err, 'Failed to save stock adjustment.'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const getFormComponent = () => {
     switch (formType) {
       case 'branch':
@@ -1469,6 +1567,16 @@ const FormModal: React.FC = () => {
             isLoading={isSubmitting || isPurchaseMetaLoading}
           />
         );
+      case 'stockAdjustment':
+        return (
+          <StockAdjustmentForm
+            initialData={editingData}
+            warehouses={purchaseWarehouses}
+            adjustmentTypes={adjustmentTypes}
+            onSubmit={handleStockAdjustmentSubmit}
+            isLoading={isSubmitting || isPurchaseMetaLoading}
+          />
+        );
       case 'customer':
         return (
           <CustomerForm
@@ -1546,6 +1654,7 @@ const FormModal: React.FC = () => {
     formType === 'purchase' ||
     formType === 'openingStock' ||
     formType === 'stockTransfer' ||
+    formType === 'stockAdjustment' ||
     formType === 'customer' ||
     formType === 'user' ||
     formType === 'role' ||
@@ -1560,8 +1669,10 @@ const FormModal: React.FC = () => {
   const isOpeningStockEdit = formType === 'openingStock' && Boolean(editingData?.id) && !editingData?.readOnly;
   const isStockTransferView = formType === 'stockTransfer' && Boolean(editingData?.readOnly);
   const isStockTransferEdit = formType === 'stockTransfer' && Boolean(editingData?.id) && !editingData?.readOnly;
-  const isDocumentView = isOpeningStockView || isStockTransferView;
-  const isDocumentEdit = isOpeningStockEdit || isStockTransferEdit;
+  const isStockAdjustmentView = formType === 'stockAdjustment' && Boolean(editingData?.readOnly);
+  const isStockAdjustmentEdit = formType === 'stockAdjustment' && Boolean(editingData?.id) && !editingData?.readOnly;
+  const isDocumentView = isOpeningStockView || isStockTransferView || isStockAdjustmentView;
+  const isDocumentEdit = isOpeningStockEdit || isStockTransferEdit || isStockAdjustmentEdit;
 
   const formTypeLabel =
     formType === 'subcategory'
@@ -1578,6 +1689,8 @@ const FormModal: React.FC = () => {
               ? 'Opening Stock'
             : formType === 'stockTransfer'
               ? 'Stock Transfer'
+            : formType === 'stockAdjustment'
+              ? 'Stock Adjustment'
             : formType === 'customer'
               ? 'Customer'
               : formType === 'role'
@@ -1627,6 +1740,8 @@ const FormModal: React.FC = () => {
                 : isDocumentEdit
                   ? formType === 'stockTransfer'
                     ? 'Update lines — inventory adjusts automatically on save (no accounting)'
+                    : formType === 'stockAdjustment'
+                      ? 'Update lines — stock and accounting adjust automatically on save'
                     : 'Update lines — stock and accounts adjust automatically on save'
                   : 'Fill in the details below'}
             </p>

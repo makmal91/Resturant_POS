@@ -14,6 +14,7 @@ export type FormType =
   | 'purchase'
   | 'openingStock'
   | 'stockTransfer'
+  | 'stockAdjustment'
   | 'customer'
   | 'role'
   | 'journalVoucher'

@@ -10,9 +10,13 @@ export interface Column<T> {
 
 export interface Action<T> {
   label: string;
+  /** Hover text shown before clicking the action button. */
+  tooltip?: string;
   onClick: (item: T) => void;
   variant?: 'primary' | 'secondary' | 'danger';
   icon?: React.ReactNode;
+  /** When true, only the icon is shown (tooltip should describe the action). */
+  iconOnly?: boolean;
   hidden?: (item: T) => boolean;
 }
 
@@ -317,6 +321,7 @@ function DataTable<T extends Record<string, any>>({
                   ))}
                   {actions.length > 0 && (
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div className="inline-flex items-center gap-1">
                       {actions.map((action, actionIndex) => {
                         if (action.hidden?.(item)) {
                           return null;
@@ -325,7 +330,10 @@ function DataTable<T extends Record<string, any>>({
                         return (
                         <button
                           key={actionIndex}
+                          type="button"
                           onClick={() => action.onClick(item)}
+                          title={action.tooltip ?? action.label}
+                          aria-label={action.tooltip ?? action.label}
                           className={`inline-flex items-center px-3 py-1 rounded-md text-sm font-medium ${
                             action.variant === 'danger'
                               ? 'text-red-600 hover:text-red-900 hover:bg-red-50'
@@ -334,11 +342,12 @@ function DataTable<T extends Record<string, any>>({
                               : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                           }`}
                         >
-                          {action.icon && <span className="mr-1">{action.icon}</span>}
-                          {action.label}
+                          {action.icon && <span className={action.iconOnly ? '' : 'mr-1'}>{action.icon}</span>}
+                          {!action.iconOnly && action.label}
                         </button>
                         );
                       })}
+                      </div>
                     </td>
                   )}
                 </tr>

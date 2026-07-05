@@ -174,14 +174,32 @@
 .receipt-items-head,
 .receipt-item-row {
   display: grid;
-  grid-template-columns: 1fr auto auto auto;
-  gap: 0.35rem 0.5rem;
   align-items: start;
+  column-gap: 0.35rem;
+}
+
+.receipt-print--thermal .receipt-items-head,
+.receipt-print--thermal .receipt-item-row {
+  grid-template-columns: minmax(0, 1fr) 11mm 13mm 15mm;
 }
 
 .receipt-print--a4 .receipt-items-head,
 .receipt-print--a4 .receipt-item-row {
-  grid-template-columns: 2fr 0.7fr 0.9fr 0.9fr 1fr;
+  grid-template-columns: minmax(0, 2fr) 12mm 16mm 14mm 18mm;
+  column-gap: 0.5rem;
+}
+
+.receipt-col-item {
+  min-width: 0;
+}
+
+.receipt-col-qty,
+.receipt-col-price,
+.receipt-col-disc,
+.receipt-col-total {
+  text-align: right;
+  justify-self: stretch;
+  font-variant-numeric: tabular-nums;
 }
 
 .receipt-items-head {
@@ -192,6 +210,13 @@
   color: var(--receipt-muted);
   padding-bottom: 0.25rem;
   border-bottom: 1px solid var(--receipt-border);
+}
+
+.receipt-items-head .receipt-col-qty,
+.receipt-items-head .receipt-col-price,
+.receipt-items-head .receipt-col-disc,
+.receipt-items-head .receipt-col-total {
+  text-align: right;
 }
 
 .receipt-item-row {
@@ -302,6 +327,26 @@
   margin-top: 0.5rem;
   width: 100%;
   overflow: hidden;
+}
+
+.receipt-powered-by {
+  margin-top: 0.65rem;
+  padding-top: 0.45rem;
+  border-top: 1px dashed var(--receipt-border);
+}
+
+.receipt-powered-by-title {
+  margin: 0 0 0.15rem;
+  font-size: 0.9em;
+  font-weight: 700;
+  color: #222;
+}
+
+.receipt-powered-by-contact {
+  margin: 0;
+  font-size: 0.85em;
+  color: var(--receipt-muted);
+  letter-spacing: 0.01em;
 }
 
 .receipt-barcode {
