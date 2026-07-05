@@ -13,6 +13,7 @@ export const CODE_MODULES = {
   SupplierPayment: 'SupplierPayment',
   Expense: 'Expense',
   JournalVoucher: 'JournalVoucher',
+  OpeningStock: 'OpeningStock',
 } as const;
 
 export type CodeModuleName = (typeof CODE_MODULES)[keyof typeof CODE_MODULES];

@@ -17,6 +17,7 @@ const CASH_TYPE_LABELS: Record<CashFlowTransactionType, string> = {
   CashOut: 'Cash Out',
   BankTransfer: 'Bank Transfer',
   OpeningBalance: 'Opening',
+  OpeningStockVoucher: 'Opening Stock',
   ClosingBalance: 'Closing',
   Reversal: 'Reversal',
 };

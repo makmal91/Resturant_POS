@@ -20,6 +20,7 @@ public static class PermissionModules
     public const string Suppliers = "Suppliers";
     public const string Purchase = "Purchase";
     public const string Stock = "Stock";
+    public const string OpeningStock = "Opening Stock";
     public const string Sales = "Sales";
     public const string Customers = "Customers";
     public const string Expenses = "Expenses";
@@ -76,6 +77,7 @@ public static class PermissionModules
         Suppliers,
         Purchase,
         Stock,
+        OpeningStock,
         StockTransfer,
         Sales,
         Customers,

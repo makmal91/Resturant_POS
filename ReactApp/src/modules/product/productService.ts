@@ -104,6 +104,8 @@ export interface ProductListItem {
   allowNegativeStock?: boolean;
   enableLowStockAlert?: boolean;
   lowStockAlertLevel?: number | null;
+  costPrice?: number;
+  baseUnitName?: string;
 }
 
 export interface ProductDetail extends ProductListItem {

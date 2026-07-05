@@ -246,6 +246,34 @@ public class AccountingIntegrationService : IAccountingIntegrationService
         await _accounting.CreateDoubleEntryAsync(entries);
     }
 
+    public async Task PostOpeningStockVoucherAsync(OpeningStockVoucher voucher, decimal amount)
+    {
+        if (amount <= 0)
+            return;
+
+        if (await _accountingRepository.ExistsForReferenceAsync(voucher.Id, GlTransactionType.OpeningStockVoucher))
+            return;
+
+        var accounts = await _glAccounts.ResolvePostingAccountsAsync();
+        var groupId = Guid.NewGuid();
+        var ledgerChainId = groupId;
+        var description = $"Opening Stock — {voucher.VoucherNo}";
+        if (!string.IsNullOrWhiteSpace(voucher.Description))
+            description = $"{description} — {voucher.Description.Trim()}";
+
+        var date = voucher.VoucherDate;
+        var branchId = voucher.BranchId;
+        var roundedAmount = Math.Round(amount, 2, MidpointRounding.AwayFromZero);
+        var entries = new List<AccountingTransactionDto>();
+
+        AddLine(entries, accounts.Inventory, branchId, roundedAmount, 0, groupId, voucher.Id, description,
+            GlTransactionType.OpeningStockVoucher, date, ledgerChainId);
+        AddLine(entries, accounts.OwnerCapital, branchId, 0, roundedAmount, groupId, voucher.Id, description,
+            GlTransactionType.OpeningStockVoucher, date, ledgerChainId);
+
+        await _accounting.CreateDoubleEntryAsync(entries);
+    }
+
     public Task ReverseTransactionAsync(int referenceId, GlTransactionType transactionType, string? reason = null) =>
         _accounting.ReverseByReferenceAsync(referenceId, transactionType, reason);
 

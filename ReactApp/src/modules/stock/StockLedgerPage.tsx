@@ -41,6 +41,7 @@ const TYPE_LABEL: Record<StockLedgerType, string> = {
   TransferIn:     'Return In',
   TransferOut:    'Return Out',
   Opening:        'Opening',
+  OpeningReversal: 'Opening Reversal',
   SaleReversal:   'Sale Reversal',
   PurchaseReversal: 'Purchase Reversal',
 };
@@ -54,6 +55,7 @@ const TYPE_BADGE: Record<StockLedgerType, 'success' | 'danger' | 'info' | 'warni
   TransferIn:     'info',
   TransferOut:    'warning',
   Opening:        'secondary',
+  OpeningReversal: 'warning',
   SaleReversal:   'warning',
   PurchaseReversal: 'warning',
 };

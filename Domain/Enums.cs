@@ -92,6 +92,7 @@ public enum StockLedgerType
     SaleReversal     = 8,
     PurchaseReversal = 9,
     Opening          = 10,
+    OpeningReversal  = 11,
 }
 
 public enum CashFlowTransactionType
@@ -135,4 +136,5 @@ public enum GlTransactionType
     OpeningBalance  = 6,
     Adjustment      = 7,
     Reversal        = 8,
+    OpeningStockVoucher = 9,
 }

@@ -859,7 +859,11 @@ public class ProductService : IProductService
             BranchName = product.Branch?.Name ?? string.Empty,
             AllowNegativeStock = product.AllowNegativeStock,
             EnableLowStockAlert = product.EnableLowStockAlert,
-            LowStockAlertLevel = product.LowStockAlertLevel
+            LowStockAlertLevel = product.LowStockAlertLevel,
+            CostPrice = product.CostPrice,
+            BaseUnitName = product.Units.FirstOrDefault(u => u.IsBaseUnit && !u.IsDeleted)?.UnitName
+                ?? product.BaseUnit?.UnitName
+                ?? string.Empty
         };
     }
 

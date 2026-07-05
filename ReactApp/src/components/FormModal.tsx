@@ -1,6 +1,6 @@
 import React, { useMemo, useEffect, useState } from 'react';
 import { useFormModal } from '../contexts/FormModalContext';
-import { BranchForm, BusinessForm, UserForm, MenuForm, InventoryForm, CategoryForm, SubCategoryForm, BrandForm, WarehouseForm, SupplierForm, PurchaseForm, CustomerForm, RoleForm, CashTransactionForm, ReceivePaymentForm, PaySupplierForm, ExpenseForm, type CashTransactionFormData, type ReceivePaymentFormData, type PaySupplierFormData, type ExpenseFormData } from './forms';
+import { BranchForm, BusinessForm, UserForm, MenuForm, InventoryForm, CategoryForm, SubCategoryForm, BrandForm, WarehouseForm, SupplierForm, PurchaseForm, OpeningStockForm, CustomerForm, RoleForm, CashTransactionForm, ReceivePaymentForm, PaySupplierForm, ExpenseForm, type CashTransactionFormData, type ReceivePaymentFormData, type PaySupplierFormData, type ExpenseFormData } from './forms';
 import { BranchService, BusinessService, MenuService, InventoryService } from '../services/apiService';
 import { getApiErrorMessage } from '../services/api';
 import { categoryService } from '../modules/category/categoryService';
@@ -9,6 +9,7 @@ import { brandService } from '../modules/brand/brandService';
 import { warehouseService } from '../modules/warehouse/warehouseService';
 import { supplierService } from '../modules/supplier/supplierService';
 import { purchaseService } from '../modules/purchase/purchaseService';
+import { openingStockService } from '../modules/opening-stock/openingStockService';
 import { customerService as apiCustomerService } from '../modules/customer/customerService';
 import { userService, RoleListItem } from '../modules/user/userService';
 import { roleService } from '../services/roleService';
@@ -192,33 +193,39 @@ const FormModal: React.FC = () => {
     let isCancelled = false;
 
     const loadPurchaseMeta = async () => {
-      if (!isOpen || formType !== 'purchase') {
+      if (!isOpen || (formType !== 'purchase' && formType !== 'openingStock')) {
         return;
       }
 
       const branchId = Number(editingData?.branchId ?? selectedBranchId ?? -1);
       if (!hasBranchContext(branchId)) {
-        setPurchaseSuppliers([]);
+        if (formType === 'purchase') setPurchaseSuppliers([]);
         setPurchaseWarehouses([]);
         return;
       }
 
       setIsPurchaseMetaLoading(true);
       try {
-        const [suppliersRes, warehousesRes] = await Promise.all([
-          supplierService.getAllActive(branchId),
-          warehouseService.getAllActive(branchId),
-        ]);
+        const requests: Promise<unknown>[] = [warehouseService.getAllActive(branchId)];
+        if (formType === 'purchase') {
+          requests.unshift(supplierService.getAllActive(branchId));
+        }
+
+        const results = await Promise.all(requests);
+        const suppliersRes = formType === 'purchase' ? results[0] : null;
+        const warehousesRes = formType === 'purchase' ? results[1] : results[0];
 
         if (!isCancelled) {
-          setPurchaseSuppliers(
-            (Array.isArray(suppliersRes.data) ? suppliersRes.data : []).map((item) => ({
-              id: Number((item as { id?: number }).id ?? 0),
-              name: String((item as { name?: string }).name ?? ''),
-            })).filter((item) => item.id > 0)
-          );
+          if (formType === 'purchase' && suppliersRes) {
+            setPurchaseSuppliers(
+              (Array.isArray((suppliersRes as { data?: unknown }).data) ? (suppliersRes as { data: unknown[] }).data : []).map((item) => ({
+                id: Number((item as { id?: number }).id ?? 0),
+                name: String((item as { name?: string }).name ?? ''),
+              })).filter((item) => item.id > 0)
+            );
+          }
           setPurchaseWarehouses(
-            (Array.isArray(warehousesRes.data) ? warehousesRes.data : []).map((item) => ({
+            (Array.isArray((warehousesRes as { data?: unknown }).data) ? (warehousesRes as { data: unknown[] }).data : []).map((item) => ({
               id: Number((item as { id?: number }).id ?? 0),
               name: String((item as { name?: string }).name ?? ''),
             })).filter((item) => item.id > 0)
@@ -226,9 +233,9 @@ const FormModal: React.FC = () => {
         }
       } catch (err) {
         if (!isCancelled) {
-          setPurchaseSuppliers([]);
+          if (formType === 'purchase') setPurchaseSuppliers([]);
           setPurchaseWarehouses([]);
-          setError(getApiErrorMessage(err, 'Failed to load purchase form data.'));
+          setError(getApiErrorMessage(err, 'Failed to load voucher form data.'));
         }
       } finally {
         if (!isCancelled) {
@@ -1216,6 +1223,59 @@ const FormModal: React.FC = () => {
     }
   };
 
+  const handleOpeningStockSubmit = async (data: any) => {
+    setIsSubmitting(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    const branchId = Number(data?.branchId ?? 0);
+    const warehouseId = Number(data?.warehouseId ?? 0);
+    const lines = Array.isArray(data?.lines) ? data.lines : [];
+
+    if (branchId <= 0 || warehouseId <= 0) {
+      setError('Branch and warehouse are required.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (lines.length === 0) {
+      setError('At least one product line is required.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    const payload = {
+      voucherDate: new Date(String(data?.voucherDate ?? new Date().toISOString())).toISOString(),
+      description: String(data?.description ?? '').trim(),
+      warehouseId,
+      branchId,
+      lines: lines.map((line: any) => ({
+        productId: Number(line.productId ?? 0),
+        variantId: line.variantId != null ? Number(line.variantId) : null,
+        unitId: Number(line.unitId ?? 0),
+        quantity: Number(line.quantity ?? 0),
+        costPrice: Number(line.costPrice ?? 0),
+      })),
+    };
+
+    const voucherId = Number(data?.id ?? editingData?.id ?? 0);
+
+    try {
+      useBranchStore.getState().setSelectedBranchId(branchId);
+      if (voucherId > 0) {
+        await openingStockService.update(voucherId, branchId, payload);
+        closeWithSuccess('Opening stock voucher updated successfully.');
+      } else {
+        await openingStockService.create(branchId, payload);
+        closeWithSuccess('Opening stock voucher saved successfully.');
+      }
+    } catch (err: any) {
+      setError(getApiErrorMessage(err, 'Failed to save opening stock voucher.'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const getFormComponent = () => {
     switch (formType) {
       case 'branch':
@@ -1330,6 +1390,15 @@ const FormModal: React.FC = () => {
             isLoading={isSubmitting || isPurchaseMetaLoading}
           />
         );
+      case 'openingStock':
+        return (
+          <OpeningStockForm
+            initialData={editingData}
+            warehouses={purchaseWarehouses}
+            onSubmit={handleOpeningStockSubmit}
+            isLoading={isSubmitting || isPurchaseMetaLoading}
+          />
+        );
       case 'customer':
         return (
           <CustomerForm
@@ -1405,6 +1474,7 @@ const FormModal: React.FC = () => {
     formType === 'warehouse' ||
     formType === 'supplier' ||
     formType === 'purchase' ||
+    formType === 'openingStock' ||
     formType === 'customer' ||
     formType === 'user' ||
     formType === 'role' ||
@@ -1414,6 +1484,9 @@ const FormModal: React.FC = () => {
     formType === 'expense'
       ? 'max-w-4xl'
       : 'max-w-2xl';
+
+  const isOpeningStockView = formType === 'openingStock' && Boolean(editingData?.readOnly);
+  const isOpeningStockEdit = formType === 'openingStock' && Boolean(editingData?.id) && !editingData?.readOnly;
 
   const formTypeLabel =
     formType === 'subcategory'
@@ -1426,6 +1499,8 @@ const FormModal: React.FC = () => {
             ? 'Supplier'
             : formType === 'purchase'
             ? 'Purchase'
+            : formType === 'openingStock'
+              ? 'Opening Stock'
             : formType === 'customer'
               ? 'Customer'
               : formType === 'role'
@@ -1463,9 +1538,19 @@ const FormModal: React.FC = () => {
         <div className="shrink-0 z-10 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
           <div>
             <h2 className="text-xl font-semibold text-gray-900">
-              {isEditMode ? 'Edit' : 'Create'} {formTypeLabel}
+              {isOpeningStockView
+                ? `View ${formTypeLabel}`
+                : isOpeningStockEdit
+                  ? `Edit ${formTypeLabel}`
+                  : `${isEditMode ? 'Edit' : 'Create'} ${formTypeLabel}`}
             </h2>
-            <p className="text-sm text-gray-500 mt-0.5">Fill in the details below</p>
+            <p className="text-sm text-gray-500 mt-0.5">
+              {isOpeningStockView
+                ? 'Posted voucher details (read-only)'
+                : isOpeningStockEdit
+                  ? 'Update lines — stock and accounts adjust automatically on save'
+                  : 'Fill in the details below'}
+            </p>
           </div>
           <button
             type="button"

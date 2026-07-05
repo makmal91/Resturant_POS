@@ -134,9 +134,13 @@ public class GlBackfillService
             }
         }
 
+        // Product-form opening stock only: ReferenceId = ProductId.
+        // Voucher-based opening uses ReferenceId = voucher Id — GL is posted via PostOpeningStockVoucherAsync.
         var openingStockProducts = await _db.StockLedgerEntries
             .AsNoTracking()
-            .Where(e => !e.IsDeleted && e.Type == StockLedgerType.Opening)
+            .Where(e => !e.IsDeleted
+                        && e.Type == StockLedgerType.Opening
+                        && e.ReferenceId == e.ProductId)
             .Select(e => new { e.ProductId, e.BusinessId, e.BranchId })
             .Distinct()
             .ToListAsync(cancellationToken);
@@ -161,7 +165,8 @@ public class GlBackfillService
                             && e.ProductId == row.ProductId
                             && e.BusinessId == row.BusinessId
                             && e.BranchId == row.BranchId
-                            && e.Type == StockLedgerType.Opening)
+                            && e.Type == StockLedgerType.Opening
+                            && e.ReferenceId == e.ProductId)
                 .ToListAsync(cancellationToken);
 
             var amount = Math.Round(openingEntries.Sum(e => e.TotalAmount), 2, MidpointRounding.AwayFromZero);
@@ -176,6 +181,34 @@ public class GlBackfillService
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Skipped GL backfill for opening stock on product {ProductId}.", product.Id);
+            }
+        }
+
+        var openingStockVouchers = await _db.OpeningStockVouchers
+            .AsNoTracking()
+            .Where(v => !v.IsDeleted && !v.IsReversed && v.TotalAmount > 0)
+            .ToListAsync(cancellationToken);
+
+        foreach (var voucher in openingStockVouchers)
+        {
+            if (await _accountingRepository.ExistsForReferenceAsync(voucher.Id, GlTransactionType.OpeningStockVoucher))
+                continue;
+
+            try
+            {
+                await _integration.PostOpeningStockVoucherAsync(voucher, voucher.TotalAmount);
+                _logger.LogInformation(
+                    "Backfilled GL opening stock voucher journal for voucher {VoucherId} ({VoucherNo}).",
+                    voucher.Id,
+                    voucher.VoucherNo);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Skipped GL backfill for opening stock voucher {VoucherId} ({VoucherNo}).",
+                    voucher.Id,
+                    voucher.VoucherNo);
             }
         }
     }

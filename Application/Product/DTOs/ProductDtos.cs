@@ -38,17 +38,16 @@ public class ProductListDto
     public bool AllowNegativeStock { get; set; }
     public bool EnableLowStockAlert { get; set; }
     public decimal? LowStockAlertLevel { get; set; }
+    public decimal CostPrice { get; set; }
+    public string BaseUnitName { get; set; } = string.Empty;
 }
 
 public class ProductDetailDto : ProductListDto
 {
     public string Description { get; set; } = string.Empty;
-    public decimal CostPrice { get; set; }
     public decimal WholesalePrice { get; set; }
     public bool UseAutoUnitPricing { get; set; } = true;
     public int? BaseUnitId { get; set; }
-    public string BaseUnitName { get; set; } = string.Empty;
-    public bool IsVariantEnabled { get; set; }
     public bool IsDiscountAllowed { get; set; }
     public ProductDiscountType? DiscountType { get; set; }
     public decimal DiscountValue { get; set; }

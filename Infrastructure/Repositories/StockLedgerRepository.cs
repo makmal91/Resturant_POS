@@ -283,13 +283,31 @@ public class StockLedgerRepository : IStockLedgerRepository
 
     public async Task<bool> HasOpeningEntryAsync(int productId, int businessId, int branchId)
     {
-        return await _context.StockLedgerEntries
+        var net = await _context.StockLedgerEntries
             .IgnoreQueryFilters()
-            .AnyAsync(e => e.ProductId == productId
-                           && e.BusinessId == businessId
-                           && e.BranchId == branchId
-                           && e.Type == StockLedgerType.Opening
-                           && !e.IsDeleted);
+            .Where(e => e.ProductId == productId
+                        && e.BusinessId == businessId
+                        && e.BranchId == branchId
+                        && !e.IsDeleted
+                        && (e.Type == StockLedgerType.Opening || e.Type == StockLedgerType.OpeningReversal))
+            .SumAsync(e => (decimal?)e.QuantityInBaseUnit);
+
+        return net.GetValueOrDefault() > 0.0001m;
+    }
+
+    public async Task<bool> HasOpeningEntryForVariantAsync(int productId, int? variantId, int businessId, int branchId)
+    {
+        var net = await _context.StockLedgerEntries
+            .IgnoreQueryFilters()
+            .Where(e => e.ProductId == productId
+                        && e.VariantId == variantId
+                        && e.BusinessId == businessId
+                        && e.BranchId == branchId
+                        && !e.IsDeleted
+                        && (e.Type == StockLedgerType.Opening || e.Type == StockLedgerType.OpeningReversal))
+            .SumAsync(e => (decimal?)e.QuantityInBaseUnit);
+
+        return net.GetValueOrDefault() > 0.0001m;
     }
 
     public async Task<List<StockLedger>> GetOpeningEntriesAsync(int productId, int businessId, int branchId)

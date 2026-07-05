@@ -37,6 +37,7 @@ const TYPE_COLORS: Record<CashFlowTransactionType, string> = {
   CashOut: 'bg-orange-100 text-orange-700',
   BankTransfer: 'bg-purple-100 text-purple-700',
   OpeningBalance: 'bg-gray-100 text-gray-600',
+  OpeningStockVoucher: 'bg-teal-100 text-teal-700',
   ClosingBalance: 'bg-gray-100 text-gray-700',
   Reversal: 'bg-amber-100 text-amber-800',
 };
@@ -48,6 +49,7 @@ const TYPE_LABELS: Record<CashFlowTransactionType, string> = {
   CashOut: 'Cash Out',
   BankTransfer: 'Bank Transfer',
   OpeningBalance: 'Opening',
+  OpeningStockVoucher: 'Opening Stock',
   ClosingBalance: 'Closing',
   Reversal: 'Reversal',
 };
@@ -59,6 +61,7 @@ const TX_TYPES: CashFlowTransactionType[] = [
   'CashOut',
   'BankTransfer',
   'OpeningBalance',
+  'OpeningStockVoucher',
   'ClosingBalance',
   'Reversal',
 ];

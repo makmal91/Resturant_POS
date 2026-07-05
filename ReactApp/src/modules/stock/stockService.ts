@@ -9,6 +9,7 @@ export type StockLedgerType =
   | 'TransferOut'
   | 'TransferIn'
   | 'Opening'
+  | 'OpeningReversal'
   | 'SaleReversal'
   | 'PurchaseReversal';
 

@@ -3,7 +3,7 @@ import apiClient from '../../services/api';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type CashFlowTransactionType =
-  | 'Sale' | 'Expense' | 'CashIn' | 'CashOut' | 'BankTransfer' | 'OpeningBalance' | 'ClosingBalance' | 'Reversal';
+  | 'Sale' | 'Expense' | 'CashIn' | 'CashOut' | 'BankTransfer' | 'OpeningBalance' | 'OpeningStockVoucher' | 'ClosingBalance' | 'Reversal';
 
 export type CashFlowPaymentMethod = 'Cash' | 'Bank' | 'Wallet';
 

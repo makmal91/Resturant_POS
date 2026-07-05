@@ -21,6 +21,7 @@ public interface IStockLedgerRepository
     Task<List<StockLedger>> GetByReferenceAsync(
         int referenceId, int businessId, int branchId, params StockLedgerType[] types);
     Task<bool> HasOpeningEntryAsync(int productId, int businessId, int branchId);
+    Task<bool> HasOpeningEntryForVariantAsync(int productId, int? variantId, int businessId, int branchId);
     Task<List<StockLedger>> GetOpeningEntriesAsync(int productId, int businessId, int branchId);
     Task<Dictionary<int, (bool AllowNegativeStock, bool EnableLowStockAlert, decimal? LowStockAlertLevel)>> GetProductStockSettingsAsync(
         int businessId, int branchId, IEnumerable<int> productIds);

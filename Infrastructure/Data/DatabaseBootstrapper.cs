@@ -105,6 +105,7 @@ public static class DatabaseBootstrapper
             ("VariantMaster", VariantMasterDatabaseInitializer.EnsureSchemaAsync),
             ("Brand", BrandDatabaseInitializer.EnsureSchemaAsync),
             ("ProductManagement", ProductManagementDatabaseInitializer.EnsureSchemaAsync),
+            ("OpeningStock", OpeningStockDatabaseInitializer.EnsureSchemaAsync),
             ("PurchaseWarehouse", PurchaseWarehouseInitializer.EnsureSchemaAsync),
             ("SaleInvoice", SaleInvoiceInitializer.EnsureSchemaAsync),
             ("Customer", CustomerInitializer.EnsureSchemaAsync),

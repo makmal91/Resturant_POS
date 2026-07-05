@@ -16,6 +16,7 @@ using POSSystem.Application.Modules.Interfaces;
 using POSSystem.Application.Warehouse.Interfaces;
 using POSSystem.Application.Supplier.Interfaces;
 using POSSystem.Application.Purchase.Interfaces;
+using POSSystem.Application.OpeningStock.Interfaces;
 using POSSystem.Application.Stock.Interfaces;
 using POSSystem.Application.Sales.Interfaces;
 using POSSystem.Application.Customer.Interfaces;
@@ -66,6 +67,7 @@ public static class ServiceRegistration
         services.AddScoped<IWarehouseRepository, WarehouseRepository>();
         services.AddScoped<ISupplierRepository, SupplierRepository>();
         services.AddScoped<IPurchaseRepository, PurchaseRepository>();
+        services.AddScoped<IOpeningStockRepository, OpeningStockRepository>();
         services.AddScoped<IStockLedgerRepository, StockLedgerRepository>();
         services.AddScoped<ILowStockAlertRepository, LowStockAlertRepository>();
 
