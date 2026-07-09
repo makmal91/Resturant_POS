@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import DataTable, { Action, Column } from '../../components/DataTable';
 import Badge from '../../components/Badge';
 import AuthenticatedImage from '../../components/AuthenticatedImage';
 import { getApiErrorMessage } from '../../services/api';
@@ -24,6 +25,7 @@ const fallbackUnits = [
 ];
 
 const ProductPage: React.FC = () => {
+  const navigate = useNavigate();
   const { selectedBranchId, canAdd, canModify, getWriteBlockMessage } = useModuleCrudAccess('Products');
   const [products, setProducts] = useState<ProductListItem[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<ProductDetail | null>(null);
@@ -35,10 +37,11 @@ const ProductPage: React.FC = () => {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [page, setPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [totalPages, setTotalPages] = useState(0);
   const [totalRecords, setTotalRecords] = useState(0);
-  const [search, setSearch] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<number | null>(null);
   const [subCategoryFilter, setSubCategoryFilter] = useState<number | null>(null);
   const [brandFilter, setBrandFilter] = useState<number | null>(null);
@@ -51,7 +54,6 @@ const ProductPage: React.FC = () => {
   const barcodeFeatureEnabled = useHasFeature(FEATURE_KEYS.BARCODE);
 
   const branchId = selectedBranchId && selectedBranchId > 0 ? selectedBranchId : 0;
-  const pageSize = 10;
 
   const showNotification = useCallback((type: 'success' | 'error', message: string) => {
     setNotification({ type, message });
@@ -140,8 +142,8 @@ const ProductPage: React.FC = () => {
       return;
     }
 
-    const activePage = options?.page ?? page;
-    const activeSearch = options?.search !== undefined ? options.search : search;
+    const activePage = options?.page ?? currentPage;
+    const activeSearch = options?.search !== undefined ? options.search : searchTerm;
     const activeCategoryId = options?.categoryId !== undefined ? options.categoryId : categoryFilter;
     const activeSubCategoryId = options?.subCategoryId !== undefined ? options.subCategoryId : subCategoryFilter;
     const activeBrandId = options?.brandId !== undefined ? options.brandId : brandFilter;
@@ -167,20 +169,30 @@ const ProductPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [branchId, page, pageSize, search, categoryFilter, subCategoryFilter, brandFilter, statusFilter, showNotification]);
+  }, [branchId, currentPage, pageSize, searchTerm, categoryFilter, subCategoryFilter, brandFilter, statusFilter, showNotification]);
 
   useEffect(() => {
     void loadMasters();
   }, [loadMasters]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => void loadProducts(), search ? 300 : 0);
+    const timer = window.setTimeout(() => void loadProducts(), searchTerm ? 300 : 0);
     return () => window.clearTimeout(timer);
-  }, [loadProducts, search]);
+  }, [loadProducts, searchTerm]);
 
   useEffect(() => {
-    setPage(1);
-  }, [branchId, categoryFilter, subCategoryFilter, brandFilter, statusFilter]);
+    setCurrentPage(1);
+  }, [branchId, categoryFilter, subCategoryFilter, brandFilter, statusFilter, pageSize]);
+
+  const handleSearchChange = (value: string) => {
+    setSearchTerm(value);
+    setCurrentPage(1);
+  };
+
+  const handlePageSizeChange = (nextPageSize: number) => {
+    setPageSize(nextPageSize);
+    setCurrentPage(1);
+  };
 
   const openCreate = () => {
     const blockMessage = getWriteBlockMessage();
@@ -243,8 +255,8 @@ const ProductPage: React.FC = () => {
       setIsFormOpen(false);
       setEditingProduct(null);
       if (!editingProduct) {
-        setPage(1);
-        setSearch('');
+        setCurrentPage(1);
+        setSearchTerm('');
         setCategoryFilter(null);
         setSubCategoryFilter(null);
         setBrandFilter(null);
@@ -273,6 +285,79 @@ const ProductPage: React.FC = () => {
     () => (categoryFilter ? subCategories.filter((item) => item.categoryId === categoryFilter) : subCategories),
     [categoryFilter, subCategories]
   );
+
+  const columns: Column<ProductListItem>[] = useMemo(() => [
+    {
+      key: 'productName',
+      header: 'Product Name',
+      render: (_value, product) => (
+        <div>
+          <div className="font-medium text-gray-900">{product.productName}</div>
+          <div className="text-xs text-gray-500">
+            {product.productCode}{product.sku ? ` | ${product.sku}` : ''}
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'categoryName',
+      header: 'Category',
+      render: (value) => String(value || '-'),
+    },
+    {
+      key: 'brandName',
+      header: 'Brand',
+      render: (value) => String(value || '-'),
+    },
+    {
+      key: 'sellingPrice',
+      header: 'Selling Price',
+      render: (value) => Number(value ?? 0).toFixed(2),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (value) => (
+        <Badge variant={value ? 'success' : 'danger'} size="sm" dot>
+          {value ? 'Active' : 'Inactive'}
+        </Badge>
+      ),
+    },
+  ], []);
+
+  const actions: Action<ProductListItem>[] = useMemo(() => {
+    const items: Action<ProductListItem>[] = [
+      {
+        label: 'View',
+        onClick: (product) => void openDetail(product),
+        variant: 'secondary',
+      },
+    ];
+
+    if (canModify) {
+      items.push({
+        label: 'Edit',
+        onClick: (product) => void openEdit(product),
+        variant: 'primary',
+      });
+    }
+
+    if (barcodeFeatureEnabled) {
+      items.push({
+        label: 'Print',
+        onClick: (product) => navigate(`/barcodes?productId=${product.id}`),
+        variant: 'secondary',
+      });
+    }
+
+    return items;
+  }, [barcodeFeatureEnabled, canModify, navigate]);
+
+  const emptyMessage = branchId <= 0
+    ? 'Select a branch to load products.'
+    : searchTerm
+      ? 'No products match your search.'
+      : 'No products found.';
 
   return (
     <div>
@@ -304,8 +389,7 @@ const ProductPage: React.FC = () => {
         </div>
       )}
 
-      <div className="mb-6 grid grid-cols-1 gap-3 rounded-lg border border-gray-200 bg-white p-4 md:grid-cols-5">
-        <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name, code, SKU, barcode" className="rounded-lg border border-gray-300 px-3 py-2 text-sm md:col-span-2" />
+      <div className="mb-6 grid grid-cols-1 gap-3 rounded-lg border border-gray-200 bg-white p-4 md:grid-cols-4">
         <select value={categoryFilter ?? 0} onChange={(event) => { setCategoryFilter(Number(event.target.value) || null); setSubCategoryFilter(null); }} className="rounded-lg border border-gray-300 px-3 py-2 text-sm">
           <option value={0}>All Categories</option>
           {categories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
@@ -325,61 +409,26 @@ const ProductPage: React.FC = () => {
         </select>
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                {['ProductName', 'Category', 'Brand', 'SellingPrice', 'Status', 'Actions'].map((header) => (
-                  <th key={header} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">{header}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 bg-white">
-              {loading ? (
-                <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-500">Loading products...</td></tr>
-              ) : products.length === 0 ? (
-                <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-500">No products found.</td></tr>
-              ) : products.map((product) => (
-                <tr key={product.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-gray-900">{product.productName}</div>
-                    <div className="text-xs text-gray-500">{product.productCode}{product.sku ? ` | ${product.sku}` : ''}</div>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-700">{product.categoryName || '-'}</td>
-                  <td className="px-4 py-3 text-sm text-gray-700">{product.brandName || '-'}</td>
-                  <td className="px-4 py-3 text-sm text-gray-700">{Number(product.sellingPrice ?? 0).toFixed(2)}</td>
-                  <td className="px-4 py-3"><Badge variant={product.status ? 'success' : 'danger'} size="sm" dot>{product.status ? 'Active' : 'Inactive'}</Badge></td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-2">
-                      <button onClick={() => void openDetail(product)} className="rounded border px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50">View</button>
-                      {canModify && (
-                        <button onClick={() => void openEdit(product)} className="rounded border px-3 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50">Edit</button>
-                      )}
-                      {barcodeFeatureEnabled && (
-                        <Link
-                          to={`/barcodes?productId=${product.id}`}
-                          className="rounded border px-3 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-50"
-                        >
-                          Print
-                        </Link>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="flex items-center justify-between border-t border-gray-200 px-4 py-3 text-sm text-gray-600">
-          <span>{totalRecords} product(s)</span>
-          <div className="flex items-center gap-2">
-            <button disabled={page <= 1} onClick={() => setPage((prev) => Math.max(1, prev - 1))} className="rounded border px-3 py-1 disabled:opacity-50">Previous</button>
-            <span>Page {page} of {totalPages || 1}</span>
-            <button disabled={totalPages === 0 || page >= totalPages} onClick={() => setPage((prev) => prev + 1)} className="rounded border px-3 py-1 disabled:opacity-50">Next</button>
-          </div>
-        </div>
-      </div>
+      <DataTable
+        data={products}
+        columns={columns}
+        actions={actions}
+        loading={loading}
+        searchable
+        searchPlaceholder="Search by name, code, SKU, or barcode..."
+        pagination
+        pageSize={pageSize}
+        pageSizeOptions={[5, 10, 25, 50]}
+        onPageSizeChange={handlePageSizeChange}
+        emptyMessage={emptyMessage}
+        serverSide
+        totalRecords={totalRecords}
+        totalPages={totalPages}
+        currentPage={currentPage}
+        onPageChange={setCurrentPage}
+        searchTerm={searchTerm}
+        onSearchChange={handleSearchChange}
+      />
 
       {isFormOpen && (
         <SlideOver title={editingProduct ? 'Edit Product' : 'Create Product'} onClose={() => setIsFormOpen(false)}>
