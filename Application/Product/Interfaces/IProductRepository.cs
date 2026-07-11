@@ -18,6 +18,7 @@ public interface IProductRepository
     Task<Dictionary<int, decimal>> GetCostPricesByIdsAsync(int businessId, int branchId, IEnumerable<int> productIds);
     Task AddAsync(ProductEntity product);
     Task<POSSystem.Domain.ProductImage?> GetImageByIdAsync(int productId, int imageId, int businessId, int branchId);
+    Task<POSSystem.Domain.ProductImage?> GetPrimaryImageAsync(int productId, int businessId, int branchId);
     void RemoveImage(POSSystem.Domain.ProductImage image);
     Task SaveChangesAsync();
 }

@@ -209,6 +209,8 @@ export const productService = {
 
   getImageEndpoint: (productId: number, imageId: number) => `/products/${productId}/images/${imageId}`,
 
+  getPrimaryImageEndpoint: (productId: number) => `/products/${productId}/image`,
+
   deleteImage: (productId: number, imageId: number, branchId: number) =>
     apiClient.delete(`/products/${productId}/images/${imageId}`, {
       params: { branchId },

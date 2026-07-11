@@ -287,6 +287,18 @@ public class ProductsController : ControllerBase
         }
     }
 
+    [HttpGet("{id:int}/image")]
+    public async Task<IActionResult> GetPrimaryProductImage(int id, [FromQuery] int branchId, [FromQuery] int? businessId = null)
+    {
+        var resolvedBusinessId = this.ResolveBusinessId(businessId);
+        var resolvedBranchId = this.ResolveBranchId(branchId);
+        var image = await _productService.GetPrimaryProductImageAsync(id, resolvedBusinessId, resolvedBranchId);
+        if (image == null || image.ImageData.Length == 0)
+            return NotFound(new { message = "Product image not found." });
+
+        return File(image.ImageData, image.ContentType, image.FileName);
+    }
+
     [HttpGet("{id:int}/images/{imageId:int}")]
     public async Task<IActionResult> GetProductImage(int id, int imageId, [FromQuery] int branchId, [FromQuery] int? businessId = null)
     {

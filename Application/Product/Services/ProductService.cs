@@ -277,6 +277,17 @@ public class ProductService : IProductService
     public async Task<ProductImageDataDto?> GetProductImageAsync(int productId, int imageId, int businessId, int branchId)
     {
         var image = await _repository.GetImageByIdAsync(productId, imageId, businessId, branchId);
+        return MapProductImageData(image);
+    }
+
+    public async Task<ProductImageDataDto?> GetPrimaryProductImageAsync(int productId, int businessId, int branchId)
+    {
+        var image = await _repository.GetPrimaryImageAsync(productId, businessId, branchId);
+        return MapProductImageData(image);
+    }
+
+    private static ProductImageDataDto? MapProductImageData(Domain.ProductImage? image)
+    {
         return image == null
             ? null
             : new ProductImageDataDto

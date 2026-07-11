@@ -16,6 +16,7 @@ public interface IProductService
     Task RemoveBarcodeAsync(int id, int barcodeId, int businessId, int branchId);
     Task RemoveImageAsync(int id, int imageId, int businessId, int branchId);
     Task<ProductImageDataDto?> GetProductImageAsync(int productId, int imageId, int businessId, int branchId);
+    Task<ProductImageDataDto?> GetPrimaryProductImageAsync(int productId, int businessId, int branchId);
 }
 
 public class ProductImageUploadDto

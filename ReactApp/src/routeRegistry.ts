@@ -14,7 +14,6 @@ import UserPage from './modules/user/UserPage';
 import RolePermissionPage from './modules/role/RolePermissionPage';
 import MenuList from './components/MenuList';
 import InventoryList from './components/InventoryList';
-import { OrderScreen } from './components/forms';
 import CategoryPage from './modules/category/CategoryPage';
 import SubCategoryPage from './modules/subcategory/SubCategoryPage';
 import BrandPage from './modules/brand/BrandPage';
@@ -88,7 +87,6 @@ export const routeRegistry: RouteDefinition[] = [
   { path: '/taxes', label: 'Taxes', component: TaxPage, module: 'Taxes' },
   { path: '/discounts', label: 'Discounts', component: DiscountPage, module: 'Discounts' },
   { path: '/inventory', label: 'Inventory', component: InventoryList, module: 'Inventory' },
-  { path: '/orders', label: 'Orders', component: OrderScreen, module: 'Orders' },
   { path: '/warehouses', label: 'Warehouses', component: WarehousePage, module: 'Warehouses' },
   { path: '/purchase', label: 'Purchase', component: PurchasePage, module: 'Purchase' },
   { path: '/opening-stock', label: 'Opening Stock', component: OpeningStockPage, module: 'Opening Stock', feature: 'product.stock.enable' },
@@ -132,6 +130,7 @@ export const getRouteDefinition = (path: string): RouteDefinition | undefined =>
 
 const extraRouteContext: Record<string, { module: string; form: string }> = {
   '/pos': { module: 'POS Billing', form: 'POSBilling' },
+  '/orders': { module: 'POS Billing', form: 'RestaurantPOS' },
   '/sales-invoices/edit': { module: 'Sales', form: 'EditInvoice' },
   '/cashflow/opening': { module: 'Cash Flow', form: 'OpeningCash' },
   '/cashflow/closing': { module: 'Cash Flow', form: 'ClosingCash' },

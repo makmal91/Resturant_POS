@@ -12,6 +12,7 @@ import { routeRegistry } from './routeRegistry';
 import LoginPage from './pages/LoginPage';
 import BranchSelectionPage from './pages/BranchSelectionPage';
 import POSBillingPage from './modules/pos/POSBillingPage';
+import RestaurantPOSPage from './modules/orders/RestaurantPOSPage';
 import EditInvoicePage from './modules/sales/EditInvoicePage';
 import OpeningCashPage from './modules/cashflow/OpeningCashPage';
 import ClosingCashPage from './modules/cashflow/ClosingCashPage';
@@ -39,6 +40,14 @@ function App() {
                 element={
                   <ProtectedRoute module="POS Billing">
                     <POSBillingPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/orders"
+                element={
+                  <ProtectedRoute module="POS Billing">
+                    <RestaurantPOSPage />
                   </ProtectedRoute>
                 }
               />

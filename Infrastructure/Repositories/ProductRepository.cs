@@ -226,6 +226,21 @@ public class ProductRepository : IProductRepository
             .FirstOrDefaultAsync();
     }
 
+    public Task<ProductImage?> GetPrimaryImageAsync(int productId, int businessId, int branchId)
+    {
+        return _context.ProductImages
+            .IgnoreQueryFilters()
+            .Where(i =>
+                i.ProductId == productId &&
+                !i.IsDeleted &&
+                i.BusinessId == businessId &&
+                i.BranchId == branchId)
+            .OrderByDescending(i => i.IsPrimary)
+            .ThenBy(i => i.SortOrder)
+            .ThenBy(i => i.Id)
+            .FirstOrDefaultAsync();
+    }
+
     public void RemoveImage(ProductImage image)
     {
         _context.ProductImages.Remove(image);
